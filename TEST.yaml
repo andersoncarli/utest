@@ -1,0 +1,13 @@
+exclude:
+  - "node_modules/**"
+  - ".git/**"
+  - "archive/**"
+  - "index.t.js"
+unit:
+  exclude:
+    - "**/*.it.js"
+  include:
+    - "**/*.js"
+integration:
+  include:
+    - "**/*.it.js"
