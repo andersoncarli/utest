@@ -36,16 +36,22 @@ export function describe(name, fn) {
 export function it(name, fn) {
   return test(name, fn)
 }
+it.todo = (name, fn) => test(name, fn, { todo: true })
+it.skip = (name, fn) => test(name, fn, { skip: true })
+test.todo = it.todo
+test.skip = it.skip
 
-export function expect(a, t) {
-  const chk = (cond, expected) => check.call(t, cond, expected)
+export function expect(a) {
+  const chk = (cond, expected) => check(cond, expected)
 
   const matchers = (val) => ({
     toBe: (b) => chk(val, b),
     toEqual: (b) => chk(val, b),
     toStrictEqual: (b) => chk(val, b),
     toBeGreaterThan: (b) => chk(val > b, true),
+    toBeGreaterThanOrEqual: (b) => chk(val >= b, true),
     toBeLessThan: (b) => chk(val < b, true),
+    toBeLessThanOrEqual: (b) => chk(val <= b, true),
     toContain: (b) => chk(val?.includes?.(b), true),
     toBeTruthy: () => chk(!!val, true),
     toBeFalsy: () => chk(!val, true),
@@ -54,6 +60,11 @@ export function expect(a, t) {
     toBeNull: () => chk(val === null, true),
     toBeInstanceOf: (C) => chk(val instanceof C, true),
     toMatch: (re) => chk(re.test(val), true),
+    toHaveBeenCalled: () => chk(val?.calls?.length > 0, true),
+    toHaveBeenCalledWith: (...args) => chk(val?.calls?.some(c => JSON.stringify(c) === JSON.stringify(args)), true),
+    toHaveLength: (l) => chk(val?.length === l, true),
+    toHaveProperty: (p, v) => chk(v !== undefined ? val?.[p] === v : p in (val || {}), true),
+    toBeTypeOf: (t) => chk(typeof val === t, true),
     toThrow: (msg) => {
        try { 
          const fn = typeof val === 'function' ? val : () => { throw val }
@@ -61,28 +72,24 @@ export function expect(a, t) {
        } 
        catch(e) { chk(msg ? (e.message || String(e)).includes(msg) : true, true) }
     },
-    not: Object.keys({
-      toBe: 1, toEqual: 1, toContain: 1, toBeNull: 1, toBeTruthy: 1, toBeFalsy: 1, toThrow: 1
-    }).reduce((acc, k) => {
-      acc[k] = (...args) => {
-        const savedChk = check.call;
-        let passed = false;
-        // Mock check to invert it
-        const mockT = { ...t, checks: { push: () => {} } }; 
-        // This is tricky. Let's just do it manually.
-        if (k === 'toBe') chk(val !== args[0], true);
-        if (k === 'toEqual') chk(val !== args[0], true);
-        if (k === 'toContain') chk(!val?.includes?.(args[0]), true);
-        if (k === 'toBeNull') chk(val !== null, true);
-        if (k === 'toBeTruthy') chk(!val, true);
-        if (k === 'toBeFalsy') chk(!!val, true);
-        if (k === 'toThrow') {
-           try { val(); chk(true, true) } catch(e) { chk(false, true) }
-        }
-        return acc;
-      };
-      return acc;
-    }, {})
+    not: {
+      toBe: (b) => chk(val !== b, true),
+      toEqual: (b) => chk(val !== b, true),
+      toStrictEqual: (b) => chk(val !== b, true),
+      toContain: (b) => chk(!val?.includes?.(b), true),
+      toBeTruthy: () => chk(!val, true),
+      toBeFalsy: () => chk(!!val, true),
+      toBeNull: () => chk(val !== null, true),
+      toBeDefined: () => chk(val === undefined, true),
+      toBeUndefined: () => chk(val !== undefined, true),
+      toThrow: (msg) => {
+        try { 
+          const fn = typeof val === 'function' ? val : () => { throw val }
+          fn(); chk(true, true) 
+        } 
+        catch(e) { chk(false, true) }
+      }
+    }
   });
 
   const base = matchers(a);
@@ -110,15 +117,23 @@ export function spyOn(obj, method) {
   const original = obj[method]
   const spy = (...args) => {
     spy.calls.push(args)
-    return spy.impl ? spy.impl(...args) : original.apply(obj, args)
+    if (spy.i) return spy.i(...args)
+    if (spy.v !== undefined) return spy.v
+    return original.apply(obj, args)
   }
   spy.calls = []
-  spy.mockImplementation = (fn) => { spy.impl = fn; return spy }
-  spy.mockReturnValue = (val) => { spy.impl = () => val; return spy }
+  spy.i = null
+  spy.v = undefined
+  spy.mockImplementation = (fn) => { spy.i = fn; return spy }
+  spy.mockReturnValue = (v) => { spy.v = v; return spy }
   spy.mockRestore = () => { obj[method] = original }
   obj[method] = spy
   return spy
 }
+
+export const jest = { spyOn, fn: (impl) => { const s = spyOn({ f: impl || (() => {}) }, 'f'); s.mockImplementation = impl; return s } }
+export const vi = jest
+export const mock = jest
 
 export const beforeAll = (fn) => fn() 
 export const afterAll = (fn) => {}
@@ -129,6 +144,6 @@ export function installShims() {
   Object.assign(globalThis, {
     describe, it, expect, 
     beforeAll, afterAll, beforeEach, afterEach,
-    withTempDir, spyOn
+    withTempDir, spyOn, jest, vi, mock
   })
 }

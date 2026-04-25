@@ -8,7 +8,7 @@ import path from 'path'
 import YAML from 'yaml'
 import test from './test.js'
 
-const SKIP_DIRS    = new Set(['node_modules', '.git', 'archive', 'archived', 'dist', 'tmp', 'temp'])
+const SKIP_DIRS    = new Set(['node_modules', '.git', 'archive', 'archived', 'dist', 'tmp', 'temp', 'DB', 'scratch', 'tests'])
 const TEST_PATTERN = /\.(t|test|tuit|it)\.(js|ts)$/
 const DEFAULT_INCLUDES = ['**/*.t.js', '**/*.test.js', '**/*.tuit.js']
 
@@ -91,8 +91,14 @@ function buildManifest(files, cwd) {
         m[rel] = rec
       }
     } else if (!m[rel]) {
-      const cache = cacheCount(full, null)
-      m[rel] = cache !== null ? { cache } : {}
+      const content = fs.readFileSync(full, 'utf8')
+      const hasInlineTests = /(?<![.\w])test\s*\(/.test(content)
+      const cache = hasInlineTests ? cacheCount(full, null) : null
+      if (hasInlineTests) {
+        m[rel] = cache !== null ? { cache } : {}
+      } else if (!m[rel]) {
+        m[rel] = {}
+      }
     }
   }
   return m

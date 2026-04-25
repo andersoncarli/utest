@@ -5,24 +5,52 @@
  * to ensure hybrid tests can run outside of 'bun test' mode.
  */
 import { plugin } from "bun";
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "./shims.js";
+import path from "path";
+import fs from "fs";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, withTempDir, spyOn, jest, vi, mock } from "./shims.js";
 
 // Intercept 'bun:test' imports and redirect them to our shims
+const shimsPath = path.join(import.meta.dir, "shims.js");
+
+// Intercept and rewrite test files to bypass 'bun:test' built-ins
 plugin({
-  name: "bun-test-mock",
+  name: "test-file-rewriter",
   setup(build) {
-    build.onResolve({ filter: /^bun:test$/ }, (args) => {
+    build.onLoad({ filter: /\.(t|test|tuit|it)\.(js|ts)$/ }, async (args) => {
+      let code = await fs.promises.readFile(args.path, 'utf8');
+      if (code.includes('bun:test')) {
+        // Comment out bun:test imports so they fall back to our global shims
+        // Support multi-line imports
+        code = code.replace(/import\s+[\s\S]*?from\s+["']bun:test["'];?/g, (m) => {
+          return m.split('\n').map(l => '// [utest-shim] ' + l).join('\n');
+        });
+      }
       return {
-        path: import.meta.resolve("./shims.js"),
+        contents: code,
+        loader: args.path.endsWith('.ts') ? 'ts' : 'js',
       };
     });
   },
 });
 
-// Install globals for files that don't import but rely on global scope
-Object.assign(globalThis, {
+globalThis.utest = true;
+const globals = {
   describe, it, expect,
-  beforeAll, afterAll, beforeEach, afterEach
-});
+  beforeAll, afterAll, beforeEach, afterEach,
+  withTempDir, spyOn, jest, vi, mock
+};
+
+for (const [k, v] of Object.entries(globals)) {
+  try {
+    Object.defineProperty(globalThis, k, {
+      value: v,
+      configurable: true,
+      writable: true,
+      enumerable: true
+    });
+  } catch (e) {
+    globalThis[k] = v;
+  }
+}
 
 // console.warn("Unified runner shims installed.");

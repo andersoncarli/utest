@@ -66,4 +66,8 @@ test.SRC_DIR = SRC_DIR
 
 test.context = {} // For core.js injection
 
+test.todo = (name, fn) => test(name, fn, { todo: true })
+test.skip = (name, fn) => test(name, fn, { skip: true })
+test.it = test
+
 export default test

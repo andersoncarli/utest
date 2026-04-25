@@ -206,4 +206,27 @@ export async function render(report, op = {}) {
   return lines.join('\n')
 }
 
-export default { render, glyphs }
+export async function warmDeps() {
+  await getDeps()
+}
+
+export function renderSuite(s, op = {}) {
+  const verbosity = op.verbosity ?? 1
+  const width = op.width ?? process.stdout.columns ?? 80
+  const deps = _deps 
+  if (!deps) return '' // Should call warmDeps first
+  const { cl } = deps
+
+  if (s.state === 'passed') {
+    if (verbosity < 2) return ''
+    return suiteInline(s)
+  }
+
+  const lines = [suiteHeader(s, deps)]
+  if (verbosity >= 3) lines.push(...suiteNodeLines(s, deps, width))
+  else lines.push(...suiteFailureLines(s, deps, width))
+  lines.push(`\x1b[40m\x1b[K\x1b[49m`)
+  return lines.join('\n')
+}
+
+export default { render, renderSuite, warmDeps, glyphs }

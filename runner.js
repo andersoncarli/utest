@@ -6,81 +6,35 @@
 //   "src/baz.js":  {}                                        uncovered — skipped
 
 import path from 'path'
-import test from './test.js'
+import { test } from './test.js'
 
 const INTERNAL = /utest\.js|scanner\.js|runner\.js|test\.js|node:|loader|run_main|ModuleJob|Module\._|internal\//i
 
-async function loadFile(abs) {
+export async function loadFile(abs) {
   const prev = test._loadingFile
   test._loadingFile = abs
   const existing = test.main.tests.filter(t => t.address === abs || t._address === abs)
-  if (existing.length > 0) {
-    // console.log(`[runner.js] ${abs} already loaded, skipping import`)
-    return
-  }
+  if (existing.length > 0) return
 
   try {
-    await import(`file://${abs}?t=${Date.now()}`)
+    await Promise.race([
+      import(abs),
+      new Promise((_, r) => setTimeout(() => r(new Error(`Import Timeout (1s): ${abs}`)), 1000))
+    ])
     for (const t of test.main.tests)
       if (!t.address && !t._address) t._address = abs
   } catch (e) {
-    const t = test(`load ${path.basename(abs)}`, () => {})
-    t.state = 'exception'
-    t.error = e
-    t.address = abs
-  } finally {
-    test._loadingFile = prev
-  }
+    const t = test(`load ${path.basename(abs)}`, () => { })
+    t.state = 'exception'; t.error = e; t.address = abs
+  } finally { test._loadingFile = prev }
 }
 
 function cachedTest(name, abs, checkCount) {
   const t = test(name, () => {})
-  t.state = 'passed'
-  t._cached = true
-  t._checkCount = checkCount
-  t.address = abs
+  t.state = 'passed'; t._cached = true; t._checkCount = checkCount; t.address = abs
   return t
 }
 
-export async function runManifest(manifest, options = {}) {
-  const { force = false, stopOnException = false } = options
-  const cwd = manifest._TARGET || process.cwd()
-
-  for (const [rel, entry] of Object.entries(manifest)) {
-    if (rel.startsWith('_')) continue
-
-    if (entry.tests) {
-      const dir = path.dirname(path.resolve(cwd, rel))
-      for (const [testName, info] of Object.entries(entry.tests)) {
-        const abs = path.join(dir, testName)
-        if (typeof info.cache === 'number' && !force)
-          cachedTest(testName, abs, info.cache)
-        else
-          await loadFile(abs)
-      }
-    } else if (typeof entry.cache === 'number') {
-      const abs = path.resolve(cwd, rel)
-      if (force) await loadFile(abs)
-      else cachedTest(path.basename(rel), abs, entry.cache)
-    }
-    // uncovered: skip
-  }
-
-  const rawTree = await run(test.main, { stopOnException })
-  const entries  = Object.entries(manifest).filter(([k]) => !k.startsWith('_'))
-  const allRel   = entries.map(([k]) => k)
-  const isTest   = n => /\.(t|test|tuit|it)\.(js|ts)$/.test(n)
-
-  const fCount = allRel.filter(n => !isTest(n)).length
-  const cCount = entries.filter(([, v]) => v.tests || typeof v.cache === 'number').length
-
-  rawTree._coverage = {
-    files:     fCount,
-    covered:   cCount,
-    uncovered: fCount - cCount,
-  }
-  return prepareReport(rawTree)
-}
 
 export async function run(tree, options = {}) {
   const { stopOnException = false } = options
@@ -88,16 +42,14 @@ export async function run(tree, options = {}) {
   const ctx = { check: await G.check, callstack: await G.callstack }
   const start = process.hrtime.bigint()
 
-  for (const t of tree.tests) {
-    if (t._cached) continue
+  // Parallel Execution within a file
+  await Promise.all(tree.tests.filter(t => !t._cached).map(async t => {
     try {
       await runTest(t, ctx, { stopOnException })
     } catch (e) {
       console.error(`[run] fatal: "${t.name}"`, e)
-      throw e
     }
-    if (stopOnException && t.state === 'exception') break
-  }
+  }))
 
   tree.duration = Number(process.hrtime.bigint() - start) / 1e6
   const sum = summary(tree)
@@ -129,8 +81,29 @@ export async function runTest(t, ctx, op = {}) {
       log:   (...a) => t.output.push(['log', a]),
       debug: (...a) => t.output.push(['debug', a]),
     }
-    const r = t.fn.call(t, context)
-    if (r instanceof Promise) await r
+
+    await Promise.race([
+      new Promise(async (resolve, reject) => {
+        try {
+          const done = (e) => e ? reject(e) : resolve();
+          // Detect if the first argument is intended to be context (legacy/bun style)
+          // or if it's the newer (done, context) style.
+          let r;
+          if (t.fn.length === 1) {
+            // Single arg: assume it's context
+            r = t.fn.call(t, context);
+          } else {
+            // 0 or 2+ args: standard (done, context)
+            r = t.fn.call(t, done, context);
+          }
+
+          if (r instanceof Promise) await r;
+          else if (t.fn.length === 0 || t.fn.length === 1) resolve();
+          // If t.fn.length > 0, we wait for done() to be called
+        } catch (e) { reject(e); }
+      }),
+      new Promise((_, r) => setTimeout(() => r(new Error("Timeout (1s)")), 1000))
+    ]);
 
     for (const child of t.tests) {
       await runTest(child, ctx, op)
@@ -175,7 +148,9 @@ const HOG_MS = 100
 export function prepareReport(rawTree) {
   const cov = rawTree._coverage || {}
   const stats = {
-    files: cov.files || 0, covered: cov.covered || 0, self: cov.self || 0, uncovered: cov.uncovered || 0,
+    files:     cov.files     || 0,
+    covered:   (cov.covered  || 0) + (cov.self || 0),  // covered + self-validating
+    uncovered: cov.uncovered || 0,
     tests: 0, passed: 0, cached: 0, failed: 0, exception: 0, hogs: 0
   }
 

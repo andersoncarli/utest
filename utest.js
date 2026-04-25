@@ -9,6 +9,7 @@
  */
 import fs from 'fs'
 import path from 'path'
+import './setup.js'
 
 import { test } from './scanner.js'
 import { render } from './viewer.js'
@@ -34,6 +35,9 @@ const titleArg = args.find(a => a.startsWith('--title='))
 const title   = titleArg ? titleArg.split('=')[1] : (targets.length ? targets.join(', ') : '.')
 const force    = args.includes('--force') || verbosity >= 3
 const hogsOnly = args.includes('--hogs')
+const noAnsi   = args.includes('--no-ansi')
+
+const stripAnsi = s => String(s || '').replace(/\x1b\[[0-9;]*[mGKKH]/g, '')
 
 async function main() {
   try {
@@ -75,14 +79,48 @@ async function main() {
     let results
     try {
       // Phase 2: Run
-      const { runManifest } = await import('./runner.js')
-      results = await runManifest(manifest, { force, stopOnException: false })
+      const { runManifest } = await import('./orchestrator.js')
+      const { renderSuite, warmDeps } = await import('./viewer.js')
+      await warmDeps()
+      
+      const width = process.env.WIDTH ? parseInt(process.env.WIDTH) : (process.stdout.columns || 80)
+      const hr = `\x1b[90m${'═'.repeat(width)}\x1b[39m`
+      const cl = (await G.cl) || { bold: s => s, gray: s => s }
+
+      if (verbosity >= 2) {
+        process.stdout.write(hr + '\n' + cl.bold(`${title} Test Results`) + '\n' + hr + '\n')
+      }
+
+      let lastWasInline = false
+      const onResult = (suite) => {
+        if (verbosity < 2) return
+        const clean = renderSuite(suite, { verbosity, width })
+        if (!clean) return
+        
+        const isInline = !clean.includes('\n')
+        if (isInline) {
+          process.stdout.write((lastWasInline ? '  ' : '') + (noAnsi ? stripAnsi(clean) : clean))
+          lastWasInline = true
+        } else {
+          process.stdout.write((lastWasInline ? '\n' : '') + (noAnsi ? stripAnsi(clean) : clean) + '\n')
+          lastWasInline = false
+        }
+      }
+
+      results = await runManifest(manifest, { force, stopOnException: false, onResult, workers: 8 })
+      if (lastWasInline) process.stdout.write('\n')
 
       // Phase 3: View
       if (origConsole) restoreConsole(origConsole)
-      const width = process.env.WIDTH ? parseInt(process.env.WIDTH) : (process.stdout.columns || 80)
       const report = await render(results, { verbosity, width, title, nameTerms: filter, hogsOnly })
-      if (report) console.log(report)
+      
+      // If we already streamed, just print the footer part of the report
+      if (verbosity >= 2) {
+        const footer = report.split('\n').slice(-3).join('\n')
+        process.stdout.write(noAnsi ? stripAnsi(footer) + '\n' : footer + '\n')
+      } else if (report) {
+        process.stdout.write(noAnsi ? stripAnsi(report) + '\n' : report + '\n')
+      }
 
       // Phase 4: Cache writeback
       if (results) {
@@ -113,14 +151,13 @@ async function main() {
     const finalState = results?.state || 'failed'
     process.exit(['failed', 'exception'].includes(finalState) ? 1 : 0)
   } catch (e) {
-    console.log(`\n💥 Fatal Error: ${e.message}`)
-    console.log(e.stack)
+    console.error(e)
     process.exit(1)
   }
 }
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('\n\x1b[31;1mUNHANDLED REJECTION:\x1b[39;22m', reason)
+  process.exit(1)
 })
 main().catch(err => { console.error(err); process.exit(1) })
 

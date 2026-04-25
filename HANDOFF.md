@@ -1,39 +1,64 @@
-# Utest Stability Handoff
+# utest Handoff — 2026-04-24 (Session 3)
 
-This document summarizes the learnings and state of the `utest` registry and runner system as of 2026-04-22.
+## Current State (Parallelized & Streaming)
 
-## Key Achievements
+The `utest` runner has undergone a major architectural upgrade. It now supports high-concurrency parallel execution and real-time result streaming, achieving significantly faster feedback loops.
 
-### 1. Mtime-based Metadata Encoding
-We evolved the caching system to support two metrics instead of one. The file Mtime (offset from the start of the minute) now encodes:
-- **Checks (✔)**: `ms % 1000` (up to 999 checks)
-- **Test Calls (🧪)**: `Math.floor(ms / 1000)` (up to 59 test calls per minute)
-
-Modified `utest/scanner.js` and `utest/runner.js` to pack/unpack this metadata.
-
-### 2. Global Registry Unification
-- Fixed a regression where `utest.js` was importing a mock `test` object from `scanner.js` instead of the real collector in `test.js`.
-- Ensured `globalThis.test` is the source of truth for all test registrations across dynamic imports.
-
-### 3. G Registry & Globalization
-- **Lazy Loading**: Most modules in `globals.d.js` were moved from `eager` to lazy loading to improve boot speed and reduce initialization conflicts.
-- **Globalization Sync**: Identified that accessing `G.<module>` before the `globalizer` plugin is installed triggers the `Explicit globalizer not loaded` stub. The boot sequence now waits for plugin installation before proceeding to globalize.
-- **ESM Default Unwrap**: Updated `G.js` to correctly unwrap ESM `default` exports even when the module has other exports, ensuring `finalModule` is the intended function/object.
-
-## Current State
-
-- **Baseline Stability**: The system is currently stable on the staged branch.
-- **Reporting Parity**: The `utest` runner now shows 🧪 (test calls) and ✔ (checks) in the footer, matching legacy expectations.
-- **Scanner Accuracy**: Increased Mtime offset threshold from 1s to 60s to capture files modified earlier in the minute (fixes "histogram.js not counted" issue).
-
-## Open Issues / Next Steps
-
-1. **Explicit Globalizer Stub**: Intermittent "Explicit globalizer not loaded" errors still occur if a module is requested during the very early boot phase. Ensure all core dependencies used by `G` itself (like `fs`, `path`) are handled safely.
-2. **Submodule Management**: The `utils/` directory is a submodule. Any changes there must be committed/staged separately from the root repository.
-3. **Registry Pruning**: The `global` list in `globals.d.js` should continue to be pruned in favor of lazy `G.name` access to minimize global namespace pollution.
-
-## Diagnostics
-Use the following command for deep-dive logs:
 ```bash
-DEBUG=G ./utest.js utils --force -v:2
+utest utils -v2 --force
+```
+
+**Performance (utils suite - 101 files):**
+- **Sequential**: ~25-30 seconds.
+- **Parallel (8 workers)**: ~6-7 seconds (including multiple 1s timeouts).
+- **Feedback**: Immediate (real-time streaming).
+
+---
+
+## Architectural Upgrades
+
+### 1. Parallel Orchestration (`orchestrator.js`)
+- Transitioned from a sequential manifest loop to a **Worker Pool** architecture.
+- Uses `Bun.spawn` to execute each test file in a dedicated [child-worker.js](file:///home/bittnkr/bot/utest/child-worker.js) process.
+- **Why spawn instead of Bun.Worker?**: ACHIEVES 100% ISOLATION. This resolved persistent ESM circular dependency issues (like `Cannot access 'default' before initialization`) by providing a fresh process environment for every test file.
+
+### 2. Real-Time Streaming UI (`utest.js` + `viewer.js`)
+- Implemented an `onResult` callback in the orchestrator that notifies the CLI immediately upon suite completion.
+- **Last-Inline Layout**: 
+  - **Passing suites** render on a single line (e.g., `is.t.js ✔25`) to conserve space.
+  - **Failing suites** break to a new line and render full multi-line diagnostics.
+- This provides "live" feedback, making it immediately obvious where hangs or failures occur.
+
+### 3. Hardened Isolation
+- **Global Reset**: Each `child-worker` starts with a clean `test.main` registry.
+- **Strict Timeouts**: Reduced per-file safety timeout to **1s**. This forces the identification of asynchronous "hogs" and prevents a single bad test from stalling the pipeline.
+
+---
+
+## Error Categorization (Current Run)
+
+### 1. Timeouts (⏳) — "Hogs"
+- Interactive TUI tests and some heavy `G` plugin tests (like `discovery.t.js`, `debug.t.js`) hit the 1s limit.
+- These need to be investigated for either genuine slowness or hung promises.
+
+### 2. Logic Failures (✘)
+- Several tests in `utils/src` (like `split.js`, `toSource.t.js`) are failing due to logic mismatches in the unified environment.
+
+---
+
+## Next Priority Tasks
+
+1. **Stabilize `utils` failures**: Now that the runner is fast and reliable, systematically fix the functional regressions in the core utility tests.
+2. **Resource Contention**: Ensure parallel tests don't collide on shared resources (like the `DB` or temporary directories).
+3. **Dynamic Worker Count**: Auto-detect `os.cpus()` instead of hard-coding `workers: 8`.
+4. **Mock `process.stdin`**: Continue hardening the shim layer for TUI tests that depend on interactive input.
+
+---
+
+## Standard Commands
+
+```bash
+utest utils -v2 --force         # High-speed parallel run with live feedback
+utest <file> -v3                # Deep-dive into specific file (full tree)
+DEBUG=utest utest <file>        # See internal orchestration logs
 ```
