@@ -1,15 +1,11 @@
-// runner.js — Load test files from scanner manifest, execute, serialize for viewer.
-//
-// Manifest format (from scanner.js):
-//   "src/foo.js":  { tests: { "foo.t.js": {cache?:N} } }   covered
-//   "src/bar.js":  { cache: N }                              self-validating
-//   "src/baz.js":  {}                                        uncovered — skipped
-
 import path from 'path'
 import { test } from './test.js'
+import check from './check.js'
+import callstack from '../utils/src/callstack.js'
 
-const INTERNAL = /utest\.js|scanner\.js|runner\.js|test\.js|node:|loader|run_main|ModuleJob|Module\._|internal\//i
+const INTERNAL = /utest\.js|scanner\.js|runner\.js|worker\.js|check\.js|test\.js|shims\.js|node:|bun:|internal\//i
 
+// ─── Load ─────────────────────────────────────────────────────
 export async function loadFile(abs) {
   const prev = test._loadingFile
   test._loadingFile = abs
@@ -24,31 +20,19 @@ export async function loadFile(abs) {
     for (const t of test.main.tests)
       if (!t.address && !t._address) t._address = abs
   } catch (e) {
-    const t = test(`load ${path.basename(abs)}`, () => { })
+    const t = test(`load ${path.basename(abs)}`, () => {})
     t.state = 'exception'; t.error = e; t.address = abs
   } finally { test._loadingFile = prev }
 }
 
-function cachedTest(name, abs, checkCount) {
-  const t = test(name, () => {})
-  t.state = 'passed'; t._cached = true; t._checkCount = checkCount; t.address = abs
-  return t
-}
-
-
+// ─── Execute ──────────────────────────────────────────────────
 export async function run(tree, options = {}) {
-  const { stopOnException = false } = options
-  await G._ready
-  const ctx = { check: await G.check, callstack: await G.callstack }
+  const { stopOnException = false, timeout = 1000 } = options
   const start = process.hrtime.bigint()
 
-  // Parallel Execution within a file
   await Promise.all(tree.tests.filter(t => !t._cached).map(async t => {
-    try {
-      await runTest(t, ctx, { stopOnException })
-    } catch (e) {
-      console.error(`[run] fatal: "${t.name}"`, e)
-    }
+    try { await runTest(t, { stopOnException, timeout }) }
+    catch (e) { console.error(`[run] fatal: "${t.name}"`, e) }
   }))
 
   tree.duration = Number(process.hrtime.bigint() - start) / 1e6
@@ -57,56 +41,48 @@ export async function run(tree, options = {}) {
   return serialize(tree)
 }
 
-export async function runTest(t, ctx, op = {}) {
-  const { stopOnException = true } = op
+export async function runTest(t, op = {}) {
+  const { stopOnException = true, timeout = 1000 } = op
   if (t.state !== 'pending') return t
   t.state = 'running'
   t.startTime = process.hrtime.bigint()
 
-  if (!t.caller && t.stack && ctx.callstack) {
-    for (const frame of ctx.callstack({ error: { stack: t.stack }, smartFilter: false }).stack) {
+  // Resolve caller location from the test's captured stack
+  if (!t.caller && t.stack) {
+    const cs = callstack({ error: { stack: t.stack }, smartFilter: false })
+    for (const frame of cs.stack) {
       if (!INTERNAL.test(frame.file) && !INTERNAL.test(frame.func)) { t.caller = frame; break }
     }
   }
 
-  const saved = ctx.check.test
-  ctx.check.test = t
+  const saved = check.test
+  check.test = t
+
   try {
     const context = {
       ...(t.context || {}),
-      check: ctx.check.bind(t),
-      checkFail: ctx.check.checkFail.bind(t),
-      checkException: ctx.check.checkException.bind(t),
-      test: test.bind(t),
-      log:   (...a) => t.output.push(['log', a]),
-      debug: (...a) => t.output.push(['debug', a]),
+      check:          check.bind(t),
+      checkFail:      check.checkFail.bind(t),
+      checkException: check.checkException.bind(t),
+      test:           test.bind(t),
+      log:            (...a) => t.output.push(['log', a]),
+      debug:          (...a) => t.output.push(['debug', a]),
     }
 
+    const effectiveTimeout = t.op?.timeout || timeout
     await Promise.race([
-      new Promise(async (resolve, reject) => {
-        try {
-          const done = (e) => e ? reject(e) : resolve();
-          // Detect if the first argument is intended to be context (legacy/bun style)
-          // or if it's the newer (done, context) style.
-          let r;
-          if (t.fn.length === 1) {
-            // Single arg: assume it's context
-            r = t.fn.call(t, context);
-          } else {
-            // 0 or 2+ args: standard (done, context)
-            r = t.fn.call(t, done, context);
-          }
-
-          if (r instanceof Promise) await r;
-          else if (t.fn.length === 0 || t.fn.length === 1) resolve();
-          // If t.fn.length > 0, we wait for done() to be called
-        } catch (e) { reject(e); }
-      }),
-      new Promise((_, r) => setTimeout(() => r(new Error("Timeout (1s)")), 1000))
-    ]);
+      (async () => {
+        let r
+        if (t.fn.length === 0)      r = t.fn.call(t)            // no-arg: plain async fn (bun:test style)
+        else if (t.fn.length === 1) r = t.fn.call(t, context)   // ({ check }) => {} style
+        else { const done = new Promise((res, rej) => { r = t.fn.call(t, (e) => e ? rej(e) : res(), context) }); await done; return }
+        if (r instanceof Promise) await r
+      })(),
+      new Promise((_, r) => setTimeout(() => r(new Error(`Timeout (${effectiveTimeout}ms)`)), effectiveTimeout))
+    ])
 
     for (const child of t.tests) {
-      await runTest(child, ctx, op)
+      await runTest(child, op)
       if (stopOnException && child.state === 'exception') { t.state = 'exception'; break }
     }
 
@@ -117,13 +93,14 @@ export async function runTest(t, ctx, op = {}) {
     t.state = 'exception'
     t.error = e
   } finally {
-    ctx.check.test = saved
+    check.test = saved
     t.endTime  = process.hrtime.bigint()
     t.duration = Number(t.endTime - t.startTime) / 1e6
   }
   return t
 }
 
+// ─── Summary ──────────────────────────────────────────────────
 export function summary(t) {
   const s = { passed: 0, failed: 0, exception: 0, total: 0 }
   for (const c of (t.checks || [])) { s[c.state] = (s[c.state] || 0) + 1; s.total++ }
@@ -132,103 +109,19 @@ export function summary(t) {
       const cs = summary(child)
       s.passed += cs.passed; s.failed += cs.failed; s.exception += cs.exception; s.total += cs.total
     }
-  } else if (s.total === 0 && t.state && !['pending','running'].includes(t.state)) {
-    s[['passed','failed','exception'].includes(t.state) ? t.state : 'passed']++
-    s.total++
-  }
-  return s
-}
-
-// ── Report ─────────────────────────────────────────────────────────────────────
-// Converts the raw serialized tree from run() into a flat Report POJO for viewer.
-// Pre-computes all summaries and flattens failures — viewer becomes pure formatting.
-
-const HOG_MS = 100
-
-export function prepareReport(rawTree) {
-  const cov = rawTree._coverage || {}
-  const stats = {
-    files:     cov.files     || 0,
-    covered:   (cov.covered  || 0) + (cov.self || 0),  // covered + self-validating
-    uncovered: cov.uncovered || 0,
-    tests: 0, passed: 0, cached: 0, failed: 0, exception: 0, hogs: 0
-  }
-
-  const suites = (rawTree.tests || []).map(t => {
-    const s = _buildSuite(t)
-    stats.tests     += s._tc
-    stats.passed    += s.passed
-    stats.cached    += s.cached
-    stats.failed    += s.failed
-    stats.exception += s.exception
-    stats.hogs      += s._hogs
-    delete s._tc
-    delete s._hogs
-    return s
-  })
-
-  return { state: rawTree.state, duration: rawTree.duration || 0, stats, suites }
-}
-
-function _buildSuite(root) {
-  const s = {
-    name:      root.name,
-    file:      root.address || root._address || '',
-    state:     root.state,
-    duration:  Math.round(root.duration || 0),
-    fromCache: root.cached || false,
-    passed: 0, cached: 0, failed: 0, exception: 0,
-    _tc: 0, _hogs: 0,
-    failures: [],   // { kind:'check'|'exception', check?, name?, error? }
-    nodes: []       // flat depth-annotated list for v3 rendering
-  }
-
-  function walk(t, depth) {
-    s._tc++
-    const ic     = t.cached || t._cached
-    const checks = t.checks || []
-
-    if (!ic && (t.duration || 0) > HOG_MS) s._hogs++
-
-    if (ic) {
-      s.cached += t.checkCount || 1
-    } else {
-      for (const c of checks) {
-        if (c.state === 'passed') s.passed++
-        else {
-          s[c.state] = (s[c.state] || 0) + 1
-          s.failures.push({ kind: 'check', check: c })
-        }
-      }
-      // Exception on the test node itself (not via a check)
-      if (t.state === 'exception' && t.error) {
-        if (!checks.length) s.exception++
-        s.failures.push({ kind: 'exception', name: t.name, error: t.error })
-      }
-      // Leaf nodes with no checks: auto-count 1 to keep cache encoding non-zero
-      if (!checks.length && !(t.tests?.length) && t.state === 'passed') s.passed++
+  } else {
+    if (s.total === 0 && t.state && !['pending','running'].includes(t.state)) {
+      s[['passed','failed','exception'].includes(t.state) ? t.state : 'passed']++
+      s.total++
+    } else if (t.state === 'exception' && !s.exception) {
+      // Leaf test threw an exception but also has checks — count the exception
+      s.exception++; s.total++
     }
-
-    s.nodes.push({
-      depth,
-      name:       t.name,
-      state:      t.state,
-      duration:   Math.round(t.duration || 0),
-      cached:     ic,
-      checkCount: ic ? (t.checkCount || 0) : undefined,
-      checks,
-      output:     t.output || [],
-      error:      t.error ? { message: t.error.message, stack: t.error.stack } : undefined
-    })
-
-    for (const child of (t.tests || [])) walk(child, depth + 1)
   }
-
-  walk(root, 0)
   return s
 }
 
-// ── Serialize ─────────────────────────────────────────────────────────────────
+// ─── Serialize ────────────────────────────────────────────────
 const safeStr = v => { try { return v !== undefined ? String(v) : undefined } catch(e) { return `[${e.message}]` } }
 
 function serializeCheck(c) {
@@ -240,22 +133,24 @@ function serializeCheck(c) {
     address:  c.address       || undefined,
     lineCode: c.lineCode      || undefined,
     error:    c.error ? { message: c.error.message, stack: c.error.stack } : undefined,
-    op: { skip: c.op?.skip, message: c.op?.message,
-          error: c.op?.error ? { message: c.op.error.message, stack: c.op.error.stack } : undefined },
+    op: {
+      message: c.op?.message,
+      error: c.op?.error ? { message: c.op.error.message, stack: c.op.error.stack } : undefined
+    },
   }
 }
 
 function serialize(t) {
   return {
-    name:     t.name,
-    state:    t.state,
-    duration: Math.round(t.duration || 0),
-    address:  t.address || t._address || (t.caller ? `${t.caller.file}:${String(t.caller.line).padStart(3,'0')}` : undefined),
+    name:       t.name,
+    state:      t.state,
+    duration:   Math.round(t.duration || 0),
+    address:    t.address || t._address || (t.caller ? `${t.caller.file}:${String(t.caller.line).padStart(3,'0')}` : undefined),
     cached:     t._cached || false,
     checkCount: t._checkCount || 0,
     checks:     (t.checks || []).map(serializeCheck),
-    output:   t.output || [],
-    error:    t.error ? { message: t.error.message, stack: t.error.stack } : undefined,
-    tests:    (t.tests || []).map(serialize),
+    output:     t.output || [],
+    error:      t.error ? { message: t.error.message, stack: t.error.stack } : undefined,
+    tests:      (t.tests || []).map(serialize),
   }
 }

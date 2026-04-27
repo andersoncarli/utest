@@ -1,16 +1,9 @@
-/**
- * test.js - Minimal Test Collector
- *
- * Fundamental dependency for defining tests.
- * Decoupled from execution and visualization.
- */
-import { TEST_DIR, ROOT, SRC_DIR } from './paths.js'
+// _current: set by test.begin() for per-file isolation; null = use test.main (back-compat)
+let _current = null
 
-export function test(name, fn = () => { }, op = {}) {
-  // Capture raw stack for postponed extraction
+export function test(name, fn = () => {}, op = {}) {
   const stack = new Error().stack
 
-  // The test instance is a container for metadata and execution state
   const t = {
     name,
     fn,
@@ -24,21 +17,31 @@ export function test(name, fn = () => { }, op = {}) {
     oncheck: (chk) => t.checks.push(chk)
   }
 
-  // Nesting logic: 'this' will be the parent test instance when called via context
-  // Context-bound tests will have 'this' set to the parent test object
-  const parent = (this && this.tests) ? this : test.main
+  // Precedence: explicit this-binding (inside describe) → _current (file root) → test.main
+  const parent = (this && this.tests) ? this
+    : _current ?? test.main
+
   if (parent && parent !== t) {
     t.parent = parent
     parent.tests.push(t)
-    if (parent === test.main && test._loadingFile) {
+    if (!_current && parent === test.main && test._loadingFile)
       t.address = test._loadingFile
-    }
   }
 
   return t
 }
 
-// Global registry - Unified across module instances
+// ─── Isolated scope API (used by utest2.js) ─────────────────────
+// Call test.begin() before import(file), test.end() after.
+// All top-level test() calls in the file go into the returned root.
+test.begin = (name = 'root') => {
+  const root = { name, tests: [], checks: [], state: 'pending', output: [] }
+  _current = root
+  return root
+}
+test.end = () => { _current = null }
+
+// ─── Singleton (back-compat for worker.js / utest.js) ───────────
 test.main = globalThis.test?.main || {
   name: 'Main',
   tests: [],
@@ -46,28 +49,18 @@ test.main = globalThis.test?.main || {
   state: 'pending'
 }
 
-if (!globalThis.test) {
-  globalThis.test = test
-}
+if (!globalThis.test) globalThis.test = test
 globalThis.test.main = test.main
 
-// Shared loading state for address capture - Unified via shared test.main object
 Object.defineProperty(test, '_loadingFile', {
-  get: () => test.main._loadingFile,
-  set: (v) => { test.main._loadingFile = v },
+  get: () => (test.main._loadingFile),
+  set: v => { test.main._loadingFile = v },
   configurable: true
 })
 
-
-
-test.ROOT = ROOT
-test.TEST_DIR = TEST_DIR
-test.SRC_DIR = SRC_DIR
-
-test.context = {} // For core.js injection
-
 test.todo = (name, fn) => test(name, fn, { todo: true })
 test.skip = (name, fn) => test(name, fn, { skip: true })
-test.it = test
+test.it   = test
+test.context = {}
 
 export default test

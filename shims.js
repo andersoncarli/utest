@@ -5,33 +5,40 @@
  * to allow hybrid Bun tests to run in our unified runner.
  */
 import test from './test.js'
-import check from '../utils/src/check.js'
+import check from './check.js'
 import { withTempDir } from '../lib/withTempDir.js'
 
-export { withTempDir, test }
+export { withTempDir, test, check }
 
 export function describe(name, fn) {
   const t = test(name, fn)
-  // Auto-execute the block to register inner tests immediately
+  t._describe = true
+  t._beforeAll = []
+  t._afterAll  = []
+
+  // Global lifecycle hooks attach to the innermost describe via a stack
+  _describeStack.push(t)
   const context = {
-    test: test.bind(t),
-    describe: describe.bind(t),
-    it: it.bind(t),
-    beforeAll: (f) => f(),
-    afterAll: (f) => {},
+    test:       test.bind(t),
+    describe:   describe.bind(t),
+    it:         it.bind(t),
+    beforeAll:  (f) => t._beforeAll.push(f),
+    afterAll:   (f) => t._afterAll.push(f),
     beforeEach: (f) => {},
-    afterEach: (f) => {},
-    expect: (a) => expect(a, t),
+    afterEach:  (f) => {},
+    expect:     (a) => expect(a, t),
     withTempDir
   }
-  // In describe blocks, we execute synchronously to collect children
-  try {
-    fn.call(t, context)
-  } catch (e) {
-    t.state = 'exception'
-    t.error = e
-  }
+  try { fn.call(t, context) } catch (e) { t.state = 'exception'; t.error = e }
+  _describeStack.pop()
 }
+
+// Stack so globalThis.beforeAll/afterAll know which describe they're inside
+const _describeStack = []
+export const beforeAll  = (f) => { const t = _describeStack.at(-1); if (t) t._beforeAll.push(f); else f() }
+export const afterAll   = (f) => { const t = _describeStack.at(-1); if (t) t._afterAll.push(f) }
+export const beforeEach = (f) => {}
+export const afterEach  = (f) => {}
 
 export function it(name, fn) {
   return test(name, fn)
@@ -42,52 +49,50 @@ test.todo = it.todo
 test.skip = it.skip
 
 export function expect(a) {
-  const chk = (cond, expected) => check(cond, expected)
-
   const matchers = (val) => ({
-    toBe: (b) => chk(val, b),
-    toEqual: (b) => chk(val, b),
-    toStrictEqual: (b) => chk(val, b),
-    toBeGreaterThan: (b) => chk(val > b, true),
-    toBeGreaterThanOrEqual: (b) => chk(val >= b, true),
-    toBeLessThan: (b) => chk(val < b, true),
-    toBeLessThanOrEqual: (b) => chk(val <= b, true),
-    toContain: (b) => chk(val?.includes?.(b), true),
-    toBeTruthy: () => chk(!!val, true),
-    toBeFalsy: () => chk(!val, true),
-    toBeDefined: () => chk(val !== undefined, true),
-    toBeUndefined: () => chk(val === undefined, true),
-    toBeNull: () => chk(val === null, true),
-    toBeInstanceOf: (C) => chk(val instanceof C, true),
-    toMatch: (re) => chk(re.test(val), true),
-    toHaveBeenCalled: () => chk(val?.calls?.length > 0, true),
-    toHaveBeenCalledWith: (...args) => chk(val?.calls?.some(c => JSON.stringify(c) === JSON.stringify(args)), true),
-    toHaveLength: (l) => chk(val?.length === l, true),
-    toHaveProperty: (p, v) => chk(v !== undefined ? val?.[p] === v : p in (val || {}), true),
-    toBeTypeOf: (t) => chk(typeof val === t, true),
+    toBe: (b) => check(val, b),
+    toEqual: (b) => check(val, b),
+    toStrictEqual: (b) => check(val, b),
+    toBeGreaterThan: (b) => check(val > b),
+    toBeGreaterThanOrEqual: (b) => check(val >= b),
+    toBeLessThan: (b) => check(val < b),
+    toBeLessThanOrEqual: (b) => check(val <= b),
+    toContain: (b) => check(val?.includes?.(b)),
+    toBeTruthy: () => check(!!val),
+    toBeFalsy: () => check(!val),
+    toBeDefined: () => check(val !== undefined),
+    toBeUndefined: () => check(val === undefined),
+    toBeNull: () => check(val === null),
+    toBeInstanceOf: (C) => check(val instanceof C),
+    toMatch: (re) => check(re.test(val)),
+    toHaveBeenCalled: () => check(val?.calls?.length > 0),
+    toHaveBeenCalledWith: (...args) => check(val?.calls?.some(c => JSON.stringify(c) === JSON.stringify(args))),
+    toHaveLength: (l) => check(val?.length === l),
+    toHaveProperty: (p, v) => check(v !== undefined ? val?.[p] === v : p in (val || {})),
+    toBeTypeOf: (t) => check(typeof val === t),
     toThrow: (msg) => {
-       try { 
+       try {
          const fn = typeof val === 'function' ? val : () => { throw val }
-         fn(); chk(false, true) 
-       } 
-       catch(e) { chk(msg ? (e.message || String(e)).includes(msg) : true, true) }
+         fn(); check(false)
+       }
+       catch(e) { check(msg ? (e.message || String(e)).includes(msg) : true) }
     },
     not: {
-      toBe: (b) => chk(val !== b, true),
-      toEqual: (b) => chk(val !== b, true),
-      toStrictEqual: (b) => chk(val !== b, true),
-      toContain: (b) => chk(!val?.includes?.(b), true),
-      toBeTruthy: () => chk(!val, true),
-      toBeFalsy: () => chk(!!val, true),
-      toBeNull: () => chk(val !== null, true),
-      toBeDefined: () => chk(val === undefined, true),
-      toBeUndefined: () => chk(val !== undefined, true),
+      toBe: (b) => check(val !== b),
+      toEqual: (b) => check(val !== b),
+      toStrictEqual: (b) => check(val !== b),
+      toContain: (b) => check(!val?.includes?.(b)),
+      toBeTruthy: () => check(!val),
+      toBeFalsy: () => check(!!val),
+      toBeNull: () => check(val !== null),
+      toBeDefined: () => check(val === undefined),
+      toBeUndefined: () => check(val !== undefined),
       toThrow: (msg) => {
-        try { 
+        try {
           const fn = typeof val === 'function' ? val : () => { throw val }
-          fn(); chk(true, true) 
-        } 
-        catch(e) { chk(false, true) }
+          fn(); check(true)
+        }
+        catch(e) { check(false) }
       }
     }
   });
@@ -95,19 +100,19 @@ export function expect(a) {
   const base = matchers(a);
   base.resolves = {
     get not() { return matchers(a.then(v => v)).not },
-    toBe: async (b) => chk(await a, b),
-    toEqual: async (b) => chk(await a, b),
-    toBeTruthy: async () => chk(!!(await a), true),
-    toBeFalsy: async () => chk(!(await a), true),
-    toContain: async (b) => chk((await a)?.includes?.(b), true),
+    toBe: async (b) => check(await a, b),
+    toEqual: async (b) => check(await a, b),
+    toBeTruthy: async () => check(!!(await a)),
+    toBeFalsy: async () => check(!(await a)),
+    toContain: async (b) => check((await a)?.includes?.(b)),
   };
   base.rejects = {
     get not() { return matchers(a.catch(e => e)).not },
     toThrow: async (msg) => {
-      try { await a; chk(false, true) }
-      catch(e) { chk(msg ? (e.message || String(e)).includes(msg) : true, true) }
+      try { await a; check(false) }
+      catch(e) { check(msg ? (e.message || String(e)).includes(msg) : true) }
     },
-    toBe: async (b) => { try { await a; chk(false, true) } catch(e) { chk(e, b) } }
+    toBe: async (b) => { try { await a; check(false) } catch(e) { check(e, b) } }
   };
 
   return base;
@@ -135,14 +140,10 @@ export const jest = { spyOn, fn: (impl) => { const s = spyOn({ f: impl || (() =>
 export const vi = jest
 export const mock = jest
 
-export const beforeAll = (fn) => fn() 
-export const afterAll = (fn) => {}
-export const beforeEach = (fn) => {}
-export const afterEach = (fn) => {}
 
 export function installShims() {
   Object.assign(globalThis, {
-    describe, it, expect, 
+    describe, it, expect,
     beforeAll, afterAll, beforeEach, afterEach,
     withTempDir, spyOn, jest, vi, mock
   })
