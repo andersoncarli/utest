@@ -41,6 +41,14 @@ test.begin = (name = 'root') => {
 }
 test.end = () => { _current = null }
 
+// Temporarily redirect test() registrations into a parent node.
+// Used by describe() in shims so arrow-function bodies work correctly.
+test.scope = (parent, fn) => {
+  const prev = _current
+  _current = parent
+  try { fn() } finally { _current = prev }
+}
+
 // ─── Singleton (back-compat for worker.js / utest.js) ───────────
 test.main = globalThis.test?.main || {
   name: 'Main',

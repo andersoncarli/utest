@@ -8,38 +8,44 @@
 //   test('hash53', ({ hash53, check }) => { check(hash53(''), 0) })
 //   — hash53 comes from the target module, check from the runner. Zero imports needed.
 
-import path    from 'path'
-import fs      from 'fs'
+import path from 'path'
+import fs from 'fs'
 import { plugin } from 'bun'
 
-import test    from './test.js'
-import { check, checkFail, checkException }     from './check.js'
+import test from './test.js'
+import { check, checkFail, checkException } from './check.js'
 import { scan, writeCache, writeSelfCache, bustCache } from './scanner.js'
-import { view, fullView, summary, glyphs }      from './viewer.js'
-import { expect, describe, it, spyOn, jest, vi, mock,
-         beforeAll, afterAll, beforeEach, afterEach,
-         withTempDir }                          from './shims.js'
+import { view, fullView, summary, glyphs, checkView } from './viewer.js'
+import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
+         beforeEach, afterEach, withTempDir} from './shims.js'
 
-import is        from '../utils/src/is.js'
-import toSource  from '../utils/src/toSource.js'
+import { busReset } from '../io/bus.js'
+
+import is from '../utils/src/is.js'
+import toSource from '../utils/src/toSource.js'
 import callstack from '../utils/src/callstack.js'
 // import normalize from '../utils/src/normalize.js'
-import cl        from '../utils/src/cl.js'
+import cl from '../utils/src/cl.js'
 // import forEach   from '../utils/src/forEach.js'
-import dotfill   from '../utils/src/dotfill.js'
+import dotfill from '../utils/src/dotfill.js'
 
 // Needed by callstack.js and cl.js internally
-globalThis.fs   = fs
+globalThis.fs = fs
 globalThis.path = path
+
+// Wire checkView so standalone check() calls (outside test context) render properly
+check.view = (c) => checkView(c, { width: process.stdout.columns || 80 })
 
 // ─── Base context ─────────────────────────────────────────────────────────────
 // Everything a test body might need except target exports (added per file).
-const baseCtx = { check, checkFail, checkException, expect,  is, cl, withTempDir }
+const baseCtx = { check, checkFail, checkException, expect, is, cl, withTempDir }
 
 // ─── Globals for fn.length===0 style and file-level code ─────────────────────
 for (const [k, v] of Object.entries(baseCtx)) globalThis[k] = v
-Object.assign(globalThis, { test, describe, it, spyOn, jest, vi, mock,
-                             beforeAll, afterAll, beforeEach, afterEach })
+Object.assign(globalThis, {
+  test, describe, it, spyOn, jest, vi, mock,
+  beforeAll, afterAll, beforeEach, afterEach
+})
 globalThis.utest = true
 
 // ─── Plugin: redirect 'bun:test' imports to our shims ────────────────────────
@@ -54,7 +60,7 @@ plugin({
           m => m.split('\n').map(l => '// [utest-shim] ' + l).join('\n'))
       const isCjs = /\bmodule\.exports\b|\brequire\s*\(/.test(code)
       if (!isCjs) {
-        code = `import { test, describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, check } from ${JSON.stringify(shimsPath)};\n` + code
+        code = `import { test, describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, check } from ${JSON.stringify(shimsPath)};` + code
       }
       return { contents: code, loader: args.path.endsWith('.ts') ? 'ts' : 'js' }
     })
@@ -66,18 +72,18 @@ async function runTest(t, ctx, timeout = 1000) {
   if (t.state !== 'pending') return t
   t.state = 'running'
   const saved = check.test
-  check.test  = t
+  check.test = t
   const start = process.hrtime.bigint()
 
   // Build per-test context (binds check/log to this test node)
   const tCtx = {
     ...ctx,
-    check:          check.bind(t),
-    checkFail:      checkFail.bind(t),
+    check: check.bind(t),
+    checkFail: checkFail.bind(t),
     checkException: checkException.bind(t),
-    test:           test.bind(t),
-    log:            (...a) => t.output.push(['log', a]),
-    debug:          (...a) => t.output.push(['debug', a]),
+    test: test.bind(t),
+    log: (...a) => t.output.push(['log', a]),
+    debug: (...a) => t.output.push(['debug', a]),
   }
 
   try {
@@ -88,7 +94,7 @@ async function runTest(t, ctx, timeout = 1000) {
         if (t._describe) {
           for (const f of t._beforeAll || []) await f()
           for (const child of t.tests) await runTest(child, ctx, timeout)
-          for (const f of t._afterAll  || []) try { await f() } catch {}
+          for (const f of t._afterAll || []) try { await f() } catch { }
           return
         }
         // Leaf tests with no pre-registered children call fn now.
@@ -122,7 +128,7 @@ async function runTest(t, ctx, timeout = 1000) {
     ])
 
     if (t.state === 'running')
-      t.state = (t.checks.some(c => c.state !== 'passed') || t.tests.some(c => ['failed','exception'].includes(c.state)))
+      t.state = (t.checks.some(c => c.state !== 'passed') || t.tests.some(c => ['failed', 'exception'].includes(c.state)))
         ? 'failed' : 'passed'
   } catch (e) {
     t.state = 'exception'; t.error = e
@@ -136,31 +142,38 @@ async function runTest(t, ctx, timeout = 1000) {
 // ─── Args ────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2)
 let verbosity = 1
-const _verbMatch = a => (a.match(/^-?v?([0-3])$/) || a.match(/^--v([0-3])$/) || [])[1]
-for (const a of args) { const m = _verbMatch(a); if (m != null) verbosity = parseInt(m) }
+const _vArg = args.find(a => /^(-v)?:?([0123])$/.test(a))
+if (_vArg) verbosity = parseInt(_vArg.match(/([0123])$/)[1])
 
-const force      = args.includes('--force') || args.includes('-f')
-const showUnc    = args.includes('--uncovered') || args.includes('-u')
-const hogs       = args.includes('--hogs') || args.includes('-h')
+const force = args.includes('--force') || args.includes('-f')
+const watch = args.includes('--watch') || args.includes('-w')
+const showUnc = args.includes('--uncovered') || args.includes('-u')
+const hogs = args.includes('--hogs') || args.includes('-h')
 const timeoutArg = args.find(a => a.startsWith('--timeout=') || a.startsWith('-to='))
-const timeout    = timeoutArg ? parseInt(timeoutArg.split('=')[1]) : 1000
-const positional = args.filter(a => !a.startsWith('-') && _verbMatch(a) == null)
+const timeout = timeoutArg ? parseInt(timeoutArg.split('=')[1]) : 1000
+const positional = args.filter(a => !a.startsWith('-') && !/^(-v)?:?([0123])$/.test(a))
 const filterTerms = positional.filter(a => !fs.existsSync(a))
-const targetDir  = positional.find(a => fs.existsSync(a))
-const root       = path.resolve(targetDir || '.')
+const rawTarget = positional.find(a => fs.existsSync(a))
+const _isFile = rawTarget && fs.statSync(rawTarget).isFile()
+const targetDir = _isFile ? path.dirname(rawTarget) : rawTarget
+const root = path.resolve(targetDir || '.')
 const configPath = [root, process.cwd()].map(d => path.resolve(d, 'TEST.yaml')).find(p => fs.existsSync(p))
   || path.resolve(process.cwd(), 'TEST.yaml')
-const width      = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
+const width = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
 
 // ─── Scan ─────────────────────────────────────────────────────────────────────
 let entries = [], uncovered = []
 try {
-  ;({ entries, uncovered } = scan(root, configPath))
+  ; ({ entries, uncovered } = scan(root, configPath))
 } catch (e) {
   if (e.code !== 'ENOENT') { console.error('[utest2] scan error:', e.message); process.exit(1) }
 }
 const seen = new Set()
 entries = entries.filter(e => !seen.has(e.path) && seen.add(e.path))
+if (_isFile) {
+  const absFile = path.resolve(rawTarget)
+  entries = entries.filter(e => e.path === absFile)
+}
 
 // ─── Main result node ────────────────────────────────────────────────────────
 const main = { name: path.relative(process.cwd(), root) || '.', tests: [], checks: [], state: 'pending', duration: 0 }
@@ -168,15 +181,20 @@ const startAll = process.hrtime.bigint()
 
 // ─── Process each test file ───────────────────────────────────────────────────
 for (const entry of entries) {
+  busReset()
 
   // ── Cached: inject placeholder, skip execution ───────────────────────────
-  if (!force && entry.cache && !entry.cache.exception) {
+  // Bypass cache when filter terms are active (user wants live output/logs)
+  const entryName = path.relative(root, entry.path)
+  const matchesFilter = filterTerms.length === 0 ||
+    filterTerms.every(t => entryName.toLowerCase().includes(t.toLowerCase()))
+  if (!force && !matchesFilter && entry.cache && !entry.cache.exception) {
     main.tests.push({
-      name:       path.basename(entry.path),
-      state:      entry.cache.exception ? 'exception' : 'passed',
-      address:    path.relative(root, entry.path),
+      name: path.basename(entry.path),
+      state: entry.cache.exception ? 'exception' : 'passed',
+      address: path.relative(root, entry.path),
       cached: true, _cached: true,
-      testCount:  entry.cache.tests,
+      testCount: entry.cache.tests,
       checkCount: entry.cache.checks,
       duration: 0, checks: [], tests: [], output: [],
     })
@@ -187,14 +205,14 @@ for (const entry of entries) {
   const ctx = { ...baseCtx }
   if (entry.target) {
     try {
-      const mod      = await import(entry.target)
+      const mod = await import(entry.target)
       const baseName = path.basename(entry.target, path.extname(entry.target))
       for (const [k, v] of Object.entries(mod)) if (k !== 'default') ctx[k] = v
       if (mod.default !== undefined) {
         ctx[baseName] = mod.default   // hash53.js → ctx.hash53, cl.js → ctx.cl
         if (!ctx.default) ctx.default = mod.default
       }
-    } catch {}
+    } catch { }
   }
 
   // ── Isolated load: test.begin() scopes all registrations to fileRoot ────
@@ -220,17 +238,17 @@ for (const entry of entries) {
 
   // ── Run all registered tests in-process ──────────────────────────────────
   const suite = {
-    name:    path.basename(entry.path),
+    name: path.basename(entry.path),
     address: path.relative(root, entry.path),
-    tests:   fileRoot.tests,
+    tests: fileRoot.tests,
     checks: [], output: [], state: 'pending', duration: 0,
   }
   const suiteStart = process.hrtime.bigint()
 
   for (const t of suite.tests) {
     await runTest(t, ctx, timeout)
-    if (verbosity >= 3) {
-      const v = view(t, { verbosity, width, nameTerms: filterTerms })
+    if (verbosity >= 3 && matchesFilter) {
+      const v = view(t, { verbosity, width })
       if (v) process.stdout.write(v + '\n')
     }
   }
@@ -264,11 +282,11 @@ if (verbosity < 3) {
   const stripAnsi = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '')
   const left = [
     `${glyphs.passed} ${finalSum.total}`,
-    finalSum.failed    ? `${glyphs.failed} ${finalSum.failed}`       : '',
+    finalSum.failed ? `${glyphs.failed} ${finalSum.failed}` : '',
     finalSum.exception ? `${glyphs.exception} ${finalSum.exception}` : '',
   ].filter(Boolean).join('  ')
   const right = `\x1b[90m${Math.round(main.duration)}ms\x1b[39m`
-  const gap   = Math.max(1, width - stripAnsi(left).length - stripAnsi(right).length)
+  const gap = Math.max(1, width - stripAnsi(left).length - stripAnsi(right).length)
   process.stdout.write(`${left}${' '.repeat(gap)}${right}\n`)
 }
 
@@ -277,4 +295,44 @@ if (showUnc && uncovered.length) {
   for (const f of uncovered) process.stdout.write('  ' + path.relative(root, f) + '\n')
 }
 
-process.exit(finalSum.failed > 0 || finalSum.exception > 0 ? 1 : 0)
+if (!watch) {
+  process.exit(finalSum.failed > 0 || finalSum.exception > 0 ? 1 : 0)
+}
+
+// ─── Watch mode ───────────────────────────────────────────────────────────────
+const runArgs = args.filter(a => a !== '--watch' && a !== '-w')
+let debounce = null
+let child = null
+let lastChildExit = 0  // epoch ms when the last child process finished
+
+const watchLine = () =>
+  process.stdout.write(`\x1b[90mWatching ${root} — press Ctrl+C to stop\x1b[39m\n`)
+
+const rerun = () => {
+  clearTimeout(debounce)
+  debounce = null
+  if (child) { try { child.kill() } catch { } }
+  process.stdout.write('\x1b[2J\x1b[H') // clear screen
+  child = Bun.spawn(['bun', import.meta.path, ...runArgs, '--force'], {
+    stdout: 'inherit', stderr: 'inherit',
+  })
+  // Reprint the watch line after the child finishes, and record exit time so
+  // we can ignore the cache-write mtime events that follow immediately.
+  child.exited.then(() => {
+    lastChildExit = Date.now()
+    watchLine()
+  })
+}
+
+fs.watch(root, { recursive: true }, (_, filename) => {
+  if (!filename) return
+  // Skip for 1.5 s after a run ends — cache writes (utimesSync) trigger this too
+  if (Date.now() - lastChildExit < 1500) return
+  if (!/\.(js|ts|yaml|json|md)$/.test(filename)) return
+  if (/node_modules|\.bot[/\\]/.test(filename)) return
+  clearTimeout(debounce)
+  debounce = setTimeout(rerun, 80)
+})
+
+watchLine()
+await new Promise(() => { })

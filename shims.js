@@ -19,9 +19,9 @@ export function describe(name, fn) {
   // Global lifecycle hooks attach to the innermost describe via a stack
   _describeStack.push(t)
   const context = {
-    test:       test.bind(t),
-    describe:   describe.bind(t),
-    it:         it.bind(t),
+    test:       (n, f, o) => { let r; test.scope(t, () => { r = test.call(t, n, f, o) }); return r },
+    describe:   (n, f) => describe.call(t, n, f),
+    it:         (n, f, o) => { let r; test.scope(t, () => { r = test.call(t, n, f, o) }); return r },
     beforeAll:  (f) => t._beforeAll.push(f),
     afterAll:   (f) => t._afterAll.push(f),
     beforeEach: (f) => {},
@@ -29,7 +29,8 @@ export function describe(name, fn) {
     expect:     (a) => expect(a, t),
     withTempDir
   }
-  try { fn.call(t, context) } catch (e) { t.state = 'exception'; t.error = e }
+  // Use test.scope so inner test() calls (even in arrow functions) go into t
+  try { test.scope(t, () => fn.call(t, context)) } catch (e) { t.state = 'exception'; t.error = e }
   _describeStack.pop()
 }
 
@@ -100,11 +101,16 @@ export function expect(a) {
   const base = matchers(a);
   base.resolves = {
     get not() { return matchers(a.then(v => v)).not },
-    toBe: async (b) => check(await a, b),
-    toEqual: async (b) => check(await a, b),
-    toBeTruthy: async () => check(!!(await a)),
-    toBeFalsy: async () => check(!(await a)),
-    toContain: async (b) => check((await a)?.includes?.(b)),
+    toBe:          async (b) => check(await a, b),
+    toEqual:       async (b) => check(await a, b),
+    toStrictEqual: async (b) => check(await a, b),
+    toBeTruthy:    async ()  => check(!!(await a)),
+    toBeFalsy:     async ()  => check(!(await a)),
+    toBeNull:      async ()  => check(await a, null),
+    toBeUndefined: async ()  => check((await a) === undefined),
+    toBeDefined:   async ()  => check((await a) !== undefined),
+    toContain:     async (b) => check((await a)?.includes?.(b)),
+    toHaveLength:  async (b) => check((await a)?.length, b),
   };
   base.rejects = {
     get not() { return matchers(a.catch(e => e)).not },
@@ -112,7 +118,9 @@ export function expect(a) {
       try { await a; check(false) }
       catch(e) { check(msg ? (e.message || String(e)).includes(msg) : true) }
     },
-    toBe: async (b) => { try { await a; check(false) } catch(e) { check(e, b) } }
+    toBe:          async (b) => { try { await a; check(false) } catch(e) { check(e, b) } },
+    toEqual:       async (b) => { try { await a; check(false) } catch(e) { check(e, b) } },
+    toBeDefined:   async ()  => { try { await a; check(false) } catch { check(true) } },
   };
 
   return base;

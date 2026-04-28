@@ -35,15 +35,15 @@ function checkView(c, { width = 80 } = {}) {
   if (c.state === 'exception') {
     const msg  = c.error?.message || String(c.error || 'exception')
     const left = `${glyphs.exception} ${msg}`
-    const out  = [dotfill(left, '.', gray(addr), width)]
+    const out  = [dotfill(left, '.', ' '+gray(addr), width)]
     const frames = extractFrames(errLike)
     for (const f of frames.slice(0, 6))
-      out.push(gray(`  ${f.func || ''}`.padEnd(2) + dotfill('  ' + (f.func || ''), '.', `${f.file}:${String(f.line).padStart(3,'0')}`, width - 2)))
+      out.push(gray(`  ${f.func || ''}`.padEnd(2) + dotfill(' ' + (f.func || ''), '.', `${f.file}:${String(f.line).padStart(3,'0')}`, width - 2)))
     return out.join('\n')
   }
 
   const left = `${glyphs.failed} ${lineCode || 'check()'}`
-  let out = dotfill(left, '.', gray(addr), width)
+  let out = dotfill(left, '.', ' '+gray(addr), width)
   if (c.a !== undefined) out += `\n  received: ${cl.red(String(c.a))}`
   if (c.b !== undefined) out += `\n  expected: ${cl.green(String(c.b))}`
   return out
@@ -94,7 +94,7 @@ function errorView(err, { width = 80 } = {}) {
   const header = `${glyphs.exception} ${cl.red(msg.split('\n')[0])}`
   const lines  = [header]
   for (const f of frames.slice(0, 6))
-    lines.push(gray(`  ${dotfill('  ' + (f.func || ''), '.', `${f.file}:${String(f.line).padStart(3,'0')}`, width - 2)}`))
+    lines.push(gray(`  ${dotfill('  ' + (f.func || ''), '.', ` ${f.file}:${String(f.line).padStart(3,'0')}`, width - 2)}`))
   return lines.join('\n')
 }
 
@@ -111,6 +111,12 @@ function gatherExceptions(t, out = []) {
   return out
 }
 
+function gatherOutput(t, out = []) {
+  for (const o of t.output || []) out.push(o)
+  for (const child of t.tests || []) gatherOutput(child, out)
+  return out
+}
+
 const normalizeTerms = terms =>
   (Array.isArray(terms) ? terms : String(terms || '').split(/[,\s]+/))
     .map(t => String(t || '').trim().toLowerCase()).filter(Boolean)
@@ -122,6 +128,8 @@ function hasDeepMatch(t, terms) {
   if (matchesTerms(t?.name, terms) || matchesTerms(t?.address, terms)) return true
   return (t?.tests || []).some(c => hasDeepMatch(c, terms))
 }
+
+export { checkView }
 
 export function summary(t) {
   const s = { passed: 0, failed: 0, exception: 0, total: 0, tests: 0 }
@@ -186,8 +194,9 @@ export function view(t, op = {}) {
     lines.push(left)
   }
 
-  if (selfMatch && verbosity >= 3 && t.output?.length) {
-    for (const [type, args] of t.output) {
+  const allOutput = verbosity < 3 ? gatherOutput(t) : (t.output || [])
+  if (selfMatch && allOutput.length && (verbosity >= 3 || t.state !== 'passed')) {
+    for (const [type, args] of allOutput) {
       const text = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
       lines.push(`${pad}  ${gray(`[${type}] ${text}`)}`)
     }

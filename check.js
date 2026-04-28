@@ -1,6 +1,8 @@
-// Self-contained check for utest — no external dependencies.
+// check for utest
 // Captures new Error('check') at call site so viewer can extract lineCode from stack.
 // Semantics match utils/src/check.js: undefined check, function eval, string repr comparison.
+
+import toSource from '../utils/src/toSource.js'
 
 const UNSET = Symbol('unset')
 
@@ -29,7 +31,7 @@ function pass(a, bIn) {
 function repr(v) {
   if (v === undefined) return 'undefined'
   if (v === null) return 'null'
-  try { return JSON.stringify(v) } catch { return String(v) }
+  try { return toSource(v) } catch { return String(v) }
 }
 
 function Check(a, bIn, op, boundTest) {
@@ -45,10 +47,14 @@ function Check(a, bIn, op, boundTest) {
     if (a instanceof Error) throw a
     const result = pass(a, bIn)
     this.state = result ? 'passed' : 'failed'
-    // Only record a/b for equality checks (not truth checks)
-    if (bGiven && !(typeof a === 'boolean' && typeof bIn !== 'boolean')) {
-      this.a = typeof a === 'function' ? repr(a()) : repr(a)
-      this.b = typeof bIn === 'function' ? repr(bIn()) : (bIn === UNSET ? undefined : repr(bIn))
+    // Always record received (and expected for 2-arg checks) when failed
+    if (this.state === 'failed') {
+      const va = typeof a === 'function' ? a() : a
+      this.a = typeof va === 'string' ? va : repr(va)
+      if (bGiven) {
+        const vb = typeof bIn === 'function' ? bIn() : bIn
+        this.b = typeof vb === 'string' ? vb : repr(vb)
+      }
     }
   } catch (e) {
     this.state = 'exception'

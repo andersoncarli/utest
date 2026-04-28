@@ -18,14 +18,10 @@ const timeoutArg = args.find(a => a.startsWith('--timeout=') || a.startsWith('-t
 const timeout   = timeoutArg ? parseInt(timeoutArg.split('=')[1]) : 1000
 
 let verbosity = 1
-for (const a of args) {
-  if (a === '0' || a === '-v0') verbosity = 0
-  if (a === '1' || a === '-v1') verbosity = 1
-  if (a === '2' || a === '-v2') verbosity = 2
-  if (a === '3' || a === '-v3') verbosity = 3
-}
+const _vArg = args.find(a => /^(-v)?:?([0123])$/.test(a))
+if (_vArg) verbosity = parseInt(_vArg.match(/([0123])$/)[1])
 
-const positional  = args.filter(a => !a.startsWith('-') && !['0','1','2','3'].includes(a))
+const positional  = args.filter(a => !a.startsWith('-') && !/^(-v)?:?([0123])$/.test(a))
 const targets     = positional.filter(a => existsSync(a) || a === '.')
 const filterTerms = positional.filter(a => !targets.includes(a))
 if (!targets.length) targets.push('.')
