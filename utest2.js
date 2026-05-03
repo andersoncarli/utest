@@ -47,6 +47,7 @@ Object.assign(globalThis, {
   beforeAll, afterAll, beforeEach, afterEach
 })
 globalThis.utest = true
+globalThis.utestVerbosity = 1
 
 // ─── Plugin: redirect 'bun:test' imports to our shims ────────────────────────
 const shimsPath = new URL('./shims.js', import.meta.url).pathname
@@ -99,27 +100,34 @@ async function runTest(t, ctx, timeout = 1000) {
         }
         // Leaf tests with no pre-registered children call fn now.
         if (!t.tests?.length) {
+          const chain = []
+          for (let p = t.parent; p; p = p.parent) chain.unshift(p)
+          for (const p of chain) for (const f of p._beforeEach || []) await f()
           let r
-          if (t.fn.length === 0) {
-            r = t.fn.call(t)
-            if (r instanceof Promise) await r
-          } else if (t.fn.length === 1) {
-            // Detect style from first param: ({check}) → context; (done) → callback
-            const firstParam = (t.fn.toString().match(/\(([^)]*)\)/) ?? [])[1]?.trim() ?? ''
-            if (firstParam.startsWith('{') || firstParam.startsWith('[')) {
-              r = t.fn.call(t, tCtx)
+          try {
+            if (t.fn.length === 0) {
+              r = t.fn.call(t)
               if (r instanceof Promise) await r
+            } else if (t.fn.length === 1) {
+              // Detect style from first param: ({check}) → context; (done) → callback
+              const firstParam = (t.fn.toString().match(/\(([^)]*)\)/) ?? [])[1]?.trim() ?? ''
+              if (firstParam.startsWith('{') || firstParam.startsWith('[')) {
+                r = t.fn.call(t, tCtx)
+                if (r instanceof Promise) await r
+              } else {
+                // done-callback style: (done) => { setTimeout(() => done()) }
+                const done = new Promise((res, rej) => { r = t.fn.call(t, (e) => e ? rej(e) : res()) })
+                if (r instanceof Promise) await r
+                else await done
+              }
             } else {
-              // done-callback style: (done) => { setTimeout(() => done()) }
-              const done = new Promise((res, rej) => { r = t.fn.call(t, (e) => e ? rej(e) : res()) })
-              if (r instanceof Promise) await r
-              else await done
+              const done = new Promise((res, rej) => {
+                r = t.fn.call(t, (e) => e ? rej(e) : res(), tCtx)
+              })
+              await done; return
             }
-          } else {
-            const done = new Promise((res, rej) => {
-              r = t.fn.call(t, (e) => e ? rej(e) : res(), tCtx)
-            })
-            await done; return
+          } finally {
+            for (const p of [...chain].reverse()) for (const f of p._afterEach || []) await f()
           }
         }
         for (const child of t.tests) await runTest(child, ctx, timeout)
@@ -144,6 +152,7 @@ const args = process.argv.slice(2)
 let verbosity = 1
 const _vArg = args.find(a => /^(-v)?:?([0123])$/.test(a))
 if (_vArg) verbosity = parseInt(_vArg.match(/([0123])$/)[1])
+globalThis.utestVerbosity = verbosity
 
 const force = args.includes('--force') || args.includes('-f')
 const watch = args.includes('--watch') || args.includes('-w')

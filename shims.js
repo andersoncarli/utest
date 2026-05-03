@@ -15,6 +15,8 @@ export function describe(name, fn) {
   t._describe = true
   t._beforeAll = []
   t._afterAll  = []
+  t._beforeEach = []
+  t._afterEach  = []
 
   // Global lifecycle hooks attach to the innermost describe via a stack
   _describeStack.push(t)
@@ -24,8 +26,8 @@ export function describe(name, fn) {
     it:         (n, f, o) => { let r; test.scope(t, () => { r = test.call(t, n, f, o) }); return r },
     beforeAll:  (f) => t._beforeAll.push(f),
     afterAll:   (f) => t._afterAll.push(f),
-    beforeEach: (f) => {},
-    afterEach:  (f) => {},
+    beforeEach: (f) => t._beforeEach.push(f),
+    afterEach:  (f) => t._afterEach.push(f),
     expect:     (a) => expect(a, t),
     withTempDir
   }
@@ -38,8 +40,8 @@ export function describe(name, fn) {
 const _describeStack = []
 export const beforeAll  = (f) => { const t = _describeStack.at(-1); if (t) t._beforeAll.push(f); else f() }
 export const afterAll   = (f) => { const t = _describeStack.at(-1); if (t) t._afterAll.push(f) }
-export const beforeEach = (f) => {}
-export const afterEach  = (f) => {}
+export const beforeEach = (f) => { const t = _describeStack.at(-1); if (t) t._beforeEach.push(f) }
+export const afterEach  = (f) => { const t = _describeStack.at(-1); if (t) t._afterEach.push(f) }
 
 export function it(name, fn) {
   return test(name, fn)
@@ -50,6 +52,19 @@ test.todo = it.todo
 test.skip = it.skip
 
 export function expect(a) {
+  const partialMatch = (actual, expected) => {
+    if (expected && expected.__utestObjectContaining) expected = expected.value
+    if (expected === actual) return true
+    if (expected instanceof RegExp) return expected.test(actual)
+    if (!expected || typeof expected !== 'object') return Object.is(actual, expected)
+    if (!actual || typeof actual !== 'object') return false
+    if (Array.isArray(expected)) {
+      if (!Array.isArray(actual) || actual.length < expected.length) return false
+      return expected.every((v, i) => partialMatch(actual[i], v))
+    }
+    return Object.entries(expected).every(([k, v]) => partialMatch(actual[k], v))
+  }
+
   const matchers = (val) => ({
     toBe: (b) => check(val, b),
     toEqual: (b) => check(val, b),
@@ -71,6 +86,8 @@ export function expect(a) {
     toHaveLength: (l) => check(val?.length === l),
     toHaveProperty: (p, v) => check(v !== undefined ? val?.[p] === v : p in (val || {})),
     toBeTypeOf: (t) => check(typeof val === t),
+    toBeCloseTo: (b, precision = 2) => check(Math.abs(Number(val) - Number(b)) < Math.pow(10, -precision) / 2),
+    toMatchObject: (b) => check(partialMatch(val, b)),
     toThrow: (msg) => {
        try {
          const fn = typeof val === 'function' ? val : () => { throw val }
@@ -125,6 +142,8 @@ export function expect(a) {
 
   return base;
 }
+
+expect.objectContaining = (value) => ({ __utestObjectContaining: true, value })
 
 export function spyOn(obj, method) {
   const original = obj[method]
