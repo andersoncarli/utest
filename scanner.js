@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, utimesSync, mkdirSync } from "fs"
 import { join, relative, dirname, basename } from "path"
-import { parse } from "yaml"
+import { parse } from "bun:yaml"
 import { Minimatch } from "minimatch"
 
 const TEST_RE = /\.(t|test|tuit|it)\.(js|ts)$/
