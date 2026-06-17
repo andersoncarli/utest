@@ -38,7 +38,7 @@ check.view = (c) => checkView(c, { width: process.stdout.columns || 80 })
 
 // ─── Base context ─────────────────────────────────────────────────────────────
 // Everything a test body might need except target exports (added per file).
-const baseCtx = { check, checkFail, checkException, expect, is, cl, withTempDir }
+const baseCtx = { check, checkFail, checkException, expect, is, cl, withTempDir, spyOn, jest, vi, mock }
 
 // ─── Globals for fn.length===0 style and file-level code ─────────────────────
 for (const [k, v] of Object.entries(baseCtx)) globalThis[k] = v
@@ -61,7 +61,11 @@ plugin({
           m => m.split('\n').map(l => '// [utest-shim] ' + l).join('\n'))
       const isCjs = /\bmodule\.exports\b|\brequire\s*\(/.test(code)
       if (!isCjs) {
-        code = `import { test, describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, check } from ${JSON.stringify(shimsPath)};` + code
+        const shebang = code.startsWith('#!')
+          ? code.slice(0, code.indexOf('\n') + 1)
+          : ''
+        const body = shebang ? code.slice(shebang.length) : code
+        code = shebang + `import { test, describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, check } from ${JSON.stringify(shimsPath)};` + body
       }
       return { contents: code, loader: args.path.endsWith('.ts') ? 'ts' : 'js' }
     })
