@@ -49,15 +49,15 @@ Object.assign(globalThis, {
 globalThis.utest = true
 globalThis.utestVerbosity = 1
 
-// ─── Plugin: redirect 'bun:test' imports to our shims ────────────────────────
+// ─── Plugin: redirect built-in test imports to our shims ─────────────────────
 const shimsPath = new URL('./shims.js', import.meta.url).pathname
 plugin({
   name: 'bun-test-shim',
   setup(build) {
     build.onLoad({ filter: /\.(t|test|tuit|it)\.(js|ts)$/ }, async (args) => {
       let code = await fs.promises.readFile(args.path, 'utf8')
-      if (code.includes('bun:test'))
-        code = code.replace(/import\s+[\s\S]*?from\s+["']bun:test["'];?/g,
+      if (code.includes('bun:test') || code.includes('node:test'))
+        code = code.replace(/import\s+[\s\S]*?from\s+["'](?:bun:test|node:test)["'];?/g,
           m => m.split('\n').map(l => '// [utest-shim] ' + l).join('\n'))
       const isCjs = /\bmodule\.exports\b|\brequire\s*\(/.test(code)
       if (!isCjs) {
@@ -173,6 +173,7 @@ const root = path.resolve(targetDir || '.')
 const configPath = [root, process.cwd()].map(d => path.resolve(d, 'TEST.yaml')).find(p => fs.existsSync(p))
   || path.resolve(process.cwd(), 'TEST.yaml')
 const width = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
+const startAll = process.hrtime.bigint()
 
 // ─── Scan ─────────────────────────────────────────────────────────────────────
 let entries = [], uncovered = []
@@ -190,7 +191,6 @@ if (_isFile) {
 
 // ─── Main result node ────────────────────────────────────────────────────────
 const main = { name: path.relative(process.cwd(), root) || '.', tests: [], checks: [], state: 'pending', duration: 0 }
-const startAll = process.hrtime.bigint()
 
 // ─── Process each test file ───────────────────────────────────────────────────
 for (const entry of entries) {
@@ -201,7 +201,8 @@ for (const entry of entries) {
   const entryName = path.relative(root, entry.path)
   const matchesFilter = filterTerms.length === 0 ||
     filterTerms.every(t => entryName.toLowerCase().includes(t.toLowerCase()))
-  if (!force && !matchesFilter && entry.cache && !entry.cache.exception) {
+  const wantsLiveRun = filterTerms.length > 0 && matchesFilter
+  if (!force && !wantsLiveRun && entry.cache && !entry.cache.exception) {
     main.tests.push({
       name: path.basename(entry.path),
       state: entry.cache.exception ? 'exception' : 'passed',

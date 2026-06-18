@@ -69,6 +69,8 @@ export function expect(a) {
     toBe: (b) => check(val, b),
     toEqual: (b) => check(val, b),
     toStrictEqual: (b) => check(val, b),
+    toBeTrue: () => check(val === true),
+    toBeFalse: () => check(val === false),
     toBeGreaterThan: (b) => check(val > b),
     toBeGreaterThanOrEqual: (b) => check(val >= b),
     toBeLessThan: (b) => check(val < b),
@@ -93,7 +95,12 @@ export function expect(a) {
          const fn = typeof val === 'function' ? val : () => { throw val }
          fn(); check(false)
        }
-       catch(e) { check(msg ? (e.message || String(e)).includes(msg) : true) }
+       catch(e) {
+         if (!msg) return check(true)
+         if (msg instanceof RegExp) return check(msg.test(e.message || String(e)))
+         if (typeof msg === 'function') return check(e instanceof msg)
+         return check((e.message || String(e)).includes(msg))
+       }
     },
     not: {
       toBe: (b) => check(val !== b),
