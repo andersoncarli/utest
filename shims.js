@@ -40,8 +40,14 @@ export function describe(name, fn) {
 const _describeStack = []
 export const beforeAll  = (f) => { const t = _describeStack.at(-1); if (t) t._beforeAll.push(f); else f() }
 export const afterAll   = (f) => { const t = _describeStack.at(-1); if (t) t._afterAll.push(f) }
-export const beforeEach = (f) => { const t = _describeStack.at(-1); if (t) t._beforeEach.push(f) }
-export const afterEach  = (f) => { const t = _describeStack.at(-1); if (t) t._afterEach.push(f) }
+export const beforeEach = (f) => {
+  const t = _describeStack.at(-1) ?? test.current
+  if (t) { if (!t._beforeEach) t._beforeEach = []; t._beforeEach.push(f) }
+}
+export const afterEach  = (f) => {
+  const t = _describeStack.at(-1) ?? test.current
+  if (t) { if (!t._afterEach) t._afterEach = []; t._afterEach.push(f) }
+}
 
 export function it(name, fn) {
   return test(name, fn)

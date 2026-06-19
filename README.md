@@ -1,20 +1,27 @@
 # utest/
 
-Test runner alternativo do FRM com paralelização por workers e streaming
-de resultados em tempo real. Complementa o `bot test` para suites maiores.
+Especificacao e compatibilidade do runner de testes do FRM. Historicamente
+`utest` reuniu descoberta de arquivos, shims de `bun:test`/Jest, `check()`,
+viewer compacto e cache barato. A nova direcao e levar essas ideias para
+`cmds/testio/testio.js`, usando `lib/adapters/io-engine.js` como trilha de IO.
 
 ---
 
-## Características
+## Direcao Atual
 
-- **Paralelo**: Pool de workers via `Bun.spawn` — cada arquivo em processo isolado
-- **Streaming**: Resultados em tempo real (`onResult` callback)
-- **Isolamento 100%**: Processo fresh por arquivo (resolve problemas de ESM circular deps)
-- **Timeout rigoroso**: 1s por arquivo para detectar hogs assíncronos
+- **Fases explicitas**: `unit`, `tui` e `integration`.
+- **Workers por arquivo**: a arquitetura alvo executa cada arquivo em processo
+  isolado e paralelizavel.
+- **Streaming persistente**: resultados devem poder ser renderizados ao vivo e
+  reabertos via IO.
+- **Cache por tempo**: manter cache por timestamp, mas comparando segundos
+  exatos do alvo/dependencias, nao minutos.
+- **Falha visivel**: erro de import/load/shim e erro do modulo alvo deve virar
+  resultado de teste, nunca sumir em `catch {}`.
 
-**Performance** (utils suite, 101 arquivos):
-- Sequential: ~25-30s
-- Parallel (8 workers): ~6-7s
+O runner atual em `utest/utest.js` ainda e majoritariamente in-process. Isso e
+util para compatibilidade e diagnostico, mas nao deve ser confundido com o
+modelo final de isolamento.
 
 ---
 
@@ -24,8 +31,8 @@ de resultados em tempo real. Complementa o `bot test` para suites maiores.
 # Rodar suite específica
 bun utest/utest.js utils -v2 --force
 
-# Com viewer
-bun utest/viewer.js
+# Caminho arquitetural em revisao
+bot testio unit -v:2
 ```
 
 ---
@@ -34,10 +41,10 @@ bun utest/viewer.js
 
 | Arquivo | Função |
 |---------|--------|
-| `utest.js` | CLI principal do runner |
-| `runner.js` | Orchestrator do pool de workers |
-| `worker.js` | Worker individual (executa um arquivo de teste) |
-| `scanner.js` / `scanner2.js` | Descoberta de arquivos de teste |
+| `utest.js` | CLI atual de compatibilidade, ainda in-process |
+| `runner.js` | Execucao modular legada/experimental |
+| `worker.js` | Base para execucao isolada por arquivo |
+| `scanner.js` | Descoberta de arquivos de teste |
 | `viewer.js` | UI de resultados em tempo real |
 | `check.js` | Assertions e visual diffing |
 | `index.js` | Entry point / exports |
@@ -55,6 +62,7 @@ bun utest/viewer.js
 | `HANDOFF.md` | Handoff da sessão 3 (parallelização e streaming) |
 | `TEST-MASTER-PLAN.md` / `TEST-MASTER-PLAN-2.md` | Planos de evolução do runner |
 | `TEST-SPEC.md` / `TEST-SPEC-1.md` | Especificações de comportamento |
+| `TEST-PROBLEMS-I-FOUND.md` | Achados recentes e limites da migracao |
 | `TEST.yaml` | Configuração de testes |
 
 ---
@@ -62,4 +70,6 @@ bun utest/viewer.js
 ## Ver também
 
 - `lib/test-runner.js` — runner principal (usado por `bot test`)
+- `cmds/testio/testio.js` — destino arquitetural do runner
+- `lib/adapters/io-engine.js` — IO log/cache/result projection
 - `tests/` — testes de integração E2E

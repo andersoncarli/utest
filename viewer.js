@@ -22,7 +22,9 @@ export const glyphs = {
 }
 
 const RUNNER   = /utest2?\.js/i
-const INTERNAL = /check\.js|test\.js|runner\.js|worker\.js|shims\.js|setup\.js|utest2?\.js|withTempDir\.js|node:|bun:|internal\//i
+// Match exact runner/framework filenames (anchored) and node:/bun:/internal/ prefixes.
+// Avoid loose patterns like `test\.js` that would also match `io-engine.test.js`.
+const INTERNAL = /^(check|runner|worker|shims|setup|withTempDir)\.js$|^utest2?\.js$|^test\.js$|node:|bun:|internal\//i
 
 // ─── Check View ───────────────────────────────────────────────
 function checkView(c, { width = 80 } = {}) {
@@ -37,8 +39,13 @@ function checkView(c, { width = 80 } = {}) {
     const left = `${glyphs.exception} ${msg}`
     const out  = [dotfill(left, '.', ' '+gray(addr), width)]
     const frames = extractFrames(errLike)
-    for (const f of frames.slice(0, 6))
-      out.push(gray(`  ${f.func || ''}`.padEnd(2) + dotfill(' ' + (f.func || ''), '.', `${f.file}:${String(f.line).padStart(3,'0')}`, width - 2)))
+    const seen = new Set([addr])  // skip frames already shown in the header
+    for (const f of frames.slice(0, 6)) {
+      const fAddr = `${f.file}:${String(f.line).padStart(3,'0')}`
+      if (seen.has(fAddr)) continue
+      seen.add(fAddr)
+      out.push(gray(`  ${f.func || ''}`.padEnd(2) + dotfill(' ' + (f.func || ''), '.', fAddr, width - 2)))
+    }
     return out.join('\n')
   }
 
@@ -54,7 +61,9 @@ function extractLineCode(errLike) {
   try {
     const cs = callstack({ error: errLike, smartFilter: false })
     for (let i = 0; i < cs.stack.length; i++) {
-      if (!INTERNAL.test(cs.stack[i].file)) return cs.callerLine(i) || ''
+      const f = cs.stack[i]
+      if (!f.file || f.file === 'native' || f.file === 'unknown') continue
+      if (!INTERNAL.test(f.file)) return cs.callerLine(i) || ''
     }
   } catch {}
   return ''
@@ -65,6 +74,7 @@ function extractAddr(errLike) {
   try {
     const cs = callstack({ error: errLike, smartFilter: false })
     for (const f of cs.stack) {
+      if (!f.file || f.file === 'native' || f.file === 'unknown') continue
       if (!INTERNAL.test(f.file)) return `${f.file}:${String(f.line).padStart(3, '0')}`
     }
   } catch {}

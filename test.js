@@ -40,6 +40,7 @@ test.begin = (name = 'root') => {
   return root
 }
 test.end = () => { _current = null }
+Object.defineProperty(test, 'current', { get: () => _current, configurable: true })
 
 // Temporarily redirect test() registrations into a parent node.
 // Used by describe() in shims so arrow-function bodies work correctly.

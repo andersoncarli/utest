@@ -2,9 +2,9 @@
 
 ## What It Is
 
-`utest` is the canonical test runner for this codebase — a synthesis of four prior runners
-(`utils/test/test-runner.js`, `lib/test-runner.js`, `cmds/testio/testio.js`, and the earlier
-`utest/` scaffold), keeping the best of each.
+`utest` is the compatibility/specification layer for the codebase test runner.
+The architectural destination is `cmds/testio/testio.js`, reproducing the useful
+parts of `utest` on top of `lib/adapters/io-engine.js`.
 
 The structural foundation is `utest/` (modular, subprocess-isolated, bun-compatible).
 The dependency-graph cache comes from `lib/test-runner.js`.
@@ -21,7 +21,7 @@ utest <phase|'unit'> <path|.> [name-filter] [-v:1*|2|3] [--force]
 
 | Argument | Default | Meaning |
 |----------|---------|---------|
-| `phase` | `unit` | One of `unit`, `rendering`, `integration`, `all` |
+| `phase` | `unit` | One of `unit`, `tui`, `integration`, `all` |
 | `path` | `.` | Directory or file to scan |
 | `name-filter` | — | Substring match on file path |
 | `-v:0` | — | Silent mode. No output. Returns exit code. |
@@ -37,7 +37,7 @@ utest <phase|'unit'> <path|.> [name-filter] [-v:1*|2|3] [--force]
 ```
 utest/
 ├── index.js      CLI entry — args parsing, orchestration
-├── config.js     TEST.yaml loader → { exclude[], unit, rendering, integration }
+├── config.js     TEST.yaml loader → { exclude[], unit, tui, integration }
 ├── scanner.js    File discovery — all .js/.ts containing test(), _ exclusion, config excludes
 ├── cacher.js     mtime-offset cache — encoding + dependency graph for source
 ├── harness.js    Test API — test/it/describe/hooks/expect/spyOn + check wiring
@@ -64,10 +64,13 @@ renamed. The `test(` regex detects intent; false positives are rare and harmless
 
 | File pattern | Phase |
 |-------------|-------|
-| `*.tuit` | `rendering` |
-| `*.rendering.t.js` | `rendering` |
-| `*.integration.t.js`, `*.live.t.js` | `integration` |
+| `*.tuit`, `*.tui.t.js`, `tui/**/*.t.js` | `tui` |
+| `*.integration.t.js`, `*.int.t.js`, `*.live.t.js` | `integration` |
 | Everything else | `unit` |
+
+`integration` means runtime/system integration: tests that exercise live
+services, process boundaries, native runtimes, IO subsystems, or long-lived
+state. It is not just "slow unit".
 
 ### `_` exclusion
 
@@ -86,31 +89,28 @@ Pattern syntax: `*` = any non-separator chars, `**` = any path depth, `?` = sing
 
 ## Caching (`cacher.js`)
 
-### mtime-offset encoding
+### timestamp encoding
 
-The cache is stored entirely in the test file's own modification time — no external file.
+The cache may stay timestamp-based, but freshness must compare exact seconds,
+not minutes.
 
 ```
-testMtime (seconds) == sourceMtime (seconds) + offset
+floor(testMtimeMs / 1000) == floor(maxDependencyMtimeMs / 1000)
 ```
 
-| Offset | State |
-|--------|-------|
-| `0` | passed |
-| `1–9999` | failed |
-| `10000+` | exception |
+Milliseconds or an IO-backed projection may encode check/test counts. If mtime
+encoding is used, readback must use integer-safe decoding (`floor`, not
+`round`) so the check count cannot alter the decoded test count.
 
-Milliseconds of `testMtime` encode the check count (0–999).
-
-**Decision:** This is zero-overhead — no cache file to write, sync, or clean up. Survives
-git checkouts as long as file timestamps are preserved.
+**Decision:** keep the simplicity of timestamp cache, but make the second-level
+contract explicit and test it with fixtures.
 
 ### Dependency graph
 
-When checking freshness of the source file, `getMaxMtime(src)` recursively walks all
-`import from './...'` statements and returns the maximum mtime across the whole dependency
-tree. This catches changes to shared utilities that the test's source imports, even when the
-source file itself is untouched.
+When checking freshness of the source file, `getMaxMtime(src)` recursively walks
+local imports and returns the maximum second-level mtime across the dependency
+tree. This catches changes to shared utilities that the test's source imports,
+even when the source file itself is untouched.
 
 **Decision:** Ported from `lib/test-runner.js`. The mtime diff approach from
 `utils/test-runner.js` was correct in principle but only checked the direct source file.
@@ -185,10 +185,13 @@ the FRM check API rather than `expect()`.
 
 ## Subprocess Model (`runner.js` + `executor.js`)
 
-Under Bun, each test file runs in a child `bun` process (full isolation, no module cache bleed).
-Under Node.js, tests run in-process with content shimmed to absolute import paths.
+Under Bun, each test file should run in a child `bun` process. This is required
+for real isolation: ESM module cache, globals, timers, process state and native
+crashes cannot be reliably contained in a shared process.
 
-The executor outputs a single JSON line to stdout:
+The executor outputs structured events/results. In the `testio` architecture,
+those events should also be appendable to IO so the live stream and final report
+share the same source of truth.
 ```json
 { "success": true, "results": { "passed": N, "failed": 0, "checks": N }, "logs": [...] }
 ```
@@ -214,12 +217,15 @@ unit:
   exclude:
     - "**/*.integration.t.js"
 
-rendering:
+tui:
   include:
     - "**/*.tuit"
+    - "**/*.tui.t.js"
+    - "tui/**/*.t.js"
 
 integration:
   include:
     - "**/*.integration.t.js"
+    - "**/*.int.t.js"
     - "**/*.live.t.js"
 ```
