@@ -1,6 +1,6 @@
 # Status: utest/
 
-Atualizado: 2026-06-18
+Atualizado: 2026-06-19
 
 `utest/` permanece como base de especificacao e compatibilidade para o sistema
 de testes, mas nao deve ser tratado como arquitetura final isolada. O destino
@@ -9,7 +9,7 @@ sobre `lib/adapters/io-engine.js`.
 
 ---
 
-## Estado: EM RECONCILIACAO
+## Estado: REFERENCIA LEGADA / MANUTENCAO
 
 O runner atual em `utest/utest.js` e funcional para varias suites, mas o estado
 documentado e o estado implementado divergiram:
@@ -19,7 +19,7 @@ documentado e o estado implementado divergiram:
 - `TEST-PROBLEMS-I-FOUND.md` registra correcoes recentes e limites ainda
   abertos, especialmente source maps, TUI/non-TTY, cache parcial e cache de
   modulo ESM;
-- `cmds/testio/testio.js` e o caminho para onde o sistema deve andar.
+- `cmds/testio/testio.js` e o runner operacional concluido para a frente T1.
 
 ---
 
@@ -39,16 +39,25 @@ documentado e o estado implementado divergiram:
 
 ---
 
-## Proxima Acao
+## Encerramento T1
 
-Reconciliar a arquitetura de `testio` com a especificacao de `utest`:
+A reconciliacao operacional entre `utest` e `testio` foi encerrada em
+2026-06-19. O `utest` permanece como referencia de contrato, scanner/cache e
+compatibilidade historica; novas evolucoes devem entrar por `cmds/testio/`.
 
-1. revisar `cmds/testio/testio.js` e separar discovery, worker execution,
-   result log/cache e render;
-2. mover o contrato de cache para segundos e corrigir arredondamentos;
-3. criar workers por arquivo antes de ampliar paralelismo;
-4. mover suites TUI/non-TTY para a fase `tui`;
-5. transformar falhas silenciosas de load/import em resultados estruturados.
+Backlog nao bloqueante:
+
+1. classificar a fase `integration` com `testio integration --force --workers=4`;
+2. extrair o transform de `bun:test` para `cmds/testio/plugins/bun-test.js`;
+3. completar tipos de evento (`transform:error`, `module:export-mismatch`);
+4. versionar formalmente o schema JSON do report;
+5. adicionar `--no-color`.
+
+Baseline atual: `testio .` cache-hot renderiza o mesmo total principal do
+`utest` (`1125` no cache atual). O scanner do `testio` foi comparado contra
+`utest/scanner.js` e retorna os mesmos 82 arquivos da suite `unit`. Para
+detalhe completo, `testio -v3` e tratado como live/force: ignora o cache e
+renderiza logs e testes intermediarios capturados pelo worker.
 
 ---
 
