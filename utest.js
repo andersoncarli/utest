@@ -8,6 +8,9 @@
 //   test('hash53', ({ hash53, check }) => { check(hash53(''), 0) })
 //   — hash53 comes from the target module, check from the runner. Zero imports needed.
 
+import { G } from '../utils/globals.d.js'
+await G._ready
+
 import path from 'path'
 import fs from 'fs'
 import { plugin } from 'bun'
