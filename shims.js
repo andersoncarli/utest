@@ -6,7 +6,7 @@
  */
 import test from './test.js'
 import check from './check.js'
-import { withTempDir } from '../lib/withTempDir.js'
+import { withTempDir } from '../utils/src/withTempDir.js'
 
 export { withTempDir, test, check }
 

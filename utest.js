@@ -20,7 +20,7 @@ import { view, fullView, summary, glyphs, checkView } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
          beforeEach, afterEach, withTempDir} from './shims.js'
 
-import { busReset } from '../lib/bus.js'
+import { busReset } from '../utils/src/bus.js'
 
 import is from '../utils/src/is.js'
 import toSource from '../utils/src/toSource.js'
