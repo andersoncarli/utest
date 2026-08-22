@@ -4,9 +4,14 @@
   "type": "module",
   "description": "",
   "main": "index.js",
+  "bin": {
+    "utest": "./utest.js",
+    "utest2": "./utest2.js"
+  },
   "scripts": {
     "dev": "bun --hot index.js",
-    "debug": "bun --inspect=127.0.0.1:6499 --hot index.js"
+    "debug": "bun --inspect=127.0.0.1:6499 --hot index.js",
+    "install": "bun link"
   },
   "keywords": [],
   "author": "",

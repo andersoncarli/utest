@@ -53,6 +53,18 @@ Backlog nao bloqueante:
 4. versionar formalmente o schema JSON do report;
 5. adicionar `--no-color`.
 
+Evidência concreta (2026-08-21): rodando `utest.js` sobre `~/bot` inteiro (96
+arquivos) em modo in-process, o arquivo que aparece como 💥 muda entre
+execuções (`io-nutshell.t.js` → `config.t.js`, mensagens sem relação com o
+código do próprio arquivo: "Syntax Error", "test.todo is not a function"), e a
+contagem total de testes varia (433 vs 124) — sinal de que uma exceção
+assíncrona tardia (provável: `process.exit()` de um subprocesso spawnado por
+`shell.t.js`/`ide.t.js`/`status.t.js` sob carga, capturado pelo trap em
+`installProcessExitTrap()`) é atribuída ao arquivo errado porque chega depois
+que o runner já avançou para o próximo. Confirma a necessidade do isolamento
+por worker já listado acima; rodando cada suite isoladamente (`utest.js
+nutshell`, etc.) o resultado é estável.
+
 Baseline atual: `testio .` cache-hot renderiza o mesmo total principal do
 `utest` (`1125` no cache atual). O scanner do `testio` foi comparado contra
 `utest/scanner.js` e retorna os mesmos 82 arquivos da suite `unit`. Para
