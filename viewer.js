@@ -187,21 +187,28 @@ export function view(t, op = {}) {
 
   const isCached    = t.cached || t._cached
   const checkCount  = t.checkCount || t._checkCount || 0
+  // File-level header (indent 0, more than one check): collapse the glyph run into counts
+  // ("shell.t.js ✔97 ✘3") instead of printing one glyph per check.
+  const isFileHeader = indent === 0 && !isCached && allChecks.length > 1
+  const passCount   = isFileHeader ? allChecks.filter(c => c.state === 'passed').length : 0
+  const failCount   = isFileHeader ? allChecks.length - passCount : 0
   const checkGlyphs = isCached
     ? (t.state === 'exception' ? glyphs.exception : `${glyphs.cached}${checkCount > 1 ? checkCount : ''}`)
-    : allChecks.map(c => glyphs[c.state] || '?').join('')
+    : isFileHeader
+      ? `${glyphs.passed}${passCount}${failCount ? ` ${glyphs.failed}${failCount}` : ''}`
+      : allChecks.map(c => glyphs[c.state] || '?').join('')
   const stateGlyph  = (allChecks.length === 0 && !isCached) ? (glyphs[t.state] || '') : ''
 
   const addr    = t.address || (t.caller ? `${t.caller.file}:${String(t.caller.line).padStart(3,'0')}` : '')
   const tookMs  = Math.round(t.duration || 0)
-  const timeTag = tookMs > 100 ? ` (${tookMs}ms)` : ''
+  const timeTag = (isFileHeader || tookMs > 100) ? ` (${tookMs}ms)` : ''
 
   const lines = []
   const selfMatch = !terms.length || matchesTerms(t.name, terms) || matchesTerms(addr, terms)
 
   if (selfMatch) {
-    const left = `${pad}${t.name} ${stateGlyph}${checkGlyphs}${timeTag}`
-    lines.push(left)
+    const left = `${pad}${t.name} ${stateGlyph}${checkGlyphs}`
+    lines.push(isFileHeader && timeTag ? dotfill(left + ' ', '-', timeTag, width) : `${left}${timeTag}`)
   }
 
   const allOutput = verbosity < 3 ? gatherOutput(t) : (t.output || [])
