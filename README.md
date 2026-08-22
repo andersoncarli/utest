@@ -1,11 +1,16 @@
 # utest/
 
-Especificacao e compatibilidade do runner de testes do FRM. Historicamente
-`utest` reuniu descoberta de arquivos, shims de `bun:test`/Jest, `check()`,
-viewer compacto e cache barato. A nova direcao e levar essas ideias para
-`cmds/testio/testio.js`, usando `lib/adapters/io-engine.js` como trilha de IO.
+Runner de testes Universal
 
----
+## Uso
+
+```bash
+# Rodar suite específica
+bun utest/utest.js utils -v2 --force
+
+# Caminho arquitetural em revisao
+bot testio unit -v:2
+```
 
 ## Direcao Atual
 
@@ -23,20 +28,6 @@ O runner atual em `utest/utest.js` ainda e majoritariamente in-process. Isso e
 util para compatibilidade e diagnostico, mas nao deve ser confundido com o
 modelo final de isolamento.
 
----
-
-## Uso
-
-```bash
-# Rodar suite específica
-bun utest/utest.js utils -v2 --force
-
-# Caminho arquitetural em revisao
-bot testio unit -v:2
-```
-
----
-
 ## Componentes
 
 | Arquivo | Função |
@@ -53,8 +44,6 @@ bot testio unit -v:2
 | `paths.js` | Resolução de paths |
 | `migrate.js` | Migração de formato de testes |
 
----
-
 ## Documentação Interna
 
 | Arquivo | Conteúdo |
@@ -64,8 +53,6 @@ bot testio unit -v:2
 | `TEST-SPEC.md` / `TEST-SPEC-1.md` | Especificações de comportamento |
 | `TEST-PROBLEMS-I-FOUND.md` | Achados recentes e limites da migracao |
 | `TEST.yaml` | Configuração de testes |
-
----
 
 ## Ver também
 

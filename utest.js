@@ -11,6 +11,7 @@
 import path from 'path'
 import fs from 'fs'
 import { plugin } from 'bun'
+import { parse as parseYaml } from 'bun:yaml'
 
 import test from './test.js'
 import { check, checkFail, checkException } from './check.js'
@@ -207,6 +208,15 @@ const configPath = [root, process.cwd()].map(d => path.resolve(d, 'TEST.yaml')).
   || path.resolve(process.cwd(), 'TEST.yaml')
 const width = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
 const startAll = process.hrtime.bigint()
+
+// ─── Project boot ─────────────────────────────────────────────────────────────
+// Opt-in via TEST.yaml `boot: <path>` (resolved relative to the config file).
+// A target project may need its own globals registered (e.g. soml's `bootstrap()`)
+// before any test file imports — this runs once, ahead of the scan.
+if (fs.existsSync(configPath)) {
+  const cfg = parseYaml(fs.readFileSync(configPath, 'utf8')) || {}
+  if (cfg.boot) await import(path.resolve(path.dirname(configPath), cfg.boot))
+}
 
 // ─── Scan ─────────────────────────────────────────────────────────────────────
 let entries = [], uncovered = []

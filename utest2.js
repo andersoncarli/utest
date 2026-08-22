@@ -56,9 +56,13 @@ plugin({
   setup(build) {
     build.onLoad({ filter: /\.(t|test|tuit|it)\.(js|ts)$/ }, async (args) => {
       let code = await fs.promises.readFile(args.path, 'utf8')
-      if (code.includes('bun:test') || code.includes('node:test'))
-        code = code.replace(/import\s+[\s\S]*?from\s+["'](?:bun:test|node:test)["'];?/g,
-          m => m.split('\n').map(l => '// [utest-shim] ' + l).join('\n'))
+      const needsShim = code.includes('bun:test') || code.includes('node:test')
+      // Files that don't use bun:test/node:test don't need shim injection — some
+      // declare their own `const { test } = globalThis` and an unconditional
+      // import here collides with it ("test has already been declared").
+      if (!needsShim) return { contents: code, loader: args.path.endsWith('.ts') ? 'ts' : 'js' }
+      code = code.replace(/import\s+[\s\S]*?from\s+["'](?:bun:test|node:test)["'];?/g,
+        m => m.split('\n').map(l => '// [utest-shim] ' + l).join('\n'))
       const isCjs = /\bmodule\.exports\b|\brequire\s*\(/.test(code)
       if (!isCjs) {
         const shebang = code.startsWith('#!')
