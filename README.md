@@ -19,14 +19,97 @@ bot testio unit -v:2
   isolado e paralelizavel.
 - **Streaming persistente**: resultados devem poder ser renderizados ao vivo e
   reabertos via IO.
-- **Cache por tempo**: manter cache por timestamp, mas comparando segundos
-  exatos do alvo/dependencias, nao minutos.
+- **Cache por tempo**: implementado — ver `## Regra do Cache` abaixo.
 - **Falha visivel**: erro de import/load/shim e erro do modulo alvo deve virar
   resultado de teste, nunca sumir em `catch {}`.
 
 O runner atual em `utest/utest.js` ainda e majoritariamente in-process. Isso e
 util para compatibilidade e diagnostico, mas nao deve ser confundido com o
 modelo final de isolamento.
+
+## Regra do Cache
+
+Implementado em `cache.js`, atras da factory `TestCache(root)` — um closure que
+memoiza o grafo de imports e esconde de quem chama qual dos dois protocolos vale
+(target pareado ou sidecar). `scanner.js` e o unico consumidor: os runners
+recebem o cache pronto de `scan()` e nunca importam `cache.js`.
+
+O cache nao tem banco nem hash: ele vive nos timestamps que todo inode ja tem.
+**Seguida a risca, a regra nao tem furo.**
+
+Cada vez que TODOS os testes de um target passam, o ts do target e cravado nos
+segundos da sua ultima alteracao, e cada teste sincroniza com esse mesmo
+segundo, com os milissegundos indicando o numero de checks que passaram:
+
+```
+ALVO    pixel.js              1788299588000     ms = 0    -> conjunto verde
+  TESTE pixel.t.js            1788299588147     ms = 147 checks
+  TESTE pixel.classes.t.js    1788299588010     ms = 10 checks
+  TESTE pixel._resolveSize.t.js 1788299588008   ms = 8 checks
+```
+
+Um conjunto e **valido** quando todos os participantes compartilham o mesmo ts
+arredondado para segundos **e** o target esta cravado nos segundos. Qualquer
+arquivo tocado pelo mundo — editor, checkout, build — sai do segundo comum e
+derruba o conjunto, que e exatamente o desejado.
+
+Os milissegundos moram no TESTE, e nao no target, e e isso que deixa N testes
+dividirem um target so: cada um guarda a propria contagem, os tres concordando
+no mesmo segundo.
+
+**Falha marca o TARGET com 1ms.** Se algum teste nao passa, o target vai para
+`ms = 1` e o conjunto inteiro deixa de valer — inclusive os irmaos que
+passaram. Nenhum teste daquele target e pulado enquanto a falha estiver de pe.
+
+### Os dois detalhes que fazem a regra fechar
+
+**ms inteiro separa carimbo de edicao.** O filesystem grava mtime com precisao
+de nanossegundo, entao um arquivo ESCRITO cai em ms fracionario
+(`...588601.1472`), enquanto `utimesSync` grava o inteiro exato pedido. Sem essa
+checagem, um teste editado dentro do mesmo segundo do target passaria por
+cacheado e devolveria uma contagem que nunca rodou.
+
+**Deps medem contra o `atime`.** O teste guarda em `atime` o instante real da
+gravacao, em precisao cheia. O segundo cravado tem resolucao de 1s, e uma dep
+tocada logo depois da gravacao cairia dentro dele — invisivel. `depsOf` segue
+os imports (inclusive `import './x.js'` de efeito colateral) recursivamente
+dentro do repo, e basta uma dep mais nova que o `atime` para re-rodar.
+
+A contagem satura em 999, o teto do campo: acima disso o cache reporta menos do
+que rodou. E o preco de caber no mtime, e o furo que sobra so encolhe um numero
+exibido — nunca pinta de verde o que falhou.
+
+### Por que isso importa
+
+Um cache que serve verde sobre codigo quebrado e pior que nao ter cache. Duas
+falhas reais que a regra anterior (bucket de MINUTO, sem deps) deixou passar:
+
+- uma edicao no mesmo minuto era invisivel, e o teste era pulado como verde;
+- um `export` removido em `scl/theme-params.js`, dois saltos alem do target
+  pareado, nao invalidava nada — o crash so aparecia com `--force`.
+
+**Cache quente e cache frio devem reportar o MESMO numero.** Se divergirem, o
+cache esta mentindo. Hoje: 3276 nos dois.
+
+## Estender: rodar outro tipo de arquivo
+
+O vocabulario de sufixos (`.t.js`, `.test.js`, `.tuit`, `.it.js`) vive em
+`kinds.js`, declarado uma vez. `register()` abre um tipo novo nas DUAS pontas ao
+mesmo tempo — o matcher que decide o que entra na suite, e o `filter` do plugin
+do Bun que injeta o shim:
+
+```js
+import { register } from './kinds.js'
+register('eval')     // .eval.js passa a ser reconhecido
+```
+
+Abrir so uma das pontas e a falha silenciosa que motivou o modulo: um arquivo
+colhido pelo scanner mas ignorado pelo loader roda sem shim, e um reconhecido so
+pelo loader nunca entra na suite. Nenhum dos dois da erro.
+
+O caso concreto que isso destrava — `sprint eval --sweep` reusando este cache
+para rodar `.eval.js` em ms em vez de minutos — esta documentado em
+`.sprint/TEST-EVAL.md`, no soml.
 
 ## Componentes
 
@@ -35,7 +118,9 @@ modelo final de isolamento.
 | `utest.js` | CLI atual de compatibilidade, ainda in-process |
 | `runner.js` | Execucao modular legada/experimental |
 | `worker.js` | Base para execucao isolada por arquivo |
-| `scanner.js` | Descoberta de arquivos de teste |
+| `scanner.js` | Descoberta de arquivos de teste (e dona do cache) |
+| `cache.js` | `TestCache(root)` — a regra do cache e o grafo de deps |
+| `kinds.js` | Que sufixos o runner reconhece, e o `register()` que abre novos |
 | `viewer.js` | UI de resultados em tempo real |
 | `check.js` | Assertions e visual diffing |
 | `index.js` | Entry point / exports |

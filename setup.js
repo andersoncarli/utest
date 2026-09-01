@@ -10,6 +10,7 @@ import cl        from "../utils/src/cl.js"
 import hash53    from "../utils/src/hash53.js"
 import forEach   from "../utils/src/forEach.js"
 import dotfill   from "../utils/src/dotfill.js"
+import { loaderFilter } from './kinds.js'
 
 // Globals required by utils/src/callstack.js (used inside function bodies, not at import time)
 globalThis.fs   = fs
@@ -20,7 +21,7 @@ const shimsPath = new URL('./shims.js', import.meta.url).pathname
 plugin({
   name: "test-file-rewriter",
   setup(build) {
-    build.onLoad({ filter: /\.(t|test|tuit|it)\.(js|ts)$/ }, async (args) => {
+    build.onLoad({ filter: loaderFilter() }, async (args) => {
       let code = await fs.promises.readFile(args.path, 'utf8')
       // Comment out any explicit bun:test imports
       if (code.includes('bun:test')) {

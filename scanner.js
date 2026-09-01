@@ -1,12 +1,19 @@
-import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, utimesSync, mkdirSync } from "fs"
+import { readFileSync, readdirSync, existsSync } from "fs"
 import { join, relative, dirname, basename } from "path"
 import { parse } from "bun:yaml"
 import { Minimatch } from "minimatch"
+import { TestCache } from "./cache.js"
+import { testRe, stripKind } from "./kinds.js"
 
-const TEST_RE = /\.(t|test|tuit|it)\.(js|ts)$/
 
 // ─── File Walking ──────────────────────────────────────────────
-function walk(dir, root, filter, out = []) {
+// Devolve os arquivos de TESTE (o que o include seleciona) e os de FONTE (todo
+// `.js`/`.ts` que sobrou, fora dos excludes). A cobertura precisa dos dois: um
+// walk que só colhia o include deixava `sourceFiles` sempre vazio, e portanto
+// `uncovered` também — o `--uncovered` não tinha como reportar nada.
+const SOURCE_RE = /\.(js|ts)$/
+
+function walk(dir, root, filter, out = { tests: [], sources: [] }) {
   let entries
   try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return out }
   for (const e of entries) {
@@ -14,9 +21,10 @@ function walk(dir, root, filter, out = []) {
     const rel = relative(root, abs)
     if (e.isDirectory()) {
       if (!filter.excluded(rel)) walk(abs, root, filter, out)
-    } else if (filter.included(rel)) {
-      out.push(abs)
+      continue
     }
+    if (filter.included(rel)) out.tests.push(abs)
+    else if (!filter.excluded(rel) && SOURCE_RE.test(e.name)) out.sources.push(abs)
   }
   return out
 }
@@ -48,62 +56,6 @@ function makeFilter(include, exclude) {
   }
 }
 
-// ─── Cache Protocol ───────────────────────────────────────────
-// On write: testMtime = floor(targetMtime/60000)*60000 + numTests*1000 + numChecks
-//   checks=0, tests=0 → exception cached (sentinel)
-//   checks>0 or tests>0 → pass cached
-// On read:  same minute → cached; different minute → stale
-export function readCache(testPath, targetPath) {
-  try {
-    const testMs   = statSync(testPath).mtimeMs
-    const targetMs = statSync(targetPath).mtimeMs
-    if (Math.floor(testMs / 60000) !== Math.floor(targetMs / 60000)) return null
-    const checks = Math.round(testMs % 1000)
-    const tests  = Math.round((testMs % 60000) / 1000)
-    return { checks, tests, exception: checks === 0 && tests === 0 }
-  } catch { return null }
-}
-
-export function bustCache(testPath) {
-  try { utimesSync(testPath, new Date(0), new Date(0)) } catch {}
-}
-
-export function writeCache(testPath, targetPath, { tests, checks, exception = false }) {
-  try {
-    const targetMs = statSync(targetPath).mtimeMs
-    const minute   = Math.floor(targetMs / 60000) * 60000
-    const mtime    = exception
-      ? new Date(minute)
-      : new Date(minute + Math.min(tests, 59) * 1000 + Math.min(checks, 999))
-    utimesSync(testPath, mtime, mtime)
-  } catch {}
-}
-
-// ─── Self-referential Cache (targetless files) ────────────────
-// Stores { mtime, exception, checks, tests } in .bot/.utest/<key>.json
-// Cache is valid when test file mtime matches stored mtime.
-function selfCacheFile(testPath, root) {
-  const key = relative(root, testPath).replace(/[/\\]/g, '__')
-  return join(root, '.bot', '.utest', key + '.json')
-}
-
-export function readSelfCache(testPath, root) {
-  try {
-    const cf = selfCacheFile(testPath, root)
-    const data = JSON.parse(readFileSync(cf, 'utf8'))
-    if (data.mtime !== statSync(testPath).mtimeMs) return null
-    return data
-  } catch { return null }
-}
-
-export function writeSelfCache(testPath, root, data) {
-  try {
-    const cf = selfCacheFile(testPath, root)
-    mkdirSync(dirname(cf), { recursive: true })
-    writeFileSync(cf, JSON.stringify({ mtime: statSync(testPath).mtimeMs, ...data }))
-  } catch {}
-}
-
 // ─── Test-to-Target Pairing ───────────────────────────────────
 export function findTarget(testPath) {
   const dir  = dirname(testPath)
@@ -122,7 +74,7 @@ export function findTarget(testPath) {
   }
 
   // Progressive strip: a.b.c.t.js → a.b.js → a.js
-  const base  = name.replace(/\.(t|test|tuit|it)\.(js|ts)$/, '')
+  const base  = stripKind(name)
   const parts = base.split('.')
   for (let i = parts.length - 1; i >= 1; i--)
     candidates.add(parts.slice(0, i).join('.') + '.js')
@@ -142,21 +94,22 @@ export function scan(root, configPath, phase = 'unit') {
   const include       = pcfg.include || ['**/*.t.js', '**/*.test.js']
   const exclude       = [...globalExclude, ...(pcfg.exclude || [])]
   const filter        = makeFilter(include, exclude)
-  const all           = walk(root, root, filter)
+  const walked      = walk(root, root, filter)
 
-  const testFiles   = all.filter(f => TEST_RE.test(basename(f)))
-  const sourceFiles = all.filter(f => !TEST_RE.test(basename(f)))
+  const isTest      = f => testRe().test(basename(f))
+  const testFiles   = walked.tests.filter(isTest)
+  const sourceFiles = walked.sources.filter(f => !isTest(f))
 
+  const cache = TestCache(root)
   const entries = testFiles.map(path => {
     const target = findTarget(path)
-    const cache  = target ? readCache(path, target) : readSelfCache(path, root)
-    return { path, target, cache }
+    return { path, target, cache: cache.read(path, target) }
   })
 
   const covered   = new Set(entries.map(e => e.target).filter(Boolean))
   const uncovered = sourceFiles.filter(f => !covered.has(f))
 
-  return { entries, uncovered }
+  return { entries, uncovered, cache }
 }
 
 if (import.meta.main) {

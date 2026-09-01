@@ -17,7 +17,7 @@ import { plugin } from 'bun'
 
 import test from './test.js'
 import { check, checkFail, checkException } from './check.js'
-import { scan, writeCache, writeSelfCache, bustCache } from './scanner.js'
+import { scan } from './scanner.js'
 import { view, fullView, summary, glyphs, checkView } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
          beforeEach, afterEach, withTempDir} from './shims.js'
@@ -31,6 +31,7 @@ import callstack from '../utils/src/callstack.js'
 import cl from '../utils/src/cl.js'
 // import forEach   from '../utils/src/forEach.js'
 import dotfill from '../utils/src/dotfill.js'
+import { loaderFilter } from './kinds.js'
 
 // Needed by callstack.js and cl.js internally
 globalThis.fs = fs
@@ -57,7 +58,7 @@ const shimsPath = new URL('./shims.js', import.meta.url).pathname
 plugin({
   name: 'bun-test-shim',
   setup(build) {
-    build.onLoad({ filter: /\.(t|test|tuit|it)\.(js|ts)$/ }, async (args) => {
+    build.onLoad({ filter: loaderFilter() }, async (args) => {
       let code = await fs.promises.readFile(args.path, 'utf8')
       const needsShim = code.includes('bun:test') || code.includes('node:test')
       // Files that don't use bun:test/node:test don't need shim injection — some
@@ -183,9 +184,9 @@ const width = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
 const startAll = process.hrtime.bigint()
 
 // ─── Scan ─────────────────────────────────────────────────────────────────────
-let entries = [], uncovered = []
+let entries = [], uncovered = [], cache = null
 try {
-  ; ({ entries, uncovered } = scan(root, configPath))
+  ; ({ entries, uncovered, cache } = scan(root, configPath))
 } catch (e) {
   if (e.code !== 'ENOENT') { console.error('[utest2] scan error:', e.message); process.exit(1) }
 }
@@ -282,10 +283,9 @@ for (const entry of entries) {
   // ── Update cache ─────────────────────────────────────────────────────────
   const cacheData = { tests: s.tests, checks: s.passed, exception: suite.state === 'exception' }
   if (suite.state === 'passed') {
-    if (entry.target) writeCache(entry.path, entry.target, cacheData)
-    else writeSelfCache(entry.path, root, cacheData)
+    cache.write(entry.path, entry.target, cacheData)
   } else {
-    bustCache(entry.path)
+    cache.bust(entry.path)
   }
 }
 

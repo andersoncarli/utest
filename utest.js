@@ -18,7 +18,7 @@ import { parse as parseYaml } from 'bun:yaml'
 
 import test from './test.js'
 import { check, checkFail, checkException } from './check.js'
-import { scan, writeCache, writeSelfCache, bustCache } from './scanner.js'
+import { scan } from './scanner.js'
 import { view, fullView, summary, glyphs, checkView } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
          beforeEach, afterEach, withTempDir} from './shims.js'
@@ -33,6 +33,7 @@ import cl from '../utils/src/cl.js'
 import forEach from '../utils/src/forEach.js'
 import dotfill from '../utils/src/dotfill.js'
 import hash53 from '../utils/src/hash53.js'
+import { loaderFilter } from './kinds.js'
 
 const realProcessExit = process.exit.bind(process)
 const realStdoutWrite = process.stdout.write.bind(process.stdout)
@@ -87,7 +88,7 @@ const shimsPath = new URL('./shims.js', import.meta.url).pathname
 plugin({
   name: 'bun-test-shim',
   setup(build) {
-    build.onLoad({ filter: /\.(t|test|tuit|it)\.(js|ts)$/ }, async (args) => {
+    build.onLoad({ filter: loaderFilter() }, async (args) => {
       let code = await fs.promises.readFile(args.path, 'utf8')
       const needsShim = code.includes('bun:test') || code.includes('node:test')
       // Files that don't use bun:test/node:test don't need shim injection.
@@ -222,9 +223,9 @@ if (fs.existsSync(configPath)) {
 }
 
 // ─── Scan ─────────────────────────────────────────────────────────────────────
-let entries = [], uncovered = []
+let entries = [], uncovered = [], cache = null
 try {
-  ; ({ entries, uncovered } = scan(root, configPath))
+  ; ({ entries, uncovered, cache } = scan(root, configPath))
 } catch (e) {
   if (e.code !== 'ENOENT') { console.error('[utest2] scan error:', e.message); realProcessExit(1) }
 }
@@ -265,6 +266,7 @@ for (const entry of entries) {
 
   // ── Build context: base utils + target module exports ────────────────────
   const ctx = { ...baseCtx }
+  let targetErr = null
   if (entry.target) {
     try {
       const mod = await import(entry.target)
@@ -274,15 +276,18 @@ for (const entry of entries) {
         ctx[baseName] = mod.default   // hash53.js → ctx.hash53, cl.js → ctx.cl
         if (!ctx.default) ctx.default = mod.default
       }
-    } catch { }
+    } catch (e) { targetErr = e }
   }
 
   // ── Isolated load: test.begin() scopes all registrations to fileRoot ────
   const fileRoot = test.begin(path.basename(entry.path))
 
-  let loadErr = null
+  // Um alvo que não importa deixava o teste rodar sem os exports dele: a falha
+  // chegava como `x is not defined` no primeiro check, apontando para o arquivo
+  // errado. O erro do alvo é o resultado — e vem antes de qualquer check.
+  let loadErr = targetErr
   try {
-    await import(entry.path)
+    if (!loadErr) await import(entry.path)
   } catch (e) { loadErr = e } finally {
     test.end()
   }
@@ -323,10 +328,9 @@ for (const entry of entries) {
   // ── Update cache ─────────────────────────────────────────────────────────
   const cacheData = { tests: s.tests, checks: s.passed, exception: suite.state === 'exception' }
   if (suite.state === 'passed') {
-    if (entry.target) writeCache(entry.path, entry.target, cacheData)
-    else writeSelfCache(entry.path, root, cacheData)
+    cache.write(entry.path, entry.target, cacheData)
   } else {
-    bustCache(entry.path)
+    cache.bust(entry.path)
   }
 }
 
