@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, statSync, utimesSync, mkdirSync, rmSync } from 'fs'
-import { join, relative, dirname, resolve } from 'path'
+import { readFileSync, writeFileSync, statSync, utimesSync, mkdirSync, rmSync, existsSync } from 'fs'
+import { join, relative, dirname, resolve, parse as parsePath } from 'path'
 
 /**
  * cache.js — o cache do utest, e a regra que o torna confiável.
@@ -65,6 +65,75 @@ function resolveImport(spec, fromDir, root) {
  */
 export function TestCache(root) {
   const depsMemo = new Map()
+
+  // ── utest/results.json — o HISTÓRICO consolidado, hierárquico por FASE ───────
+  // O cache de tempo (os timestamps de inode acima) decide se um arquivo re-roda;
+  // ele carrega só a CONTAGEM de checks (o que cabe num mtime). Este arquivo é o
+  // OUTRO lado: `phases[fase].files[relpath] = { ms, checks, failCount, state, mtime,
+  // depsNewest, at }`, gravado a cada run de verdade. Serve a três coisas:
+  //   1. output IDÊNTICO quente/frio — o render lê SEMPRE daqui, um registro é um
+  //      registro, cache-hit e live convergem no mesmo formato.
+  //   2. relatório — `(Nms)` do último run em vez de `0ms`, e a variação de tempo.
+  //   3. verificação de 2º nível — `fresh()` compara o veredito do cache de tempo
+  //      com o que o histórico diz (mesmo mtime? deps não mexeram?). Divergir é
+  //      sinal de furo na regra do cache.
+  // UM arquivo por PROJETO em `<raiz>/.utest/results.json`, não por `root`: um
+  // `bun utest/utest.js apps/eval/` estreita o `root` para `apps/eval/`, e sem isto o
+  // `results.json` nasceria lá dentro. Sobe de `root` até a raiz do projeto — o primeiro
+  // diretório com `.git` ou `TEST.yaml` —, e o storage mora num `.utest/` dedicado ali,
+  // sob a chave relativa a essa raiz. Um write por FASE (via `flush()`), não por arquivo.
+  // Perdê-lo só custa uma rodada fria.
+  const findProjectRoot = (from) => {
+    for (let d = resolve(from); ; d = dirname(d)) {
+      if (existsSync(join(d, '.git')) || existsSync(join(d, 'TEST.yaml'))) return d
+      if (d === parsePath(d).root) return resolve(from)
+    }
+  }
+  const projectRoot = findProjectRoot(root)
+  const resultsFile = join(projectRoot, '.utest', 'results.json')
+  let store = null
+  const storeLoad = () => {
+    if (store) return store
+    try {
+      const raw = JSON.parse(readFileSync(resultsFile, 'utf8'))
+      store = raw && raw.version === 1 && raw.phases ? raw : { version: 1, phases: {} }
+    } catch { store = { version: 1, phases: {} } }
+    return store
+  }
+  const phaseFiles = (phase) => {
+    const s = storeLoad()
+    s.phases[phase] ??= { files: {} }
+    return s.phases[phase].files
+  }
+  const results = {
+    get: (phase, p) => phaseFiles(phase)[relative(projectRoot, p)] || null,
+    record: (phase, p, { ms, tests, checks, failCount, state, extraDeps = [] } = {}) => {
+      phaseFiles(phase)[relative(projectRoot, p)] = {
+        ms: Math.round(ms || 0),
+        tests: tests ?? 0,
+        checks: checks ?? 0,
+        failCount: failCount ?? 0,
+        state: state || 'passed',
+        mtime: mtimeOf(p),
+        depsNewest: newestDep(p, extraDeps),
+        at: Date.now(),
+      }
+    },
+    // Um write só, no fim da fase — não um por arquivo.
+    flush: () => {
+      try { mkdirSync(dirname(resultsFile), { recursive: true }); writeFileSync(resultsFile, JSON.stringify(storeLoad(), null, 0)) } catch {}
+    },
+    // O histórico ainda bate com a realidade do disco? (mesmo mtime do teste, e
+    // nenhuma dep mais nova que quando gravamos). MESMA pergunta que a regra do
+    // cache de tempo responde por outro caminho — as duas discordarem para o mesmo
+    // arquivo é um furo em uma delas.
+    fresh: (phase, p, extraDeps = []) => {
+      const r = phaseFiles(phase)[relative(projectRoot, p)]
+      if (!r) return false
+      if (r.mtime !== mtimeOf(p)) return false
+      return newestDep(p, extraDeps) <= (r.depsNewest ?? 0)
+    },
+  }
 
   // `extraRoots` são pontos de partida ADICIONAIS do walk, para o teste cujo
   // alvo declara suas dependências fora de um `import` — um `.eval.js` cujo
@@ -239,6 +308,7 @@ export function TestCache(root) {
   return {
     deps,
     bust,
+    results,
     read: (testPath, targetPath, { extraDeps = [] } = {}) =>
       targetPath ? readPaired(testPath, targetPath, extraDeps) : readSelf(testPath, extraDeps),
     write: (testPath, targetPath, result, { extraDeps = [] } = {}) => {

@@ -1,7 +1,7 @@
 // A regra do cache vive nos timestamps do inode, então testá-la exige disco de
 // verdade: um mock de `fs` provaria só que o mock concorda consigo mesmo. Cada
 // caso monta um alvo, seus testes e suas deps num diretório próprio.
-import { mkdtempSync, rmSync, writeFileSync, statSync, utimesSync, mkdirSync } from 'fs'
+import { mkdtempSync, rmSync, writeFileSync, statSync, utimesSync, mkdirSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { TestCache } from './cache.js'
@@ -415,6 +415,34 @@ test('cache: bordas que não podem derrubar o runner', ({ test }) => {
     const { at, cache } = fixture(SET)
     cache.write(at('m.t.js'), at('m.js'), { checks: 0 })
     check(cache.read(at('m.t.js'), at('m.js')), null)
+    cleanup()
+  })
+
+  test('results — store hierárquico por fase, get/record/flush/fresh', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    check(cache.results.get('unit', at('m.t.js')), null, 'vazio no início')
+    cache.results.record('unit', at('m.t.js'), { ms: 42, tests: 3, checks: 9, failCount: 1, state: 'failed' })
+    const r = cache.results.get('unit', at('m.t.js'))
+    check(r.ms, 42); check(r.tests, 3); check(r.checks, 9); check(r.state, 'failed')
+    check(cache.results.fresh('unit', at('m.t.js')), true, 'recém-gravado bate com o disco')
+    check(cache.results.get('eval', at('m.t.js')), null, 'outra fase não vê o registro')
+    cache.results.flush()
+    // o arquivo mora na raiz-do-projeto (aqui o tmpdir não tem `.git`/`TEST.yaml`, então
+    // `findProjectRoot` cai no próprio `dir`), sob `.utest/results.json`
+    check(existsSync(join(dir, '.utest', 'results.json')), true, 'flush escreveu o arquivo')
+    // uma nova instância relê o que foi persistido
+    const c2 = TestCache(dir)
+    check(c2.results.get('unit', at('m.t.js'))?.ms, 42, 'persistiu entre instâncias')
+    cleanup()
+  })
+
+  test('results.fresh — falso quando o teste foi reeditado', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.results.record('unit', at('m.t.js'), { ms: 10, tests: 1, checks: 1, state: 'passed' })
+    check(cache.results.fresh('unit', at('m.t.js')), true)
+    const future = new Date(Date.now() + 5000)
+    utimesSync(at('m.t.js'), future, future)
+    check(cache.results.fresh('unit', at('m.t.js')), false, 'mtime mudou → stale')
     cleanup()
   })
 })

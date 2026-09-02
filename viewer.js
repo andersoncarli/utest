@@ -5,6 +5,13 @@ const stripAnsi = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '')
 // cl.gray uses dim-black (\x1b[2;30m) which is barely visible; use bright-black instead
 const gray = s => `\x1b[90m${s}\x1b[39m`
 
+// OSC 8 hyperlink — `\x1b]8;;<uri>\x07<texto>\x1b]8;;\x07`. Terminais que suportam (iTerm2,
+// VS Code, WezTerm, kitty…) tornam o `texto` clicável; os que não, mostram só o `texto`, o
+// escape some. Um `file://` abre o arquivo no editor a partir do terminal do VS Code.
+// `stripAnsi` já remove `\x1b[...m` mas NÃO o OSC 8 — quem mede largura usa `visibleLen`.
+export const link = (uri, text) => `\x1b]8;;${uri}\x07${text}\x1b]8;;\x07`
+export const visibleLen = s => stripAnsi(String(s || '')).replace(/\x1b\]8;;[^\x07]*\x07/g, '').length
+
 function dotfill(left, fill, right, width = 80) {
   const l = stripAnsi(left).length
   const r = stripAnsi(right || '').length
@@ -57,8 +64,15 @@ function checkView(c, { width = 80 } = {}) {
 
   const left = `${glyphs.failed} ${lineCode || 'check()'}`
   let out = dotfill(left, '.', ' '+gray(addr), width)
-  if (c.a !== undefined) out += `\n  received: ${cl.red(String(c.a))}`
-  if (c.b !== undefined) out += `\n  expected: ${cl.green(String(c.b))}`
+  // `check(expr, true)` que falhou: `received: false` / `expected: true` não acrescenta
+  // nada — a expressão já está no `lineCode` acima. `check.js` guarda `a`/`b` já como
+  // string (`repr()`), então a comparação é contra `'false'`/`'true'`. Qualquer outro par
+  // (`check(x, 40)`, strings) carrega informação real e continua aparecendo.
+  const trivialTruthy = c.a === 'false' && c.b === 'true'
+  if (!trivialTruthy) {
+    if (c.a !== undefined) out += `\n  received: ${cl.red(String(c.a))}`
+    if (c.b !== undefined) out += `\n  expected: ${cl.green(String(c.b))}`
+  }
   return out
 }
 
@@ -174,6 +188,18 @@ function hasDeepMatch(t, terms) {
 
 export { checkView }
 
+// `{ line, code }` de um check falho — o mesmo `lineCode`/`addr` que `checkView` mostra,
+// mas cru, para o `--json`. Um check de `.eval.js` não guarda `lineCode` no objeto (é
+// derivado do `.stack` de `op.error` na hora de renderizar), então a extração roda aqui
+// também.
+export function failInfo(c) {
+  const errLike = c.error || c.op?.error
+  return {
+    line: c.address || extractAddr(errLike) || null,
+    code: (c.lineCode || extractLineCode(errLike) || '').trim() || null,
+  }
+}
+
 export function summary(t) {
   const s = { passed: 0, failed: 0, exception: 0, total: 0, tests: 0 }
   if (t._cached) {
@@ -253,7 +279,10 @@ export function view(t, op = {}) {
   const addr    = t.address || (t.caller ? `${t.caller.file}:${String(t.caller.line).padStart(3,'0')}` : '')
   const tookMs  = Math.round(t.duration || 0)
   const hogTag  = tookMs > HOG_MS ? ` ${glyphs.hog}` : ''
-  const timeTag = (isFileHeader || tookMs > JUSTIFY_MS) ? ` (${tookMs}ms)${hogTag}` : ''
+  // No header do arquivo (indent 0), a variação de tempo contra o run anterior (`lastMs`,
+  // vindo de `.utest/results.json`) — só quando o arquivo de fato re-rodou nesta invocação.
+  const dTag    = (indent === 0 && !isCached && t.lastMs) ? deltaTag(tookMs, t.lastMs) : ''
+  const timeTag = (isFileHeader || tookMs > JUSTIFY_MS) ? ` (${tookMs}ms)${dTag}${hogTag}` : ''
 
   const lines = []
   const selfMatch = !terms.length || matchesTerms(t.name, terms) || matchesTerms(addr, terms)
@@ -302,9 +331,112 @@ export function view(t, op = {}) {
   return lines.filter(Boolean).join('\n')
 }
 
+// Σ do tempo da ÚLTIMA execução de cada arquivo da fase (`lastMs`, do storage) — NÃO o
+// tempo de parede da rodada, que num replay de cache é ~0. É este número que o relatório
+// mostra, e é o mesmo esteja o cache quente ou frio: o cache fica invisível.
+export const phaseMs = (main) =>
+  (main?.tests || []).reduce((n, t) => n + (t.lastMs || Math.round(t.duration || 0) || 0), 0)
+
+// ─── phaseLine — a linha-título de uma fase ──────────────────
+// `EVAL ......... (123ms) ✘45 📄77 🧪119 ✔127` — nome em CAIXA ALTA, dotfill, e à direita:
+// `(Σms)` (o tempo da última execução dos arquivos da fase — nunca tempo de parede), depois
+// `✘N` (`💥N`, `🐢N`) e depois o bloco fixo `📄 🧪 ✔`. `📄 🧪 ✔` ficam na MESMA coluna em
+// toda fase; o dotfill come o espaço à esquerda do `(ms)`.
+//
+// Aceita um `main` (com `tests[]`) OU um `sum` já pronto + `ms`/`files` (a linha
+// `coverage` passa o segundo).
+export function phaseLine(mainOrSum, { width = 80, title = '.', ms, files, bare = false } = {}) {
+  const isMain = Array.isArray(mainOrSum?.tests)
+  const sum   = isMain ? summary(mainOrSum) : mainOrSum
+  const fileN = isMain ? (mainOrSum.tests || []).length : (files ?? 0)
+  const hogN  = isMain
+    ? (mainOrSum.tests || []).filter(t => (t.lastMs || Math.round(t.duration || 0)) > HOG_MS).length
+    : 0
+  const dur   = ms ?? (isMain ? phaseMs(mainOrSum) : 0) ?? 0
+  const passN = sum.total - sum.failed - sum.exception
+  const alarms = [
+    sum.failed    && `${glyphs.failed}${sum.failed}`,
+    sum.exception && `${glyphs.exception}${sum.exception}`,
+    hogN          && `${glyphs.hog}${hogN}`,
+  ].filter(Boolean).join(' ')
+  const fixed = [
+    fileN     && `📄${fileN}`,
+    sum.tests && `🧪${sum.tests}`,
+    passN     && `${glyphs.passed}${passN}`,
+  ].filter(Boolean).join(' ')
+  const right = `${gray(`(${Math.round(dur)}ms)`)} ${alarms ? alarms + ' ' : ''}${fixed}`
+  if (bare) return right   // só o bloco-direito — a linha `coverage` monta o resto
+  const left  = title ? `${cl.bold(String(title).toUpperCase())} ` : ''
+  return dotfill(left, '.', ' ' + right, width)
+}
+// mantém o nome antigo como alias — nenhum chamador quebra
+export const bgPhase = phaseLine
+
+// ─── progressBar — a linha viva do que está rodando AGORA ────
+// `EVAL [████████░░░░░░░░░░░░] plans/5-apps/5.26.eval.js ....` — 20 chars de barra
+// (`done/total`), o resto para o caminho do arquivo, dotfill. Reescrita a cada arquivo
+// pelo chamador com `\r` (sem `\n`), apagada com `\r\x1b[K` no fim da fase. Só num TTY.
+const BAR_W = 20
+export function progressBar(phase, done, total, file, { width = 80 } = {}) {
+  const filled = total > 0 ? Math.round((done / total) * BAR_W) : 0
+  const bar = '█'.repeat(filled) + '░'.repeat(BAR_W - filled)
+  const left = `${cl.bold(phase.toUpperCase())} ${gray(`[${bar}]`)} `
+  const right = ` ${gray(`${done}/${total}`)}`
+  const room = Math.max(0, width - stripAnsi(left).length - stripAnsi(right).length)
+  const name = String(file || '')
+  const shown = name.length > room ? '…' + name.slice(-(room - 1)) : name
+  return dotfill(left + shown, '.', right, width)
+}
+
+// ` −40%` / ` +180%` colorido — a variação de wall-time contra o run anterior, só quando
+// ela é significativa (≥20%) e há um `prev` de verdade. Verde = mais rápido, vermelho =
+// mais lento. Silêncio quando a variação é ruído (GC/JIT já fazem ±15%).
+export function deltaTag(now, prev) {
+  if (!prev || !now) return ''
+  const pct = Math.round(((now - prev) / prev) * 100)
+  if (Math.abs(pct) < 20) return ''
+  const s = pct > 0 ? `+${pct}%` : `${pct}%`
+  return pct > 0 ? ` ${cl.red(s)}` : ` ${cl('g+', s)}`
+}
+
+// ─── compactFails — os vermelhos de uma fase em UMA linha ─────
+// Para cada arquivo com `state !== 'passed'`, um token `nome ✘M (Nms)` — SÓ o número de
+// falhas (nunca os `✔`), e SEMPRE o tempo da ÚLTIMA execução (`t.lastMs`, que o runner
+// preenche igual no cacheado e no vivo — por isso o número é o mesmo quente ou frio; o
+// cache fica invisível). `(🐢 Nms)` quando esse tempo passa de `HOG_MS`. `deltaTag` só
+// quando o arquivo re-rodou de fato (há `t.prevMs`, do run ANTERIOR) e a variação é ≥20%.
+// Soft-wrap na largura, nunca parte um token.
+export function compactFails(main, { width = 80 } = {}) {
+  const bad = (main.tests || []).filter(t => t.state !== 'passed')
+  if (!bad.length) return ''
+  const tok = t => {
+    const s = t._cached ? null : summary(t)
+    const fail = t._cached ? (t.failCount || 1) : (s.failed + s.exception)
+    const ms = t.lastMs || Math.round(t.duration || 0)
+    const hog = ms > HOG_MS ? `${glyphs.hog} ` : ''
+    const timing = ms ? gray(` (${hog}${ms}ms)`) : ''
+    const delta = t.prevMs ? deltaTag(ms, t.prevMs) : ''
+    return `${t.name} ${glyphs.failed}${fail}${timing}${delta}`
+  }
+  const tokens = bad.map(tok)
+  const lines = []
+  let cur = ''
+  for (const tk of tokens) {
+    const add = cur ? cur + '  ' + tk : tk
+    if (stripAnsi(add).length > width && cur) { lines.push(cur); cur = tk }
+    else cur = add
+  }
+  if (cur) lines.push(cur)
+  return lines.join('\n')
+}
+
 // ─── fullView(main) — complete output ─────────────────────────
 // `--hogs` NÃO passa mais por aqui — é `hogReport()`, uma leitura de tempo cega a erro. Isto
 // é sempre o relatório orientado a FALHA (v0-v3).
+//
+// v0-v2: a linha-título da fase (`phaseLine`) e — se há vermelho — os arquivos falhos numa
+// linha compacta (`compactFails`). NENHUM `checkView` por baixo: o detalhe é `-v:3
+// <arquivo>` (que força a re-execução). v3: o caminho verboso de sempre, árvore inteira.
 export function fullView(main, op = {}) {
   let verbosity = op.verbosity ?? 1
   const width   = op.width    ?? process.stdout.columns ?? 80
@@ -316,16 +448,18 @@ export function fullView(main, op = {}) {
   if (verbosity === 0 && allPassed) return ''
   if (verbosity === 0) verbosity = 1
 
-  if (verbosity === 1 && allPassed && !terms.length) {
-    const ms = Math.round(main.duration || 0)
-    const head = `${title}: ${glyphs.passed} ${sum.total} (${ms}ms)`
-    // "não conseguimos identificar quem está bloqueando" — o colapso de UMA linha (o caso
-    // comum: rodar um arquivo só) escondia exatamente o teste que pesa. Só desce a árvore
-    // quando o TOTAL já é hog — nenhum custo extra na rodada rápida, que é a maioria.
-    if (ms <= HOG_MS) return head
-    const slow = sortSlow(gatherSlowLeaves(main))
-    if (!slow.length) return head
-    return [head, ...slow.map(t => slowRow(t))].join('\n')
+  if (verbosity <= 2) {
+    // A linha-título vai à largura CHEIA (dotfill até a borda); o que vem abaixo dela é
+    // indentado 2 pelo chamador, então soft-wrap com `width - 2`.
+    const lines = [phaseLine(main, { width, title })]
+    const ms = phaseMs(main)
+    if (allPassed) {
+      if (ms > HOG_MS) for (const t of sortSlow(gatherSlowLeaves(main))) lines.push(slowRow(t))
+      return lines.filter(Boolean).join('\n')
+    }
+    const cf = compactFails(main, { width: width - 2 })
+    if (cf) lines.push(cf)
+    return lines.join('\n')
   }
 
   const hr    = `\x1b[90m${'═'.repeat(width)}\x1b[39m`
@@ -333,38 +467,9 @@ export function fullView(main, op = {}) {
 
   const filtered = terms.length ? (main.tests || []).filter(t => hasDeepMatch(t, terms)) : (main.tests || [])
 
-  if (verbosity === 2) {
-    // UMA linha por arquivo, econômica: nome+contagem sempre; `(Nms)` só quando passa de
-    // 100ms (`JUSTIFY_MS`) — um arquivo de 2ms não precisa dizer "2ms", e listar isso em
-    // toda linha inflava a saída sem ajudar a achar o hog. Nenhuma saída de
-    // `log()`/`debug()`/console capturado aparece aqui — só falha.
-    const passing = filtered.filter(t => t.state === 'passed')
-    const failing = filtered.filter(t => t.state !== 'passed')
-    if (passing.length) {
-      for (const t of passing) {
-        const n = t._cached ? (t.checkCount || '') : gatherChecks(t).length
-        const ms = Math.round(t.duration || 0)
-        const hogTag = ms > HOG_MS ? ` ${glyphs.hog}` : ''
-        const timeTag = ms > JUSTIFY_MS ? ` (${ms}ms)${hogTag}` : ''
-        lines.push(gray(`${t.name} ${glyphs.passed}${n > 1 ? n : ''}${timeTag}`))
-        if (ms > HOG_MS) {
-          const slow = sortSlow(gatherSlowLeaves(t))
-          for (const s of slow) lines.push(slowRow(s))
-        }
-      }
-    }
-    if (failing.length) {
-      if (passing.length) lines.push(hr)
-      for (const t of failing) {
-        const v = view(t, { verbosity, width, nameTerms: terms })
-        if (v) lines.push(v)
-      }
-    }
-  } else {
-    for (const t of filtered) {
-      const v = view(t, { verbosity, width, nameTerms: terms })
-      if (v) lines.push(v)
-    }
+  for (const t of filtered) {
+    const v = view(t, { verbosity, width, nameTerms: terms })
+    if (v) lines.push(v)
   }
 
   lines.push(hr)
@@ -426,4 +531,4 @@ export function hogReport(mains, { width = 80, standalone = false } = {}) {
   return lines.join('\n')
 }
 
-export default { view, fullView, summary, glyphs, JUSTIFY_MS, HOG_MS, hogReport, sumLeafDurations }
+export default { view, fullView, summary, glyphs, JUSTIFY_MS, HOG_MS, hogReport, sumLeafDurations, bgPhase, phaseLine, progressBar, compactFails, failInfo, deltaTag }

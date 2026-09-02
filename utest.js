@@ -20,7 +20,7 @@ import test from './test.js'
 import { check, checkFail, checkException } from './check.js'
 import { scan } from './scanner.js'
 import { TestCache } from './cache.js'
-import { view, fullView, summary, glyphs, checkView, hogReport } from './viewer.js'
+import { view, fullView, summary, glyphs, checkView, hogReport, failInfo, phaseLine, phaseMs, progressBar, link, HOG_MS } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
          beforeEach, afterEach, withTempDir} from './shims.js'
 
@@ -220,7 +220,7 @@ if (_vArg) verbosity = parseInt(_vArg.match(/([0123])$/)[1])
 if (hogs) verbosity = 1
 globalThis.utestVerbosity = verbosity
 
-const force = args.includes('--force') || args.includes('-f')
+let force = args.includes('--force') || args.includes('-f')
 const watch = args.includes('--watch') || args.includes('-w')
 const showUnc = args.includes('--uncovered') || args.includes('-u')
 // `--json`: uma linha por arquivo de teste em JSON, e NADA mais no stdout — para um
@@ -243,11 +243,25 @@ const _declaredPhases = new Set(fs.existsSync(_yamlNearCwd)
 const phaseArg = positional.find(a => _declaredPhases.has(a) && !fs.existsSync(a))
 const filterTerms = positional.filter(a => a !== phaseArg && !fs.existsSync(a))
 const rawTarget = positional.find(a => fs.existsSync(a))
+
 const _isFile = rawTarget && fs.statSync(rawTarget).isFile()
 const targetDir = _isFile ? path.dirname(rawTarget) : rawTarget
 const root = path.resolve(targetDir || '.')
 const configPath = [root, process.cwd()].map(d => path.resolve(d, 'TEST.yaml')).find(p => fs.existsSync(p))
   || path.resolve(process.cwd(), 'TEST.yaml')
+
+// `-v:3` é "a saída completa de uma execução" — o mesmo que `--force`. Um `-v:3` sobre o
+// cache não executa nada e não mostra nada, o que deixa o modo de investigação sem uso.
+// Ligar `force` junto — MAS só quando o escopo é DE VERDADE estreito: um path que não é a
+// raiz do projeto, ou termos de filtro. `.`/a raiz e uma fase inteira (`eval`) NÃO contam —
+// `-v:3` ali é o `--force` largo que o `docs/CRASH-LOG.md` tirou do procedimento (o pico de
+// spawn da fase `eval`/`int` dispara o `systemd-oomd` e mata o editor junto).
+const _rootIsProject = path.resolve(rawTarget || '.') === path.dirname(configPath)
+const narrowScope = (!!rawTarget && !_rootIsProject) || filterTerms.length > 0
+if (verbosity >= 3 && !force && !watch) {
+  if (narrowScope) force = true
+  else process.stderr.write('\x1b[33m-v:3 em escopo largo (raiz ou fase inteira) não fura o cache — rode filtrado: um path de arquivo/subdir, ou um termo\x1b[39m\n')
+}
 const width = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
 const startAll = process.hrtime.bigint()
 
@@ -275,6 +289,10 @@ if (!phaseNames.length) phaseNames.push('unit')
 if (phaseArg) phaseNames = phaseNames.filter(p => p === phaseArg)
 
 installProcessExitTrap()
+
+// "cada fase em tempo real": uma barra de progresso reescrita a cada arquivo. Só num TTY
+// interativo, fora do `-v:3` (que já faz streaming por-teste), do `--json` e do `--hogs`.
+const streamPhase = process.stdout.isTTY && verbosity < 3 && !asJson && !hogs && !watch
 
 // ─── Roda UMA fase: scan (ou provider) → executa cada entry → devolve o nó da fase ────────
 async function runPhase(phase) {
@@ -318,8 +336,14 @@ async function runPhase(phase) {
   const main = { name: phase, tests: [], checks: [], state: 'pending', duration: 0 }
   const phaseStart = process.hrtime.bigint()
 
+  let _done = 0
   for (const entry of entries) {
   busReset()
+  // Barra viva: `EVAL [████░░░░] plans/5-apps/5.26.eval.js ....  12/77` — reescrita a cada
+  // arquivo com `\r`, apagada no fim da fase (`\r\x1b[K`). Só num TTY, fora do `-v:3`/json/
+  // hogs (que têm o próprio streaming ou não querem ruído).
+  if (streamPhase) process.stdout.write('\r' + progressBar(phase, _done, entries.length, path.relative(root, entry.path), { width }) + '\x1b[K')
+  _done++
 
   // ── Cached: inject placeholder, skip execution ───────────────────────────
   // Bypass cache when filter terms are active (user wants live output/logs)
@@ -337,18 +361,34 @@ async function runPhase(phase) {
   const cacheHit = entry.cache && (entry.cache.failed || !entry.cache.exception)
   if (!force && !wantsLiveRun && cacheHit) {
     const c = entry.cache
+    // O registro do histórico (`utest/results.json`) é a FONTE do render — cache-hit e live
+    // convergem no mesmo formato, e por isso o output quente == frio. Se o histórico ainda
+    // não tem este arquivo (1ª rodada com o storage), degrada suave para o que o cache de
+    // tempo sabe: `ms:0` até a próxima rodada preencher.
+    const rec = cache?.results?.get(phase, entry.path)
     main.tests.push({
       name: path.basename(entry.path),
       state: c.failed ? 'failed' : 'passed',
       address: path.relative(root, entry.path),
       cached: true, _cached: true,
-      testCount: c.tests,
-      checkCount: c.checks,
-      failCount: c.failCount ?? (c.failed ? 1 : 0),
+      testCount: rec?.tests ?? c.tests,
+      checkCount: rec?.checks ?? c.checks,
+      failCount: rec?.failCount ?? c.failCount ?? (c.failed ? 1 : 0),
+      lastMs: rec?.ms || 0,
       duration: 0, checks: [], tests: [], output: [],
     })
+    // Verificação de 2º nível: o cache de tempo disse HIT; o histórico concorda que nada
+    // mudou? Discordar é sinal de furo na regra do cache — reporta, não corrige (o cache
+    // de tempo continua sendo a autoridade sobre re-rodar).
+    if (rec && cache?.results && !cache.results.fresh(phase, entry.path, entry.extraDeps ?? [])) {
+      process.stderr.write(`\x1b[33m[cache] ${path.relative(root, entry.path)}: cache diz HIT mas o histórico está stale (mtime/deps mudaram desde o último run gravado)\x1b[39m\n`)
+    }
     continue
   }
+
+  // O `ms` do run anterior deste arquivo (histórico), lido ANTES de rodar — para o
+  // relatório destacar a variação (`+50%` / `-40%`) quando um arquivo re-executa.
+  const prevMs = cache?.results?.get(phase, entry.path)?.ms || 0
 
   // Início da MEDIÇÃO real do entry — antes de qualquer import de alvo ou executor. Um
   // executor de fase-com-provider (`apps/eval/utest-phase.js`: `sweepFeature` roda o `sh()`
@@ -429,6 +469,12 @@ async function runPhase(phase) {
   }
 
   suite.duration = Number(process.hrtime.bigint() - entryStart) / 1e6
+  // O relatório mostra SEMPRE o tempo da ÚLTIMA execução real (`lastMs`), nunca o tempo
+  // de uma rodada de cache — que num replay é ~0 e não diz nada. Este arquivo acabou de
+  // rodar, então `lastMs` é o tempo de agora; `prevMs` (o run ANTERIOR) fica só para o
+  // `deltaTag`. Assim o número reportado é idêntico esteja o cache quente ou frio.
+  suite.lastMs = Math.round(suite.duration)
+  suite.prevMs = prevMs
   const s = summary(suite)
   suite.state = s.exception > 0 ? 'exception' : s.failed > 0 ? 'failed' : 'passed'
   main.tests.push(suite)
@@ -460,7 +506,19 @@ async function runPhase(phase) {
     } else {
       cache.bust(entry.path)
     }
+    // O histórico de TODO arquivo que rodou de verdade — verde ou vermelho. Gravado DEPOIS
+    // de `cache.write`: o `writePaired` de um par verde reescreve o mtime do ALVO para o
+    // segundo cravado, então `depsNewest` tem que ser lido já com esse mtime, ou o
+    // cross-check acusaria stale toda rodada. É a FONTE do render — quente e frio
+    // convergem no mesmo registro (`utest/results.json`).
+    cache?.results?.record(phase, entry.path, {
+      tests: s.tests, checks: s.passed,
+      failCount: (s.failed || 0) + (s.exception || 0),
+      ms: suite.duration, state: suite.state, extraDeps: entry.extraDeps ?? [],
+    })
   }
+
+  cache?.results?.flush()   // um write por fase, não por arquivo
 
   main.duration = Number(process.hrtime.bigint() - phaseStart) / 1e6
   const s = summary(main)
@@ -468,9 +526,12 @@ async function runPhase(phase) {
   return { main, uncovered, summary: s }
 }
 
-// ─── Roda cada fase, uma linha de relatório por fase ───────────────────────────
+// ─── Roda cada fase; a barra viva é reescrita dentro de `runPhase` ────────────────────────
 const phaseResults = []
-for (const phase of phaseNames) phaseResults.push({ phase, ...(await runPhase(phase)) })
+for (const phase of phaseNames) {
+  phaseResults.push({ phase, ...(await runPhase(phase)) })
+  if (streamPhase) process.stdout.write('\r\x1b[K')   // apaga a barra viva da fase
+}
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 process.stdout.write = guardedStdoutWrite
@@ -485,10 +546,20 @@ const single = phaseNames.length === 1 || nonEmpty.length <= 1
 // `N.F` do basename); um `.t.js` não. Cobre verde E vermelho — o consumidor (`sprint eval
 // --sweep`) precisa dos dois para derivar degrau nos dois sentidos.
 if (asJson) {
+  const gatherChecks = (t, out = []) => {
+    for (const c of t.checks || []) out.push(c)
+    for (const child of t.tests || []) gatherChecks(child, out)
+    return out
+  }
   const rows = []
   for (const { phase, main } of phaseResults) {
     for (const t of main.tests) {
       const m = t.name.match(/^(\d+\.\d+)\.eval\.js$/)
+      // `fails[]` só nos vermelhos NÃO cacheados (o cache não guarda os `checks[]` — carrega
+      // só o `failCount`). É o detalhe que o consumidor de máquina pode querer sem inflar a
+      // linha do verde nem o relatório humano.
+      const fails = t.state === 'passed' || t._cached ? []
+        : gatherChecks(t).filter(c => c.state !== 'passed').map(failInfo)
       rows.push({
         phase,
         file: t.address || t.name,
@@ -498,6 +569,7 @@ if (asJson) {
         tests: t.testCount ?? summary(t).tests,
         checks: t.checkCount ?? summary(t).passed,
         failCount: t.failCount ?? (summary(t).failed + summary(t).exception),
+        fails,
         ms: Math.round(t.duration || 0),
       })
     }
@@ -506,66 +578,108 @@ if (asJson) {
   realProcessExit(rows.some(r => r.state !== 'passed') ? 1 : 0)
 }
 
-// `--hogs` é uma leitura DE TEMPO, cega a erro — não "arquivos lentos OU vermelhos" (o que
-// filtrava antes), e sim só a lista achatada de todo teste >1000ms, sem glifo de
-// passou/falhou nem detalhe de check. Pula o loop por fase (que é sobre falha) inteiro.
+const rule = `\x1b[90m${'─'.repeat(width)}\x1b[39m`
+const rendered = phaseResults.filter(r => r.main.tests.length > 0)
+
+// coverage — só as fases que escaneiam a árvore de fontes (`scan()` devolve `uncovered`).
+// Uma fase com PROVIDER (`eval`) não tem fonte a cobrir; não entra na conta.
+let srcCovered = 0, srcTotal = 0
+for (const { main, uncovered } of phaseResults) {
+  if (!uncovered) continue
+  srcCovered += (main.tests || []).length
+  srcTotal += (main.tests || []).length + uncovered.length
+}
+const covLine = srcTotal ? `coverage: ${Math.round((srcCovered / srcTotal) * 100)}%` : 'coverage: —'
+
+const anyRed = rendered.some(r => r.main.state !== 'passed')
+
+// `--hogs` — modo de tempo, formato próprio, cego a falha.
 if (hogs) {
   process.stdout.write(hogReport(phaseResults, { width, standalone: true }) + '\n')
-} else {
-  for (const { phase, main, uncovered } of phaseResults) {
-    if (main.tests.length === 0) continue
-    if (verbosity < 3) {
-      const rootName = path.relative(process.cwd(), root) || '.'
-      const title = single ? rootName : `${rootName} · ${phase}`
-      const report = fullView(main, { verbosity, width, title, nameTerms: filterTerms })
-      if (report) process.stdout.write(report + '\n')
-    } else {
-      const s = summary(main)
-      const left = [
-        `${phase}:`,
-        `${glyphs.passed} ${s.total}`,
-        s.failed ? `${glyphs.failed} ${s.failed}` : '',
-        s.exception ? `${glyphs.exception} ${s.exception}` : '',
-      ].filter(Boolean).join('  ')
-      const right = `\x1b[90m${Math.round(main.duration)}ms\x1b[39m`
-      const gap = Math.max(1, width - stripAnsi(left).length - stripAnsi(right).length)
-      process.stdout.write(`${left}${' '.repeat(gap)}${right}\n`)
-    }
-    if (showUnc && uncovered.length) {
-      process.stdout.write(`\nUncovered (${phase}):\n`)
-      for (const f of uncovered) process.stdout.write('  ' + path.relative(root, f) + '\n')
-    }
+
+// `-v:3` — a árvore por-teste já streamou durante a fase; aqui só a linha-resumo.
+} else if (verbosity >= 3) {
+  for (const { phase, main } of rendered) {
+    const s = summary(main)
+    const left = [`${phase}:`, `${glyphs.passed} ${s.total}`,
+      s.failed ? `${glyphs.failed} ${s.failed}` : '',
+      s.exception ? `${glyphs.exception} ${s.exception}` : ''].filter(Boolean).join('  ')
+    const right = `\x1b[90m(${phaseMs(main)}ms)\x1b[39m`
+    const gap = Math.max(1, width - stripAnsi(left).length - stripAnsi(right).length)
+    process.stdout.write(`${left}${' '.repeat(gap)}${right}\n`)
   }
+
+// TUDO VERDE → bloco tight, sem frame: `utest results` / `NOME (Σms) 📄 🧪 ✔` por fase /
+// `coverage: N%`. O `(Σms)` é a soma do tempo da última execução dos arquivos da fase
+// (`phaseMs`) — o mesmo número quente ou frio. `(🐢 n Σms)` se a fase tem hog.
+} else if (!anyRed) {
+  process.stdout.write('\x1b[1mutest results\x1b[22m\n')
+  const rows = rendered.map(({ phase, main }) => {
+    const s = summary(main)
+    const hogN = (main.tests || []).filter(t => (t.lastMs || Math.round(t.duration || 0)) > HOG_MS).length
+    return {
+      name: phase.toUpperCase(),
+      paren: `(${hogN ? `${glyphs.hog} ${hogN} ` : ''}${phaseMs(main)}ms)`,
+      counts: `📄${(main.tests || []).length} 🧪${s.tests} ${glyphs.passed}${s.passed}`,
+    }
+  })
+  const nameW  = Math.max(...rows.map(r => r.name.length))
+  const parenW = Math.max(...rows.map(r => stripAnsi(r.paren).length))
+  for (const r of rows) {
+    const paren = ' '.repeat(parenW - stripAnsi(r.paren).length) + `\x1b[90m${r.paren}\x1b[39m`
+    process.stdout.write(`\x1b[1m${r.name.padEnd(nameW)}\x1b[22m ${paren} ${r.counts}\n`)
+  }
+  process.stdout.write(`\x1b[1m${covLine}\x1b[22m\n`)
+
+// HÁ VERMELHO → relatório emoldurado: frame, linha-título por fase (saída indentada 2), o
+// `tip:` entre réguas, a linha `coverage`. Lê SEMPRE do mesmo registro — quente == frio.
+} else {
+  process.stdout.write(`${rule}\n\x1b[1mutest results\x1b[22m\n${rule}\n`)
+  let firstRed = null
+  for (const { phase, main } of rendered) {
+    if (!firstRed) {
+      const t = main.tests.find(t => t.state !== 'passed')
+      if (t) firstRed = { name: t.name, path: t.address ? path.resolve(root, t.address) : null }
+    }
+    // A linha-título da fase vai à largura CHEIA do terminal (dotfill até a borda, zero
+    // espaço sobrando); só o que vem ABAIXO dela é que indenta 2.
+    const report = fullView(main, { verbosity, width, title: phase, nameTerms: filterTerms })
+    if (!report) continue
+    const [head, ...rest] = report.split('\n')
+    process.stdout.write(head + '\n')
+    for (const l of rest) process.stdout.write((l ? '  ' + l : l.slice(0, width - 2)) + '\n')
+  }
+  if (firstRed) {
+    // `utest <arquivo>` vira um OSC 8 hyperlink para o `file://` do teste — no terminal do
+    // VS Code (e outros que suportam) é clicável e abre o arquivo; onde não suporta, some o
+    // escape e fica só o texto.
+    const cmd = `utest ${firstRed.name}`
+    const shown = firstRed.path ? link('file://' + firstRed.path, cmd) : cmd
+    process.stdout.write(`${rule}\n\x1b[90m tip: run  \x1b[4m${shown}\x1b[24m  to see failure details\x1b[39m\n`)
+  }
+  process.stdout.write(`${rule}\n`)
+  // linha final: `coverage: N%` à esquerda, o bloco-direito da linha-título à direita —
+  // `ms` = Σ do tempo da última execução de TODOS os arquivos, todas as fases.
+  const finalSum = { passed: 0, failed: 0, exception: 0, total: 0, tests: 0 }
+  let totalFiles = 0, totalMs = 0
+  for (const { main } of phaseResults) {
+    const s = summary(main)
+    finalSum.passed += s.passed; finalSum.failed += s.failed
+    finalSum.exception += s.exception; finalSum.total += s.total; finalSum.tests += s.tests
+    totalFiles += (main.tests || []).length; totalMs += phaseMs(main)
+  }
+  const counts = phaseLine(finalSum, { title: '', ms: totalMs, files: totalFiles, bare: true })
+  const gap = Math.max(1, width - stripAnsi(covLine).length - stripAnsi(counts).length)
+  process.stdout.write(`\x1b[1m${covLine}\x1b[22m${' '.repeat(gap)}${counts}\n`)
 }
 
-// ─── Total geral ────────────────────────────────────────────────────────────
-const finalSum = { passed: 0, failed: 0, exception: 0, total: 0 }
-let totalMs = 0
-for (const { main } of phaseResults) {
-  const s = summary(main)
-  finalSum.passed += s.passed; finalSum.failed += s.failed
-  finalSum.exception += s.exception; finalSum.total += s.total
-  totalMs += main.duration
-}
-if (!single) {
-  const left = [
-    `${glyphs.passed} ${finalSum.total}`,
-    finalSum.failed ? `${glyphs.failed} ${finalSum.failed}` : '',
-    finalSum.exception ? `${glyphs.exception} ${finalSum.exception}` : '',
-  ].filter(Boolean).join('  ')
-  const right = `\x1b[90m${Math.round(totalMs)}ms\x1b[39m`
-  const gap = Math.max(1, width - stripAnsi(left).length - stripAnsi(right).length)
-  process.stdout.write(`${left}${' '.repeat(gap)}${right}\n`)
-}
-
-// ─── Hogs — seção final, TODA fase junta (já impressa acima se `--hogs`) ───────────────────
-if (verbosity < 3 && !hogs) {
-  const report = hogReport(phaseResults, { width })
-  if (report) process.stdout.write(report + '\n')
-}
+// exit code — independente do formato acima
+const grand = phaseResults.reduce((a, { main }) => {
+  const s = summary(main); a.failed += s.failed; a.exception += s.exception; return a
+}, { failed: 0, exception: 0 })
 
 if (!watch) {
-  process.exitCode = finalSum.failed > 0 || finalSum.exception > 0 ? 1 : 0
+  process.exitCode = grand.failed > 0 || grand.exception > 0 ? 1 : 0
 }
 
 // ─── Watch mode ───────────────────────────────────────────────────────────────
