@@ -144,7 +144,7 @@ para rodar `.eval.js` em ms em vez de minutos — esta documentado em
 | `worker.js` | Base para execucao isolada por arquivo |
 | `scanner.js` | Descoberta de arquivos de teste (e dona do cache) |
 | `cache.js` | `TestCache(root)` — a regra do cache e o grafo de deps |
-| `probe.js` | `probe(fn\|obj\|Map)` — instrumenta chamadas para achar hogs: conta, mede self-time (chamada aninhada nao conta duas vezes) e relata. Complementa `spyOn` (que e para ASSERTAR sobre chamada, nao medir) |
+| `probe.js` | `probe(fn\|obj\|Map)` — instrumenta chamadas para achar hogs: conta, mede self-time (chamada aninhada nao conta duas vezes). DUAS vistas: `probe.report()` é a FLAT (uma linha por função, todos os callers somados — "quem custa"); `probe.tree()` / `probe.callers(name)` / `probe.edges()` é a de GRAFO (mantém a identidade do caller — "de ONDE, e quanto pesa cada contexto"). Complementa `spyOn` (que e para ASSERTAR sobre chamada, nao medir) |
 | `kinds.js` | Que sufixos o runner reconhece, e o `register()` que abre novos |
 | `viewer.js` | UI de resultados em tempo real |
 | `check.js` | Assertions e visual diffing |

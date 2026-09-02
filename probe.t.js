@@ -93,4 +93,98 @@ test('probe', ({ test }) => {
     probe.restore()
     check(probe.stats().length, 0)
   })
+
+  test('grafo', ({ test }) => {
+
+    test('a aresta separa o contexto — dois callers da mesma função', ({ check }) => {
+      const reg = {
+        shared: (n) => n,
+        a: null, b: null,
+      }
+      reg.a = () => { reg.shared(1); reg.shared(1) }
+      reg.b = () => { reg.shared(1) }
+      probe(reg)
+      reg.a(); reg.a(); reg.b()
+      const callers = probe.callers('shared')
+      check(Object.keys(callers).sort().join(','), 'a,b', 'shared foi chamada de a e de b')
+      check(callers.a.calls, 4, 'a chamou shared 2×2')
+      check(callers.b.calls, 1, 'b chamou shared 1×')
+      probe.restore()
+    })
+
+    test('report() continua idêntico com o wrap novo', ({ check }) => {
+      const obj = { slow: () => sleep(15), fast: () => sleep(1) }
+      probe(obj, 'slow'); probe(obj, 'fast')
+      obj.slow(); obj.fast()
+      let out = ''
+      probe.report({ write: (s) => { out += s } })
+      check(out.includes('slow'), true)
+      check(out.indexOf('slow') < out.indexOf('fast'), true, 'flat: o mais lento primeiro')
+      check(out.includes('TOTAL'), true, 'flat: rodapé TOTAL')
+      check(out.includes('% self'), true, 'flat: cabeçalho da tabela intacto')
+      check(out.includes('↻'), false, 'flat não é a árvore — sem marca de ciclo')
+      probe.restore()
+    })
+
+    test('tree() imprime o mesmo callee sob dois callers — duas linhas', ({ check }) => {
+      const reg = { shared: () => 1, a: null, b: null }
+      reg.a = () => reg.shared()
+      reg.b = () => reg.shared()
+      probe(reg)
+      reg.a(); reg.b()
+      let out = ''
+      probe.tree({ write: (s) => { out += s } })
+      const sharedLines = out.split('\n').filter((l) => l.includes('shared'))
+      check(sharedLines.length, 2, 'shared aparece uma vez por caller')
+      check(out.includes('  shared'), true, 'indentada sob o caller')
+      probe.restore()
+    })
+
+    test('ciclo — aresta f▸f conta os frames, tree() corta com ↻', ({ check }) => {
+      const obj = {
+        f(n) { if (n > 0) this.f(n - 1) },
+      }
+      probe(obj, 'f')
+      obj.f(4)
+      const callers = probe.callers('f')
+      check(callers['(root)'].calls, 1, 'uma entrada de (root)')
+      check(callers.f.calls, 4, 'quatro re-entradas recursivas')
+      let out = ''
+      probe.tree({ write: (s) => { out += s } })
+      check(out.includes('↻'), true, 'a árvore marca o ciclo e não estoura')
+      probe.restore()
+    })
+
+    test('self de aresta = self de stats quando há um caller só', ({ check }) => {
+      const obj = { only: () => sleep(10) }
+      probe(obj, 'only')
+      obj.only(); obj.only()
+      const [s] = probe.stats()
+      const [e] = probe.edges()
+      check(Math.abs(s.selfMs - e.selfMs) < 1, true, `stats.self ${s.selfMs.toFixed(1)} ≈ edge.self ${e.selfMs.toFixed(1)}`)
+      check(e.caller, '(root)')
+      check(e.callee, 'only')
+      probe.restore()
+    })
+
+    test('reset zera as arestas, mantém a observação', ({ check }) => {
+      const obj = { f: () => 1 }
+      probe(obj, 'f')
+      obj.f(); obj.f()
+      check(probe.edges().length, 1, 'uma aresta antes do reset')
+      probe.reset()
+      check(probe.edges().length, 0, 'sem arestas depois do reset')
+      obj.f()
+      check(probe.edges().length, 1, 'ainda observando — a aresta volta')
+      probe.restore()
+    })
+
+    test('restore limpa as arestas também', ({ check }) => {
+      const obj = { f: () => 1 }
+      probe(obj, 'f')
+      obj.f()
+      probe.restore()
+      check(probe.edges().length, 0)
+    })
+  })
 })
