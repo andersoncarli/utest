@@ -82,6 +82,68 @@ test('cache: a regra do conjunto', ({ test }) => {
   })
 })
 
+test('cache: falha REPRODUZÍVEL não re-roda (cacheFailure)', ({ test }) => {
+
+  test('sem a marca, uma falha só busta — re-roda sempre', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, exception: true })
+    check(cache.read(at('m.t.js'), at('m.js')), null, 'falha comum: null, re-roda')
+    cleanup()
+  })
+
+  test('com a marca, o vermelho é reusado e vem com failed:true', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, exception: false, cacheFailure: true })
+    const hit = cache.read(at('m.t.js'), at('m.js'))
+    check(hit?.failed, true, 'o cache diz falhou')
+    check(hit?.checks, 0)
+    check(ms(at('m.js')), 1, 'o alvo continua marcado 1ms — o conjunto não vale como verde')
+    cleanup()
+  })
+
+  test('o alvo reeditado invalida o vermelho cacheado', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, cacheFailure: true })
+    check(cache.read(at('m.t.js'), at('m.js'))?.failed, true)
+    // alguém edita o alvo → sai do segundo+1ms em que o sidecar foi carimbado
+    const future = new Date(Date.now() + 5000)
+    utimesSync(at('m.js'), future, future)
+    check(cache.read(at('m.t.js'), at('m.js')), null, 'alvo mexeu: re-roda')
+    cleanup()
+  })
+
+  test('uma dep mexida invalida o vermelho cacheado', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, cacheFailure: true })
+    check(cache.read(at('m.t.js'), at('m.js'))?.failed, true)
+    const future = new Date(Date.now() + 5000)
+    utimesSync(at('dep.js'), future, future)   // dep transitiva de m.t.js
+    check(cache.read(at('m.t.js'), at('m.js')), null, 'dep mexeu: re-roda')
+    cleanup()
+  })
+
+  test('conserto: passar limpa o sidecar de falha', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, cacheFailure: true })
+    check(cache.read(at('m.t.js'), at('m.js'))?.failed, true)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 5 })   // agora passa
+    const hit = cache.read(at('m.t.js'), at('m.js'))
+    check(hit?.checks, 5, 'verde')
+    check(hit?.failed ?? false, false, 'sem resquício de failed')
+    cleanup()
+  })
+
+  test('extraDeps também governam o vermelho cacheado', ({ check }) => {
+    const { at, cache } = fixture({ ...SET, 'far.js': 'export const F = 1\n' })
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, cacheFailure: true }, { extraDeps: [at('far.js')] })
+    check(cache.read(at('m.t.js'), at('m.js'), { extraDeps: [at('far.js')] })?.failed, true)
+    const future = new Date(Date.now() + 5000)
+    utimesSync(at('far.js'), future, future)
+    check(cache.read(at('m.t.js'), at('m.js'), { extraDeps: [at('far.js')] }), null, 'extraDep mexeu: re-roda')
+    cleanup()
+  })
+})
+
 test('cache: o que precisa INVALIDAR', ({ test }) => {
 
   const mutated = mutate => {
@@ -215,6 +277,74 @@ test('cache: o grafo de dependências', ({ test }) => {
       'a.t.js': "import './sumiu.js'\ntest('a', () => {})\n",
     })
     check(cache.deps(at('a.t.js')), [])
+    cleanup()
+  })
+
+  test('extraRoots ampliam o walk — o alvo cujas deps não são `import`', ({ check }) => {
+    // Um `.eval.js` cujo assunto é uma string passada a `render()`: o grafo
+    // estático dele é vazio, e o `files:` do `.md` de feature entra por aqui.
+    const { at, cache, dir } = fixture({
+      'sub.js':  'export const S = 1\n',
+      'feat.js': "import './sub.js'\n",
+      'e.eval.js': "export default (t) => {}\n",   // não importa nada
+    })
+    check(cache.deps(at('e.eval.js')), [], 'sem extraRoots, grafo vazio')
+    const d = cache.deps(at('e.eval.js'), [join(dir, 'feat.js')]).sort()
+    check(d, [join(dir, 'feat.js'), join(dir, 'sub.js')].sort(), 'extraRoot + o que ele importa')
+    cleanup()
+  })
+})
+
+test('cache: alvo pareado com extraDeps — o modelo do `.eval.js`', ({ test }) => {
+  // O alvo é um `.md` de feature (não importa nada); o grafo real vem do
+  // `files:` do frontmatter, passado como `extraDeps`. O crava do `.md` continua
+  // sendo o "segundo comum" do protocolo — `extraDeps` só amplia o teste de deps.
+  const EVAL_SET = {
+    'feat.md':   '# feature\n',
+    'sub.js':    'export const S = 1\n',
+    'src.js':    "import './sub.js'\nexport const V = 1\n",
+    'f.eval.js': "export default (t) => {}\n",
+  }
+
+  test('grava e relê com extraDeps fresco', ({ check }) => {
+    const { at, cache } = fixture(EVAL_SET)
+    cache.write(at('f.eval.js'), at('feat.md'), { checks: 4 }, { extraDeps: [at('src.js')] })
+    check(cache.read(at('f.eval.js'), at('feat.md'), { extraDeps: [at('src.js')] })?.checks, 4)
+    check(ms(at('feat.md')), 0, 'o .md cravado no segundo')
+    cleanup()
+  })
+
+  test('uma dep de extraDeps editada invalida', ({ check }) => {
+    const { at, cache } = fixture(EVAL_SET)
+    cache.write(at('f.eval.js'), at('feat.md'), { checks: 4 }, { extraDeps: [at('src.js')] })
+    writeFileSync(at('src.js'), "import './sub.js'\nexport const V = 2\n")
+    check(cache.read(at('f.eval.js'), at('feat.md'), { extraDeps: [at('src.js')] }), null)
+    cleanup()
+  })
+
+  test('uma dep TRANSITIVA de extraDeps invalida', ({ check }) => {
+    const { at, cache } = fixture(EVAL_SET)
+    cache.write(at('f.eval.js'), at('feat.md'), { checks: 4 }, { extraDeps: [at('src.js')] })
+    writeFileSync(at('sub.js'), 'export const S = 2\n')   // dois saltos: src.js → sub.js
+    check(cache.read(at('f.eval.js'), at('feat.md'), { extraDeps: [at('src.js')] }), null)
+    cleanup()
+  })
+
+  test('um arquivo de extraDeps que sumiu do disco invalida', ({ check }) => {
+    // O provider (`utest-phase.js`) filtra `files:` inexistente ANTES de chamar
+    // o cache; mas um `files:` que some ENTRE gravar e reler é sinal real — a
+    // feature apagou algo que declara tocar. Mesma regra que já vale para deps.
+    const { at, cache } = fixture(EVAL_SET)
+    cache.write(at('f.eval.js'), at('feat.md'), { checks: 4 }, { extraDeps: [at('src.js')] })
+    rmSync(at('src.js'))
+    check(cache.read(at('f.eval.js'), at('feat.md'), { extraDeps: [at('src.js')] }), null)
+    cleanup()
+  })
+
+  test('extraDeps vazio = protocolo pareado puro (o `.t.js` comum)', ({ check }) => {
+    const { at, cache } = fixture(EVAL_SET)
+    cache.write(at('f.eval.js'), at('feat.md'), { checks: 4 })
+    check(cache.read(at('f.eval.js'), at('feat.md'))?.checks, 4)
     cleanup()
   })
 })

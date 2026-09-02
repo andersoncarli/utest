@@ -57,6 +57,11 @@ function makeFilter(include, exclude) {
 }
 
 // ─── Test-to-Target Pairing ───────────────────────────────────
+// Um `.eval.js` também tem alvo, e pela mesma regra: `slider.eval.js` prova
+// `slider.js`. Quando não há um `.js` de mesmo nome-base — o caso de um roteiro
+// de feature `N.F.eval.js`, cujo assunto é uma STRING passada a `render()` — o
+// alvo é o `N.F-*.md` da feature, e é o `files:` desse `.md` que a fase `eval`
+// caminha como grafo de dependência (`utest.js#runPhase` passa `extraDeps`).
 export function findTarget(testPath) {
   const dir  = dirname(testPath)
   const name = basename(testPath)
@@ -69,19 +74,34 @@ export function findTarget(testPath) {
     name.replace(/\.test\.(js|ts)$/, '.js'),
     name.replace(/\.tuit$/, '.js'),
     name.replace(/\.it\.(js|ts)$/, '.js'),
+    name.replace(/\.eval\.js$/, '.js'),
   ]) {
     if (v !== name) candidates.add(v)
   }
 
-  // Progressive strip: a.b.c.t.js → a.b.js → a.js
-  const base  = stripKind(name)
+  // Progressive strip: a.b.c.t.js → a.b.js → a.js. `stripKind` não conhece
+  // `eval` (registrá-lo global contaminaria `kinds.t.js`), então o `.eval.js`
+  // é descascado aqui, na origem.
+  const base  = name.endsWith('.eval.js') ? name.slice(0, -'.eval.js'.length) : stripKind(name)
   const parts = base.split('.')
   for (let i = parts.length - 1; i >= 1; i--)
     candidates.add(parts.slice(0, i).join('.') + '.js')
 
   for (const v of candidates) {
+    if (v === name) continue
     const full = join(dir, v)
     if (existsSync(full)) return full
+  }
+
+  // Sem `.js` de mesmo nome-base: para um `.eval.js`, o alvo é o `.md` irmão —
+  // `<base>.md` ou o glob `<base>-<slug>.md` (o nome de feature do sprint-cli).
+  if (name.endsWith('.eval.js')) {
+    const exact = join(dir, base + '.md')
+    if (existsSync(exact)) return exact
+    try {
+      const md = readdirSync(dir).find(f => f.startsWith(base + '-') && f.endsWith('.md'))
+      if (md) return join(dir, md)
+    } catch {}
   }
   return null
 }

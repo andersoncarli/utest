@@ -282,7 +282,10 @@ async function runPhase(phase) {
         const rootPrefix = root.endsWith(path.sep) ? root : root + path.sep
         provided = provided.filter(e => e.path === root || e.path.startsWith(rootPrefix))
       }
-      entries = provided.map(e => ({ ...e, target: e.target ?? null, cache: cache.read(e.path, e.target ?? null) }))
+      entries = provided.map(e => ({
+        ...e, target: e.target ?? null, extraDeps: e.extraDeps ?? [],
+        cache: cache.read(e.path, e.target ?? null, { extraDeps: e.extraDeps ?? [] }),
+      }))
     } else {
       ; ({ entries, uncovered, cache } = scan(root, configPath, phase))
     }
@@ -308,14 +311,24 @@ async function runPhase(phase) {
   const matchesFilter = filterTerms.length === 0 ||
     filterTerms.every(t => entryName.toLowerCase().includes(t.toLowerCase()))
   const wantsLiveRun = filterTerms.length > 0 && matchesFilter
-  if (!force && !wantsLiveRun && entry.cache && !entry.cache.exception) {
+  // Um cache pode dizer VERDE (o caso comum) ou VERMELHO REPRODUZÍVEL
+  // (`failed`, só gravado por quem passou `cacheFailure` — hoje a fase `eval`
+  // quando a feature é 100% sandbox). Vermelho cacheado é pulado igual: o
+  // resultado não muda enquanto o alvo e o grafo não mudarem, e re-rodar um
+  // passo de 10s só para reconfirmar o vermelho é o que este cache existe para
+  // evitar (`.sprint/TEST-EVAL.md`). Uma EXCEÇÃO não-`failed` no cache continua
+  // re-rodando: o stack fresco vale mais que o segundo economizado.
+  const cacheHit = entry.cache && (entry.cache.failed || !entry.cache.exception)
+  if (!force && !wantsLiveRun && cacheHit) {
+    const c = entry.cache
     main.tests.push({
       name: path.basename(entry.path),
-      state: entry.cache.exception ? 'exception' : 'passed',
+      state: c.failed ? 'failed' : 'passed',
       address: path.relative(root, entry.path),
       cached: true, _cached: true,
-      testCount: entry.cache.tests,
-      checkCount: entry.cache.checks,
+      testCount: c.tests,
+      checkCount: c.checks,
+      failCount: c.failCount ?? (c.failed ? 1 : 0),
       duration: 0, checks: [], tests: [], output: [],
     })
     continue
@@ -415,9 +428,19 @@ async function runPhase(phase) {
   }
 
   // ── Update cache ─────────────────────────────────────────────────────────
-    const cacheData = { tests: s.tests, checks: s.passed, exception: suite.state === 'exception' }
-    if (suite.state === 'passed') {
-      cache.write(entry.path, entry.target, cacheData)
+    // `entry.cacheFailure` (um executor a marca — `apps/eval/utest-phase.js`
+    // quando a feature não tem passo `real`) diz que o resultado VERMELHO é
+    // reproduzível e pode ser gravado, para não re-rodar um sweep caro só para
+    // reconfirmar. Sem a marca, uma falha só busta, como sempre.
+    const cacheData = {
+      tests: s.tests, checks: s.passed,
+      failCount: (s.failed || 0) + (s.exception || 0),
+      exception: suite.state === 'exception',
+      failed: suite.state !== 'passed',
+      cacheFailure: !!entry.cacheFailure,
+    }
+    if (suite.state === 'passed' || entry.cacheFailure) {
+      cache.write(entry.path, entry.target, cacheData, { extraDeps: entry.extraDeps ?? [] })
     } else {
       cache.bust(entry.path)
     }

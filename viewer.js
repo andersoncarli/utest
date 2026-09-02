@@ -179,6 +179,14 @@ export function summary(t) {
   if (t._cached) {
     const n = t.checkCount || 1
     if (t.state === 'exception') { s.exception++; s.total++; s.tests++ }
+    // Vermelho REPRODUZÍVEL cacheado (`cache.js#cacheFailure`): pulado como o
+    // verde, mas conta como falha — senão hot e cold divergem, que é o furo que
+    // o critério de aceite proíbe (`.sprint/TEST-EVAL.md`). `checkCount` guardou
+    // os checks que PASSARAM; `failCount` os que não.
+    else if (t.state === 'failed') {
+      const p = t.checkCount || 0, f = t.failCount || 1
+      s.passed += p; s.failed += f; s.total += p + f; s.tests += t.testCount || 1
+    }
     else { s.passed += n; s.total += n; s.tests += t.testCount || 1 }
     return s
   }
@@ -230,7 +238,13 @@ export function view(t, op = {}) {
   const passCount   = isFileHeader ? allChecks.filter(c => c.state === 'passed').length : 0
   const failCount   = isFileHeader ? allChecks.length - passCount : 0
   const checkGlyphs = isCached
-    ? (t.state === 'exception' ? glyphs.exception : `${glyphs.cached}${checkCount > 1 ? checkCount : ''}`)
+    ? (t.state === 'exception' ? glyphs.exception
+      : t.state === 'failed'
+        // Vermelho cacheado — `✔N ✘M`, o mesmo formato do header de arquivo, para
+        // hot e cold lerem igual. `(cached)` no fim para não confundir com uma
+        // rodada de verdade.
+        ? `${glyphs.passed}${checkCount || 0} ${glyphs.failed}${t.failCount || 1} ${gray('(cached)')}`
+        : `${glyphs.cached}${checkCount > 1 ? checkCount : ''}`)
     : isFileHeader
       ? `${glyphs.passed}${passCount}${failCount ? ` ${glyphs.failed}${failCount}` : ''}`
       : allChecks.map(c => glyphs[c.state] || '?').join('')

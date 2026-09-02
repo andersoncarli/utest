@@ -66,6 +66,35 @@ test('findTarget: o alvo que um teste mede', ({ test }) => {
     check(findTarget(join(d, 'sub', 'm.t.js')), null)
     cleanup()
   })
+
+  test('.eval.js pareia com o .js de mesmo nome-base', ({ check }) => {
+    // `slider.eval.js` prova `slider.js` — a mesma regra do `.t.js`.
+    const d = fixture({ 'slider.js': '', 'slider.eval.js': '' })
+    check(findTarget(join(d, 'slider.eval.js')), join(d, 'slider.js'))
+    cleanup()
+  })
+
+  test('.eval.js de feature (sem .js irmão) pareia com o N.F-*.md', ({ check }) => {
+    // Um roteiro de feature nomeia o assunto como string em `render()`; o alvo é
+    // o `.md` da feature, e o `files:` dele é o grafo de dep que o cache caminha.
+    const d = fixture({ '1.1-geometria-nao-destrutiva.md': '# f\n', '1.1.eval.js': '' })
+    check(findTarget(join(d, '1.1.eval.js')), join(d, '1.1-geometria-nao-destrutiva.md'))
+    cleanup()
+  })
+
+  test('.eval.js sem .js nem .md casando devolve null', ({ check }) => {
+    const d = fixture({ '9.9.eval.js': '' })
+    check(findTarget(join(d, '9.9.eval.js')), null)
+    cleanup()
+  })
+
+  test('.eval.js NÃO pareia com o próprio arquivo', ({ check }) => {
+    // O strip progressivo `1.1.eval.js` → `1.1.eval` + `.js` daria o próprio
+    // arquivo; a variante `.eval.js` → `.js` e o guard `v === name` impedem.
+    const d = fixture({ '1.1.eval.js': '' })
+    check(findTarget(join(d, '1.1.eval.js')), null)
+    cleanup()
+  })
 })
 
 test('scan: o que entra na suíte', ({ test }) => {

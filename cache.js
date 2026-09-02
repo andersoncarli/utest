@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, statSync, utimesSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, statSync, utimesSync, mkdirSync, rmSync } from 'fs'
 import { join, relative, dirname, resolve } from 'path'
 
 /**
@@ -66,12 +66,18 @@ function resolveImport(spec, fromDir, root) {
 export function TestCache(root) {
   const depsMemo = new Map()
 
-  const deps = entryPath => {
-    const hit = depsMemo.get(entryPath)
+  // `extraRoots` são pontos de partida ADICIONAIS do walk, para o teste cujo
+  // alvo declara suas dependências fora de um `import` — um `.eval.js` cujo
+  // assunto é uma string passada a `render()`, e cujo `.md` de feature lista os
+  // arquivos afetados em `files:`. O grafo estático do próprio teste continua
+  // valendo; `extraRoots` só o amplia.
+  const deps = (entryPath, extraRoots = []) => {
+    const key = extraRoots.length ? entryPath + '\0' + extraRoots.join('\0') : entryPath
+    const hit = depsMemo.get(key)
     if (hit) return hit
 
-    const seen  = new Set([entryPath])
-    const stack = [entryPath]
+    const seen  = new Set([entryPath, ...extraRoots])
+    const stack = [entryPath, ...extraRoots]
 
     while (stack.length) {
       const file = stack.pop()
@@ -87,51 +93,81 @@ export function TestCache(root) {
 
     seen.delete(entryPath)
     const out = [...seen]
-    depsMemo.set(entryPath, out)
+    depsMemo.set(key, out)
     return out
   }
 
-  const newestDep = testPath =>
-    deps(testPath).reduce((mx, d) => Math.max(mx, mtimeOf(d) ?? 0), 0)
+  const newestDep = (testPath, extra = []) =>
+    deps(testPath, extra).reduce((mx, d) => Math.max(mx, mtimeOf(d) ?? 0), 0)
 
   // Uma dep tocada depois da gravação re-roda; uma que sumiu do disco também.
-  const depsFresh = (testPath, seen) =>
-    deps(testPath).every(d => {
+  const depsFresh = (testPath, seen, extra = []) =>
+    deps(testPath, extra).every(d => {
       const ms = mtimeOf(d)
       return ms !== null && ms <= seen
     })
 
   // ── Conjunto pareado: o alvo é o dono do veredito ────────────────────────
-  const readPaired = (testPath, targetPath) => {
+  const readPaired = (testPath, targetPath, extraDeps = []) => {
     const st = (() => { try { return statSync(testPath) } catch { return null } })()
     const targetMs = mtimeOf(targetPath)
     if (!st || targetMs === null) return null
 
-    if (targetMs % 1000 !== 0) return null            // destravado, ou marcado 1ms
+    // Alvo marcado 1ms = o conjunto FALHOU. Para um `.t.js` isso é "re-rode" (um
+    // teste vermelho é barato e o output fresco vale). Para um passo caro que
+    // OPTOU por cachear a falha (`cacheFailure`, só quando é 100% reproduzível —
+    // eval sandbox, nunca `real`), o veredito vermelho é reusável enquanto o
+    // alvo e o grafo não mudarem: mesma pergunta do verde, resposta oposta.
+    if (targetMs % 1000 === FAILED_MARK) {
+      const side = readSelf(testPath, extraDeps)
+      if (side?.failed && side.targetSecond === targetMs) {
+        return {
+          checks: side.checks ?? 0, tests: side.tests ?? 0,
+          failCount: side.failCount ?? 1, exception: !!side.exception, failed: true,
+        }
+      }
+      return null
+    }
+    if (targetMs % 1000 !== 0) return null            // destravado
     if (!Number.isInteger(st.mtimeMs)) return null    // escrito, não carimbado
     if (Math.floor(st.mtimeMs / 1000) * 1000 !== targetMs) return null
 
     const checks = st.mtimeMs % 1000
     if (checks === 0) return null
-    if (!depsFresh(testPath, st.atimeMs)) return null
+    if (!depsFresh(testPath, st.atimeMs, extraDeps)) return null
 
     return { checks, tests: 0, exception: false }
   }
 
-  const writePaired = (testPath, targetPath, { checks, exception }) => {
+  const writePaired = (testPath, targetPath, { checks, failCount, exception, failed, tests, cacheFailure }, extraDeps = []) => {
     const targetMs = mtimeOf(targetPath)
     if (targetMs === null) return
     const second = Math.floor(targetMs / 1000) * 1000
 
     // Um teste que não passou marca o ALVO: o conjunto inteiro deixa de valer,
-    // e nenhum irmão dele é pulado enquanto a falha estiver de pé.
-    if (exception || !checks) {
+    // e nenhum irmão dele é pulado enquanto a falha estiver de pé. `failed` é
+    // EXPLÍCITO — uma suíte parcial (`s.passed>0` e `s.failed>0`) ainda tem
+    // `checks>0`, e inferir por `!checks` a cacheava como verde.
+    if (exception || failed || !checks) {
       const failed = new Date(second + FAILED_MARK)
       utimesSync(targetPath, failed, failed)
-      return bust(testPath)
+      bust(testPath)
+      // `cacheFailure`: o resultado vermelho é reproduzível, então grava-o num
+      // sidecar carimbado com o segundo+1ms do alvo. `readPaired` só o reusa
+      // enquanto `targetSecond` bater E as deps não tiverem mexido — um alvo
+      // reeditado sai desse segundo e o sidecar deixa de casar sozinho.
+      if (cacheFailure) {
+        writeSelf(testPath, {
+          failed: true, exception: !!exception,
+          checks: checks ?? 0, failCount: failCount ?? 1, tests: tests ?? 0,
+          targetSecond: second + FAILED_MARK,
+        }, extraDeps)
+      }
+      return
     }
 
     if (targetMs !== second) utimesSync(targetPath, new Date(second), new Date(second))
+    rmSelf(testPath)   // o conjunto voltou ao verde — um sidecar de falha antigo não tem mais função
     // mtime = a convenção (segundo do alvo + contagem); atime = o instante da
     // gravação, que é contra quem as deps são medidas.
     //
@@ -144,7 +180,7 @@ export function TestCache(root) {
     // Com o truncamento não havia régua boa — arredondar para baixo invalidava
     // um cache recém-gravado, e para cima cegava uma edição no mesmo ms. A
     // forma numérica preserva a fração e as duas pontas passam a medir igual.
-    const seen = newestDep(testPath)
+    const seen = newestDep(testPath, extraDeps)
     utimesSync(testPath, seen / 1000, (second + Math.min(checks, CHECKS_MAX)) / 1000)
   }
 
@@ -153,24 +189,28 @@ export function TestCache(root) {
   const selfFile = testPath =>
     join(root, '.bot', '.utest', relative(root, testPath).replace(/[/\\]/g, '__') + '.json')
 
-  const readSelf = testPath => {
+  const readSelf = (testPath, extraDeps = []) => {
     try {
       const data = JSON.parse(readFileSync(selfFile(testPath), 'utf8'))
       if (data.mtime !== statSync(testPath).mtimeMs) return null
       // Contra `seen` — a idade da dep mais nova na gravação —, e não contra o
       // mtime do teste: o teste é ANTERIOR às deps, então medir por ele deixava
       // qualquer dep editada passar por intacta.
-      if (!depsFresh(testPath, data.seen ?? 0)) return null
+      if (!depsFresh(testPath, data.seen ?? 0, extraDeps)) return null
       return data
     } catch { return null }
   }
 
-  const writeSelf = (testPath, data) => {
+  const rmSelf = testPath => {
+    try { rmSync(selfFile(testPath)) } catch {}
+  }
+
+  const writeSelf = (testPath, data, extraDeps = []) => {
     try {
       const f = selfFile(testPath)
       mkdirSync(dirname(f), { recursive: true })
       writeFileSync(f, JSON.stringify({
-        mtime: statSync(testPath).mtimeMs, seen: newestDep(testPath), ...data,
+        mtime: statSync(testPath).mtimeMs, seen: newestDep(testPath, extraDeps), ...data,
       }))
     } catch {}
   }
@@ -194,16 +234,26 @@ export function TestCache(root) {
   }
 
   // O alvo decide qual protocolo vale; quem chama não precisa saber de nenhum.
+  // `extraDeps` (opcional): raízes de dep além do grafo estático do teste — a
+  // fase `eval` passa aqui o `files:` do `.md` de feature (ver `utest.js#runPhase`).
   return {
     deps,
     bust,
-    read: (testPath, targetPath) =>
-      targetPath ? readPaired(testPath, targetPath) : readSelf(testPath),
-    write: (testPath, targetPath, result) => {
+    read: (testPath, targetPath, { extraDeps = [] } = {}) =>
+      targetPath ? readPaired(testPath, targetPath, extraDeps) : readSelf(testPath, extraDeps),
+    write: (testPath, targetPath, result, { extraDeps = [] } = {}) => {
       try {
-        if (targetPath) writePaired(testPath, targetPath, result)
-        else if (result.exception || !result.checks) bust(testPath)
-        else writeSelf(testPath, result)
+        if (targetPath) writePaired(testPath, targetPath, result, extraDeps)
+        else if (result.exception || result.failed || !result.checks) {
+          bust(testPath)
+          if (result.cacheFailure) {
+            writeSelf(testPath, {
+              failed: true, exception: !!result.exception,
+              checks: result.checks ?? 0, failCount: result.failCount ?? 1, tests: result.tests ?? 0,
+            }, extraDeps)
+          }
+        }
+        else writeSelf(testPath, result, extraDeps)
       } catch {}
     },
   }

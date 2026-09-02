@@ -61,6 +61,20 @@ no mesmo segundo.
 `ms = 1` e o conjunto inteiro deixa de valer — inclusive os irmaos que
 passaram. Nenhum teste daquele target e pulado enquanto a falha estiver de pe.
 
+**`cacheFailure` — a falha REPRODUZIVEL que nao re-roda.** Um `.t.js` vermelho e
+barato de re-rodar, e o stack fresco vale mais que o segundo economizado — entao
+a falha so busta. Mas um passo de eval que gasta 10s subindo um Chromium so para
+reconfirmar o mesmo vermelho e desperdicio puro. Quem chama `write` com
+`{ cacheFailure: true }` (hoje so a fase `eval`, e so quando a feature nao tem
+passo `real`/`linear` — os que rodam contra o projeto vivo, `.sprint/TEST-EVAL.md`
+item 4) grava o resultado vermelho num sidecar carimbado com `segundo+1ms` do
+alvo. `read` so o reusa enquanto esse carimbo bater E as deps (incluindo
+`extraDeps`) nao tiverem mexido — um alvo reeditado sai desse segundo e o sidecar
+deixa de casar sozinho. Passar limpa o sidecar (`rmSelf`). O resultado: uma fase
+`eval` inteira, vermelhos incluidos, cai de dezenas de segundos para um `stat`
+por arquivo quando nada mudou — e quente e frio dao o MESMO placar (o criterio de
+aceite), porque a contagem `✔N ✘M` viaja junto no sidecar.
+
 ### Os dois detalhes que fazem a regra fechar
 
 **ms inteiro separa carimbo de edicao.** O filesystem grava mtime com precisao
@@ -71,9 +85,19 @@ cacheado e devolveria uma contagem que nunca rodou.
 
 **Deps medem contra o `atime`.** O teste guarda em `atime` o instante real da
 gravacao, em precisao cheia. O segundo cravado tem resolucao de 1s, e uma dep
-tocada logo depois da gravacao cairia dentro dele — invisivel. `depsOf` segue
+tocada logo depois da gravacao cairia dentro dele — invisivel. `deps()` segue
 os imports (inclusive `import './x.js'` de efeito colateral) recursivamente
 dentro do repo, e basta uma dep mais nova que o `atime` para re-rodar.
+
+**Raizes extras, para o alvo cujas deps nao sao `import`.** `read`/`write`
+aceitam `{ extraDeps }` — pontos de partida ADICIONAIS do walk. E o caso da fase
+`eval`: um `.eval.js` pareia com o `N.F-*.md` da feature (`scanner.js#findTarget`
+estende a regra do `.t.js` para `.eval.js`), o `.md` nao importa nada, e o
+`files:` do frontmatter e o grafo real. `utest.js#runPhase` passa esse `files:`
+como `extraDeps`; o crava do `.md` continua sendo o "segundo comum" do protocolo
+pareado (o `.md` nao e compartilhado com `.t.js` nenhum, entao crava-lo nao
+contamina outro conjunto). O grafo estatico do proprio roteiro continua valendo —
+`extraDeps` so o amplia.
 
 A contagem satura em 999, o teto do campo: acima disso o cache reporta menos do
 que rodou. E o preco de caber no mtime, e o furo que sobra so encolhe um numero
@@ -120,6 +144,7 @@ para rodar `.eval.js` em ms em vez de minutos — esta documentado em
 | `worker.js` | Base para execucao isolada por arquivo |
 | `scanner.js` | Descoberta de arquivos de teste (e dona do cache) |
 | `cache.js` | `TestCache(root)` — a regra do cache e o grafo de deps |
+| `probe.js` | `probe(fn\|obj\|Map)` — instrumenta chamadas para achar hogs: conta, mede self-time (chamada aninhada nao conta duas vezes) e relata. Complementa `spyOn` (que e para ASSERTAR sobre chamada, nao medir) |
 | `kinds.js` | Que sufixos o runner reconhece, e o `register()` que abre novos |
 | `viewer.js` | UI de resultados em tempo real |
 | `check.js` | Assertions e visual diffing |
