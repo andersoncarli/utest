@@ -223,10 +223,25 @@ globalThis.utestVerbosity = verbosity
 const force = args.includes('--force') || args.includes('-f')
 const watch = args.includes('--watch') || args.includes('-w')
 const showUnc = args.includes('--uncovered') || args.includes('-u')
+// `--json`: uma linha por arquivo de teste em JSON, e NADA mais no stdout — para um
+// consumidor de máquina (o `sprint eval --sweep`, que mapeia verdicto→degrau). O relatório
+// humano, os hogs e o total são suprimidos; o exit code segue a mesma regra (1 se há
+// falha/exceção).
+const asJson = args.includes('--json')
 const timeoutArg = args.find(a => a.startsWith('--timeout=') || a.startsWith('-to='))
 const timeout = timeoutArg ? parseInt(timeoutArg.split('=')[1]) : 1000
 const positional = args.filter(a => !a.startsWith('-') && !/^(-v)?:?([0123])$/.test(a))
-const filterTerms = positional.filter(a => !fs.existsSync(a))
+// Um positional que casa um NOME DE FASE declarada no TEST.yaml seleciona aquela fase e sai
+// da lista de filtros — `utest.js eval` roda só a fase `eval`, cacheada, em vez de tratar
+// `eval` como termo de nome (que furava o cache e ainda escaneava as outras fases). Os
+// positionals restantes seguem como filtro de nome / path. A leitura é rasa (só as chaves
+// de topo do YAML de `cwd`); a resolução completa de fase vem depois, com `cfgRaw`.
+const _yamlNearCwd = path.resolve(process.cwd(), 'TEST.yaml')
+const _declaredPhases = new Set(fs.existsSync(_yamlNearCwd)
+  ? Object.keys(parseYaml(fs.readFileSync(_yamlNearCwd, 'utf8')) || {}).filter(k => k !== 'boot' && k !== 'exclude')
+  : [])
+const phaseArg = positional.find(a => _declaredPhases.has(a) && !fs.existsSync(a))
+const filterTerms = positional.filter(a => a !== phaseArg && !fs.existsSync(a))
 const rawTarget = positional.find(a => fs.existsSync(a))
 const _isFile = rawTarget && fs.statSync(rawTarget).isFile()
 const targetDir = _isFile ? path.dirname(rawTarget) : rawTarget
@@ -255,8 +270,9 @@ if (fs.existsSync(configPath)) {
 // não virar fase fantasma.
 const cfgRaw = fs.existsSync(configPath) ? (parseYaml(fs.readFileSync(configPath, 'utf8')) || {}) : {}
 const RESERVED = new Set(['boot', 'exclude'])
-const phaseNames = Object.keys(cfgRaw).filter(k => !RESERVED.has(k) && (cfgRaw[k]?.include || entriesFor(k)))
+let phaseNames = Object.keys(cfgRaw).filter(k => !RESERVED.has(k) && (cfgRaw[k]?.include || entriesFor(k)))
 if (!phaseNames.length) phaseNames.push('unit')
+if (phaseArg) phaseNames = phaseNames.filter(p => p === phaseArg)
 
 installProcessExitTrap()
 
@@ -464,6 +480,31 @@ const stripAnsi = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '')
 // fase vazia não é uma fase vermelha, é uma fase que não se aplica aqui.
 const nonEmpty = phaseResults.filter(r => r.main.tests.length > 0)
 const single = phaseNames.length === 1 || nonEmpty.length <= 1
+
+// `--json`: um objeto por arquivo, e nada mais no stdout. Um `.eval.js` tem `feature` (o
+// `N.F` do basename); um `.t.js` não. Cobre verde E vermelho — o consumidor (`sprint eval
+// --sweep`) precisa dos dois para derivar degrau nos dois sentidos.
+if (asJson) {
+  const rows = []
+  for (const { phase, main } of phaseResults) {
+    for (const t of main.tests) {
+      const m = t.name.match(/^(\d+\.\d+)\.eval\.js$/)
+      rows.push({
+        phase,
+        file: t.address || t.name,
+        feature: m ? m[1] : null,
+        state: t.state,                                  // 'passed' | 'failed' | 'exception'
+        cached: !!t._cached,
+        tests: t.testCount ?? summary(t).tests,
+        checks: t.checkCount ?? summary(t).passed,
+        failCount: t.failCount ?? (summary(t).failed + summary(t).exception),
+        ms: Math.round(t.duration || 0),
+      })
+    }
+  }
+  process.stdout.write(JSON.stringify(rows) + '\n')
+  realProcessExit(rows.some(r => r.state !== 'passed') ? 1 : 0)
+}
 
 // `--hogs` é uma leitura DE TEMPO, cega a erro — não "arquivos lentos OU vermelhos" (o que
 // filtrava antes), e sim só a lista achatada de todo teste >1000ms, sem glifo de

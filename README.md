@@ -12,9 +12,25 @@ bun utest/utest.js utils -v2 --force
 bot testio unit -v:2
 ```
 
+### Positionals e flags
+
+| forma | efeito |
+|---|---|
+| `utest.js <path>` | escopo do walk (arquivo ou diretório) |
+| `utest.js <nome-de-fase>` | roda SÓ aquela fase (`unit`, `eval`, `int`, …) — casa um nome declarado no `TEST.yaml`, cacheado. Um positional que não casa fase é filtro de nome. |
+| `utest.js <termo>` | filtro de nome de arquivo; ativa live-run (fura o cache) nos que casam |
+| `-v:0..3` | verbosidade |
+| `--force` \| `-f` | ignora o cache. **Não usar em escopo largo** — spawn-sweep sob pressão de memória dispara o `systemd-oomd` (ver `soml/docs/CRASH-LOG.md`) |
+| `--json` | uma linha JSON por arquivo (`{phase,file,feature,state,cached,tests,checks,failCount,ms}`), nada mais no stdout. Para consumidor de máquina — `sprint eval --sweep` usa isto. Exit 1 se há falha. |
+| `--hogs` \| `-h` | só a lista de arquivos >1000ms, cega a passou/falhou |
+| `--uncovered` \| `-u` | lista arquivos-alvo sem `.t.js` pareado |
+| `--watch` \| `-w` | re-roda ao salvar |
+
 ## Direcao Atual
 
-- **Fases explicitas**: `unit`, `tui` e `integration`.
+- **Fases explicitas**: `unit`, `eval`, `int`, `tui`. Uma fase é declarada no
+  `TEST.yaml` (por `include`/`exclude`) ou por um provider registrado no `boot:`
+  (`eval` faz isso). `utest.js <nome-de-fase>` roda uma só.
 - **Workers por arquivo**: a arquitetura alvo executa cada arquivo em processo
   isolado e paralelizavel.
 - **Streaming persistente**: resultados devem poder ser renderizados ao vivo e
