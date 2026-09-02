@@ -2,6 +2,7 @@ import path from 'path'
 import { test } from './test.js'
 import check from './check.js'
 import callstack from '../utils/src/callstack.js'
+import { captureConsole } from './console-capture.js'
 
 const INTERNAL = /utest\.js|scanner\.js|runner\.js|worker\.js|check\.js|test\.js|shims\.js|node:|bun:|internal\//i
 
@@ -70,16 +71,19 @@ export async function runTest(t, op = {}) {
     }
 
     const effectiveTimeout = t.op?.timeout || timeout
-    await Promise.race([
-      (async () => {
-        let r
-        if (t.fn.length === 0)      r = t.fn.call(t)            // no-arg: plain async fn (bun:test style)
-        else if (t.fn.length === 1) r = t.fn.call(t, context)   // ({ check }) => {} style
-        else { const done = new Promise((res, rej) => { r = t.fn.call(t, (e) => e ? rej(e) : res(), context) }); await done; return }
-        if (r instanceof Promise) await r
-      })(),
-      new Promise((_, r) => setTimeout(() => r(new Error(`Timeout (${effectiveTimeout}ms)`)), effectiveTimeout))
-    ])
+    const releaseConsole = captureConsole(t)
+    try {
+      await Promise.race([
+        (async () => {
+          let r
+          if (t.fn.length === 0)      r = t.fn.call(t)            // no-arg: plain async fn (bun:test style)
+          else if (t.fn.length === 1) r = t.fn.call(t, context)   // ({ check }) => {} style
+          else { const done = new Promise((res, rej) => { r = t.fn.call(t, (e) => e ? rej(e) : res(), context) }); await done; return }
+          if (r instanceof Promise) await r
+        })(),
+        new Promise((_, r) => setTimeout(() => r(new Error(`Timeout (${effectiveTimeout}ms)`)), effectiveTimeout))
+      ])
+    } finally { releaseConsole() }
 
     for (const child of t.tests) {
       await runTest(child, op)
