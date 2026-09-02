@@ -136,6 +136,22 @@ test('cache: o que precisa INVALIDAR', ({ test }) => {
     cleanup()
   })
 
+  test('quem falha volta para o PRESENTE, não para uma sentinela', ({ check }) => {
+    // A regra: uma falha devolve o teste ao agora, e o agora está fora do
+    // segundo cravado do conjunto — então ele deixa de casar pelo mesmo
+    // critério que vale para todo o resto, sem valor mágico a decorar.
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    const antes = Date.now()
+    cache.bust(at('m.t.js'))
+    const depois = statSync(at('m.t.js')).mtimeMs
+
+    check(depois >= antes, true, 'o carimbo é o presente')
+    check(Number.isInteger(depois), false, 'com fração: não é um carimbo do runner')
+    check(cache.read(at('m.t.js'), at('m.js')), null, 'e portanto não vale')
+    cleanup()
+  })
+
   test('um alvo que nunca foi carimbado não vale', ({ check }) => {
     const { at, cache } = fixture(SET)
     check(cache.read(at('m.t.js'), at('m.js')), null)

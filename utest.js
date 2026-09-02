@@ -183,6 +183,12 @@ async function runTest(t, ctx, timeout = 1000) {
   } catch (e) {
     t.state = 'exception'; t.error = e
   } finally {
+    // O veredito acabou de ser dado, mas `check.bind(t)` continua válido: um
+    // `setTimeout`/promise solta ainda pode empurrar checks para dentro de
+    // `t.checks` DEPOIS desta linha. Sem selar, essa falha não conta para o
+    // estado — o arquivo passa, cacheia verde, e o defeito some. Selado, ela
+    // reabre o veredito de quem a soltou.
+    t.sealed = true
     check.test = saved
     t.duration = Number(process.hrtime.bigint() - start) / 1e6
   }

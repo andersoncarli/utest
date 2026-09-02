@@ -14,7 +14,15 @@ export function test(name, fn = () => {}, op = {}) {
     output: [],
     state: 'pending',
     parent: null,
-    oncheck: (chk) => t.checks.push(chk)
+    // Depois de `sealed` o veredito de `t` já foi lido. Um check que chega aqui
+    // veio de trabalho solto (setTimeout, promise não esperada, corpo que
+    // seguiu após o timeout) e não teria efeito nenhum: seria empilhado num nó
+    // já julgado, e a falha sumiria do relatório e do cache. Reabrir o estado é
+    // o que a devolve para a conta de quem a soltou.
+    oncheck: (chk) => {
+      t.checks.push(chk)
+      if (t.sealed && chk.state !== 'passed') t.state = 'failed'
+    }
   }
 
   // Precedence: explicit this-binding (inside describe) → _current (file root) → test.main

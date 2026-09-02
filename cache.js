@@ -175,8 +175,22 @@ export function TestCache(root) {
     } catch {}
   }
 
+  // Um teste que falhou volta para o AGORA, e é só isso: o presente está fora do
+  // segundo cravado do conjunto, então ele deixa de casar pela mesma regra que
+  // vale para todo o resto — não há sentinela, nem caso especial a lembrar.
+  //
+  // Era `new Date(0)` (epoch), que funcionava por acidente do mesmo jeito e
+  // custava duas coisas: apagava a idade real do arquivo, e obrigava quem lê a
+  // conhecer um valor mágico para entender o que 1970 significa ali.
   const bust = testPath => {
-    try { utimesSync(testPath, new Date(0), new Date(0)) } catch {}
+    try {
+      // Um carimbo é sempre um ms INTEIRO; a fração é a marca de "escrito pelo
+      // mundo". Falhar devolve o arquivo a essa condição — meio ms adiante do
+      // agora, para nunca coincidir com o segundo cravado do conjunto nem com
+      // um inteiro que seria lido como contagem.
+      const now = (Date.now() + 0.5) / 1000
+      utimesSync(testPath, now, now)
+    } catch {}
   }
 
   // O alvo decide qual protocolo vale; quem chama não precisa saber de nenhum.
