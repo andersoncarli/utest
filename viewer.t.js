@@ -1,6 +1,6 @@
 // viewer.t.js — o relatório compacto (sprint 084c): barra por fase, vermelhos numa
 // linha, e o par `received: false / expected: true` que some.
-import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, deltaTag } from './viewer.js'
+import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, deltaTag, fullView } from './viewer.js'
 import cl from '../utils/src/cl.js'
 
 const strip = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[K/g, '')
@@ -31,31 +31,87 @@ test('viewer — relatório compacto', ({ test, check }) => {
       { name: 'c.eval.js', state: 'failed', _cached: true, checkCount: 0, failCount: 1 },
     ] }
     const out = strip(compactFails(main, { width: 200 }))
-    check(out.includes('a.eval.js'), false, 'o verde não aparece')
+    check(out.includes('a.eval.js'), false, 'o verde RÁPIDO não aparece')
     check(/b\.eval\.js ✘2/.test(out), true, 'b: só ✘2, sem ✔2')
     check(/c\.eval\.js ✘1/.test(out), true)
     check(out.includes('✔'), false, 'nenhum ✔ no log compacto')
   })
 
-  test('compactFails — tempo SEMPRE presente (última execução), 🐢 quando é hog', ({ check }) => {
+  test('compactFails — arquivo verde mas HOG entra como `nome 🐢N` (badge = segundos)', ({ check }) => {
+    // o detalhe da fase é o mesmo para todo kind: um `unit` todo verde com hogs mostra os
+    // hogs igual a como a `eval` mostra os vermelhos. O tempo é BADGE (segundos inteiros),
+    // não `(Nms)` — a precisão de ms num cacheado não diz nada e custa tokens.
     const main = { tests: [
-      { name: 'quick.eval.js', state: 'failed', _cached: true, failCount: 1, lastMs: 80 },
-      { name: 'slow.eval.js',  state: 'failed', _cached: true, failCount: 2, lastMs: 1429 },
+      { name: 'fast.t.js', state: 'passed', _cached: true, checkCount: 9, lastMs: 40 },
+      { name: 'shell.t.js', state: 'passed', _cached: true, checkCount: 97, lastMs: 8637 },
     ] }
     const out = strip(compactFails(main, { width: 200 }))
-    check(out.includes('quick.eval.js ✘1 (80ms)'), true, 'cacheado também mostra (Nms)')
-    check(out.includes('slow.eval.js ✘2 (🐢 1429ms)'), true, 'hog → 🐢 dentro do parêntese')
+    check(out.includes('fast.t.js'), false, 'o verde rápido não aparece — sem tempo, sem linha')
+    check(out.includes('shell.t.js 🐢9'), true, 'badge = 🐢 + segundos (8637ms → 🐢9), sem sufixo')
+    check(out.includes('ms)'), false, 'nenhum `(Nms)` — só o badge')
+    check(out.includes('✘'), false, 'nenhum ✘ — não há vermelho')
   })
 
-  test('compactFails — deltaTag só quando re-rodou (há prevMs)', ({ check }) => {
-    const cachedOnly = { tests: [{ name: 'a.eval.js', state: 'failed', failCount: 1, lastMs: 200 }] }
-    const reran      = { tests: [{ name: 'a.eval.js', state: 'failed', failCount: 1, lastMs: 200, prevMs: 100 }] }
-    check(strip(compactFails(cachedOnly, { width: 200 })).includes('%'), false, 'sem prevMs → sem delta')
-    check(strip(compactFails(reran, { width: 200 })).includes('+100%'), true, '200 vs 100 → +100%')
+  test('compactFails — arquivo abaixo de HOG_MS não carrega tempo nenhum', ({ check }) => {
+    const main = { tests: [{ name: 'r.eval.js', state: 'failed', _cached: true, failCount: 2, lastMs: 340 }] }
+    check(strip(compactFails(main, { width: 200 })), 'r.eval.js ✘2', 'só `nome ✘M`, zero tempo')
   })
 
-  test('compactFails — vazio quando tudo passou', ({ check }) => {
-    const main = { tests: [{ name: 'a.eval.js', state: 'passed', _cached: true, checkCount: 1 }] }
+  test('compactFails — vermelhos por inteiro, hogs cortados nos 5 + `+N more`', ({ check }) => {
+    const reds = Array.from({ length: 6 }, (_, i) => ({
+      name: `r${i}.eval.js`, state: 'failed', _cached: true, failCount: 1, lastMs: 100,
+    }))
+    const hogs = Array.from({ length: 9 }, (_, i) => ({
+      name: `h${i}.eval.js`, state: 'passed', _cached: true, checkCount: 1, lastMs: 2000 + i * 100,
+    }))
+    const out = strip(compactFails({ tests: [...reds, ...hogs] }, { width: 200 }))
+    for (let i = 0; i < 6; i++) check(out.includes(`r${i}.eval.js ✘1`), true, `red ${i} listado (todos)`)
+    const hogShown = out.match(/h\d\.eval\.js 🐢\d/g) || []
+    check(hogShown.length, 5, 'só os 5 hogs mais lentos, cada um com badge 🐢N (segundos)')
+    check(out.includes('h8.eval.js 🐢'), true, 'o mais lento (h8, 2800ms) está entre os 5')
+    check(out.includes('h0.eval.js 🐢'), false, 'o menos lento (h0) foi para o `+N more`')
+    check(/\+4 more 🐢/.test(out), true, '9 hogs − 5 = +4 more 🐢')
+  })
+
+  test('compactFails — reds e hogs em grupos, hog começa em linha nova', ({ check }) => {
+    const main = { tests: [
+      { name: 'r.eval.js', state: 'failed', _cached: true, failCount: 1, lastMs: 50 },
+      { name: 'h.eval.js', state: 'passed', _cached: true, checkCount: 1, lastMs: 3000 },
+    ] }
+    const rows = strip(compactFails(main, { width: 200 })).split('\n')
+    check(rows.length, 2, 'duas linhas — uma por grupo')
+    check(rows[0].includes('r.eval.js ✘1') && !rows[0].includes('h.eval.js'), true, 'linha 1 = só reds')
+    check(rows[1].includes('h.eval.js 🐢3'), true, 'linha 2 = hogs, com badge')
+  })
+
+  test('compactFails — um vermelho que TAMBÉM é hog: `nome ✘M 🐢N`', ({ check }) => {
+    const main = { tests: [
+      { name: 'quick.eval.js', state: 'failed', _cached: true, failCount: 1, lastMs: 80 },
+      { name: 'slow.eval.js',  state: 'failed', _cached: true, failCount: 2, lastMs: 10064 },
+    ] }
+    const out = strip(compactFails(main, { width: 200 }))
+    check(out.includes('quick.eval.js ✘1'), true, 'abaixo de HOG_MS: só ✘1, sem tempo')
+    check(out.includes('quick.eval.js ✘1 '), false, 'nada depois do ✘1')
+    check(out.includes('slow.eval.js ✘2 🐢10'), true, 'hog vermelho ganha o badge 🐢N')
+  })
+
+  test('compactFails — deltaTag SÓ para um HOG que re-rodou (recompensa ganho real)', ({ check }) => {
+    // um teste rápido que re-rodou NÃO ganha `%` — 20% de 200ms é ruído de GC. Só um hog
+    // (>HOG_MS) que re-rodou mostra a variação.
+    const fastReran = { tests: [{ name: 'a.eval.js', state: 'failed', failCount: 1, lastMs: 200, prevMs: 100 }] }
+    check(strip(compactFails(fastReran, { width: 200 })), 'a.eval.js ✘1', 'teste rápido re-rodou: sem tempo, sem %')
+
+    const hogReran = { tests: [{ name: 'h.eval.js', state: 'failed', failCount: 1, lastMs: 6000, prevMs: 10000 }] }
+    const out = strip(compactFails(hogReran, { width: 200 }))
+    check(out.includes('h.eval.js ✘1 🐢6'), true, 'hog: badge 🐢6 = 6 segundos')
+    check(out.includes('-40%'), true, 'hog re-rodou 40% mais rápido → -40% (ganho real, recompensado)')
+
+    const hogCached = { tests: [{ name: 'h.eval.js', state: 'passed', _cached: true, checkCount: 1, lastMs: 6000 }] }
+    check(strip(compactFails(hogCached, { width: 200 })).includes('%'), false, 'hog cacheado (sem prevMs): badge sem %')
+  })
+
+  test('compactFails — vazio quando tudo passou E nada é hog', ({ check }) => {
+    const main = { tests: [{ name: 'a.eval.js', state: 'passed', _cached: true, checkCount: 1, lastMs: 40 }] }
     check(compactFails(main, { width: 80 }), '')
   })
 
@@ -68,22 +124,31 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check(out.split('\n').every(r => r.startsWith('feature-')), true, 'só tokens de arquivo, sem linha de dica (essa mora no utest.js)')
   })
 
-  test('phaseLine — CAIXA ALTA, dotfill, ordem (Σms) ✘N 📄🧪✔, borda à direita', ({ check }) => {
-    // o `(Nms)` é a SOMA do `lastMs` dos arquivos da fase — nunca um tempo de parede — e
-    // vem PRIMEIRO no bloco direito, antes de `✘` e do `📄 🧪 ✔`.
+  test('phaseLine — CAIXA ALTA, dotfill, ordem (Σs 🐢N) ✘N 📄🧪✔, borda à direita', ({ check }) => {
+    // o parên é a SOMA do `lastMs` dos arquivos da fase EM SEGUNDOS (nunca ms, nunca parede)
+    // + a contagem de hogs; vem PRIMEIRO no bloco direito, antes de `✘` e do `📄 🧪 ✔`.
     const main = { tests: [
-      { name: 'x.t.js', state: 'passed', _cached: true, checkCount: 10, lastMs: 30 },
-      { name: 'y.t.js', state: 'failed', _cached: true, checkCount: 8, failCount: 2, lastMs: 12 },
+      { name: 'x.t.js', state: 'passed', _cached: true, checkCount: 10, lastMs: 30000 },
+      { name: 'y.t.js', state: 'failed', _cached: true, checkCount: 8, failCount: 2, lastMs: 12000 },
     ] }
     const raw = phaseLine(main, { width: 80, title: 'unit' })
     const out = strip(raw)
     check(out.includes('UNIT'), true, 'nome em caixa alta')
     check(out.includes('.....'), true, 'dotfill')
-    check(out.indexOf('(42ms)') < out.indexOf('✘2'), true, '(Σms) vem antes de ✘')
+    check(out.includes('(42s 🐢42)'), true, '42s totais, 42s deles em hogs')
+    check(out.indexOf('(42s') < out.indexOf('✘2'), true, '(Σs) vem antes de ✘')
     check(out.indexOf('✘2') < out.indexOf('📄'), true, '✘ vem antes de 📄')
+    check(out.includes('ms'), false, 'nenhum `ms` na linha-título — só segundos')
     check(/✔\d+\s*$/.test(out), true, 'termina no ✔N (bloco fixo à direita)')
     check(out.split('\n').length, 1, 'uma linha só')
     check(/\x1b\[4[0-8]/.test(raw), false, 'sem cor de FUNDO')
+  })
+
+  test('phaseLine — sem hog, o parén é só `(Ns)` — nenhum 🐢', ({ check }) => {
+    const fast = { tests: [{ name: 'a.t.js', state: 'passed', _cached: true, checkCount: 3, lastMs: 300 }] }
+    const out = strip(phaseLine(fast, { width: 80, title: 'x' }))
+    check(out.includes('(0s)'), true, '300ms → 0s totais, zero em hogs')
+    check(out.includes('🐢'), false, 'sem hog → sem 🐢 no parén')
   })
 
   test('phaseLine — fase verde não tem ✘, e 📄🧪✔ ficam na mesma coluna', ({ check }) => {
@@ -100,9 +165,10 @@ test('viewer — relatório compacto', ({ test, check }) => {
 
   test('phaseLine — bare devolve só o bloco-direito (a linha coverage)', ({ check }) => {
     const sum = { passed: 100, failed: 3, exception: 0, total: 103, tests: 40 }
-    const out = strip(phaseLine(sum, { title: '', ms: 999, files: 50, bare: true }))
+    const out = strip(phaseLine(sum, { title: '', ms: 90000, files: 50, hogSecs: 50, bare: true }))
     check(out.includes('..'), false, 'sem dotfill')
-    check(out.startsWith('(999ms)'), true, 'começa no (Σms)')
+    check(out.startsWith('(90s 🐢50)'), true, 'começa no (Σs 🐢N) — 90000ms → 90s, hogSecs passado explícito')
+    check(out.includes('ms'), false, 'nenhum ms')
     check(out.includes('✘3'), true)
     check(out.trim().endsWith('✔100'), true)
   })
@@ -133,5 +199,65 @@ test('viewer — relatório compacto', ({ test, check }) => {
     const c = { state: 'failed', address: 'f.js:012', lineCode: '  check(a, b)  ' }
     check(failInfo(c).line, 'f.js:012')
     check(failInfo(c).code, 'check(a, b)', 'trim')
+  })
+
+  test('fullView — o kind não muda o formato: só o rótulo da linha-título', ({ check }) => {
+    // Do ponto de vista do runner, `unit`/`eval`/`int`/`tui` são a MESMA coisa a
+    // renderizar — `fullView` só troca o `title`. Mesma árvore, dois títulos → saída
+    // idêntica a menos do nome da fase.
+    const mk = () => ({ tests: [
+      { name: 'a', state: 'passed', _cached: true, checkCount: 3, lastMs: 20 },
+      { name: 'b', state: 'failed', _cached: true, checkCount: 1, failCount: 2, lastMs: 1200 },
+    ] })
+    const asUnit = strip(fullView(mk(), { verbosity: 1, width: 80, title: 'unit' }))
+    const asEval = strip(fullView(mk(), { verbosity: 1, width: 80, title: 'eval' }))
+    check(asUnit.replace(/UNIT/g, 'X'), asEval.replace(/EVAL/g, 'X'),
+      'trocado o rótulo, o resto é byte-a-byte igual')
+    check(asUnit.includes('b ✘2 🐢1'), true, 'o vermelho-hog (1200ms) ganha o badge 🐢1 em qualquer kind')
+    check(asUnit.includes('received'), false, 'nenhum log/checkView num relatório amplo')
+  })
+
+  test('fullView — fase toda verde COM hog tem bloco de detalhe, igual à fase com vermelho', ({ check }) => {
+    // era ESTA a assimetria: `unit` todo verde com hogs colapsava na linha-título, `eval`
+    // (com vermelho) tinha um bloco — pareciam kinds diferentes.
+    const greenWithHog = { tests: [
+      { name: 'fast.t.js', state: 'passed', _cached: true, checkCount: 9, lastMs: 30 },
+      { name: 'shell.t.js', state: 'passed', _cached: true, checkCount: 97, lastMs: 8600 },
+    ] }
+    const out = strip(fullView(greenWithHog, { verbosity: 1, width: 80, title: 'unit' }))
+    check(out.split('\n').length >= 2, true, 'linha-título + pelo menos uma linha de detalhe')
+    check(out.includes('shell.t.js 🐢9'), true, 'o hog aparece no bloco com badge (8600ms → 9s)')
+  })
+
+  test('fullView v2 — escopo estreito: compacta + linha do erro + endereço, SEM log()', ({ check }) => {
+    // `-v:2` (o nível que uma FRENTE/FEATURE assume) mostra, por baixo de cada vermelho, a
+    // linha do check e o `f.js:NN` do stack — mas NÃO o `log()` do teste (isso é `-v:3`).
+    const main = { tests: [{
+      name: 'x.eval.js', state: 'failed', address: 'x.eval.js',
+      output: [['log', ['saída engolida no v2']]],
+      checks: [], duration: 40,
+      tests: [{
+        name: 'passo', state: 'failed', output: [['log', ['saída engolida no v2']]],
+        checks: [{ state: 'failed', a: '4', b: '5', lineCode: 'check(2 + 2, 5)', address: 'x.eval.js:012' }],
+        tests: [],
+      }],
+    }] }
+    const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'eval' }))
+    check(out.includes('x.eval.js ✘'), true, 'a linha compacta continua')
+    check(out.includes('check(2 + 2, 5)'), true, 'a linha do check aparece')
+    check(out.includes('x.eval.js:012'), true, 'o endereço do stack aparece')
+    check(out.includes('saída engolida'), false, 'o log() do teste NÃO aparece no v2')
+  })
+
+  test('fullView v2 — vermelhos ordenados do mais lento pro menos (igual ao bloco compacto)', ({ check }) => {
+    const main = { tests: [
+      { name: 'slow.eval.js', state: 'failed', address: 'slow.eval.js', lastMs: 5000,
+        checks: [{ state: 'failed', lineCode: 'check(a)', address: 'slow.eval.js:009' }], tests: [] },
+      { name: 'fast.eval.js', state: 'failed', address: 'fast.eval.js', lastMs: 50,
+        checks: [{ state: 'failed', lineCode: 'check(b)', address: 'fast.eval.js:009' }], tests: [] },
+    ] }
+    const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'eval' }))
+    check(out.indexOf('slow.eval.js:009') < out.indexOf('fast.eval.js:009'), true,
+      'slow (5s) detalha antes de fast (50ms)')
   })
 })

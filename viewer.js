@@ -280,8 +280,9 @@ export function view(t, op = {}) {
   const tookMs  = Math.round(t.duration || 0)
   const hogTag  = tookMs > HOG_MS ? ` ${glyphs.hog}` : ''
   // No header do arquivo (indent 0), a variação de tempo contra o run anterior (`lastMs`,
-  // vindo de `.utest/results.json`) — só quando o arquivo de fato re-rodou nesta invocação.
-  const dTag    = (indent === 0 && !isCached && t.lastMs) ? deltaTag(tookMs, t.lastMs) : ''
+  // de `.utest/results.json`) — só quando o arquivo re-rodou E é HOG. 20% num teste rápido
+  // é ruído de GC; num hog é ganho real, e é ele que a seta recompensa.
+  const dTag    = (indent === 0 && !isCached && t.lastMs && tookMs > HOG_MS) ? deltaTag(tookMs, t.lastMs) : ''
   const timeTag = (isFileHeader || tookMs > JUSTIFY_MS) ? ` (${tookMs}ms)${dTag}${hogTag}` : ''
 
   const lines = []
@@ -337,34 +338,43 @@ export function view(t, op = {}) {
 export const phaseMs = (main) =>
   (main?.tests || []).reduce((n, t) => n + (t.lastMs || Math.round(t.duration || 0) || 0), 0)
 
+// Σ do tempo (SEGUNDOS) só dos arquivos acima de `HOG_MS`. `🐢` sempre significa SEGUNDOS —
+// num badge de arquivo (`🐢10` = 10s daquele arquivo), na linha-título (`🐢50` = 50s
+// somados dos hogs da fase) e no rodapé (`🐢N` de todas as fases). Nunca uma contagem.
+export const phaseHogSecs = (main) =>
+  Math.round((main?.tests || []).reduce((n, t) => {
+    const ms = t.lastMs || Math.round(t.duration || 0)
+    return ms > HOG_MS ? n + ms : n
+  }, 0) / 1000)
+
 // ─── phaseLine — a linha-título de uma fase ──────────────────
-// `EVAL ......... (123ms) ✘45 📄77 🧪119 ✔127` — nome em CAIXA ALTA, dotfill, e à direita:
-// `(Σms)` (o tempo da última execução dos arquivos da fase — nunca tempo de parede), depois
-// `✘N` (`💥N`, `🐢N`) e depois o bloco fixo `📄 🧪 ✔`. `📄 🧪 ✔` ficam na MESMA coluna em
-// toda fase; o dotfill come o espaço à esquerda do `(ms)`.
+// `EVAL ......... (66s 🐢52) ✘45 📄77 🧪174 ✔129` — nome em CAIXA ALTA, dotfill, e à direita:
+// `(Σs 🐢Ns)` — o tempo TOTAL dos testes da fase em SEGUNDOS, e `🐢N` = quantos desses
+// segundos foram em hogs. Depois `✘N` (`💥N`) e o bloco fixo `📄 🧪 ✔`, na MESMA coluna em
+// toda fase. MS só no nível do teste individual (`-v:3`), nunca aqui.
 //
-// Aceita um `main` (com `tests[]`) OU um `sum` já pronto + `ms`/`files` (a linha
+// Aceita um `main` (com `tests[]`) OU um `sum` já pronto + `ms`/`files`/`hogSecs` (a linha
 // `coverage` passa o segundo).
-export function phaseLine(mainOrSum, { width = 80, title = '.', ms, files, bare = false } = {}) {
-  const isMain = Array.isArray(mainOrSum?.tests)
-  const sum   = isMain ? summary(mainOrSum) : mainOrSum
-  const fileN = isMain ? (mainOrSum.tests || []).length : (files ?? 0)
-  const hogN  = isMain
-    ? (mainOrSum.tests || []).filter(t => (t.lastMs || Math.round(t.duration || 0)) > HOG_MS).length
-    : 0
-  const dur   = ms ?? (isMain ? phaseMs(mainOrSum) : 0) ?? 0
-  const passN = sum.total - sum.failed - sum.exception
+export function phaseLine(mainOrSum, { width = 80, title = '.', ms, files, hogSecs: hogArg, bare = false } = {}) {
+  const isMain  = Array.isArray(mainOrSum?.tests)
+  const sum     = isMain ? summary(mainOrSum) : mainOrSum
+  const fileN   = isMain ? (mainOrSum.tests || []).length : (files ?? 0)
+  const hogSecs = isMain ? phaseHogSecs(mainOrSum) : (hogArg ?? 0)
+  const dur     = ms ?? (isMain ? phaseMs(mainOrSum) : 0) ?? 0
+  const passN   = sum.total - sum.failed - sum.exception
   const alarms = [
     sum.failed    && `${glyphs.failed}${sum.failed}`,
     sum.exception && `${glyphs.exception}${sum.exception}`,
-    hogN          && `${glyphs.hog}${hogN}`,
   ].filter(Boolean).join(' ')
   const fixed = [
     fileN     && `📄${fileN}`,
     sum.tests && `🧪${sum.tests}`,
     passN     && `${glyphs.passed}${passN}`,
   ].filter(Boolean).join(' ')
-  const right = `${gray(`(${Math.round(dur)}ms)`)} ${alarms ? alarms + ' ' : ''}${fixed}`
+  // `(66s 🐢52)` — segundos totais dos testes, e quantos foram em hogs. Duas grandezas do
+  // MESMO tipo (tempo), a segunda um recorte da primeira. `🐢` = segundos, sempre.
+  const paren = `(${Math.round(dur / 1000)}s${hogSecs ? ` ${glyphs.hog}${hogSecs}` : ''})`
+  const right = `${gray(paren)} ${alarms ? alarms + ' ' : ''}${fixed}`
   if (bare) return right   // só o bloco-direito — a linha `coverage` monta o resto
   const left  = title ? `${cl.bold(String(title).toUpperCase())} ` : ''
   return dotfill(left, '.', ' ' + right, width)
@@ -391,6 +401,8 @@ export function progressBar(phase, done, total, file, { width = 80 } = {}) {
 // ` −40%` / ` +180%` colorido — a variação de wall-time contra o run anterior, só quando
 // ela é significativa (≥20%) e há um `prev` de verdade. Verde = mais rápido, vermelho =
 // mais lento. Silêncio quando a variação é ruído (GC/JIT já fazem ±15%).
+// Os chamadores só a aplicam a HOGS: 20% num teste de 40ms é ruído, 20% num hog de 10s é
+// otimização real — é essa que a seta existe para recompensar.
 export function deltaTag(now, prev) {
   if (!prev || !now) return ''
   const pct = Math.round(((now - prev) / prev) * 100)
@@ -399,44 +411,85 @@ export function deltaTag(now, prev) {
   return pct > 0 ? ` ${cl.red(s)}` : ` ${cl('g+', s)}`
 }
 
-// ─── compactFails — os vermelhos de uma fase em UMA linha ─────
-// Para cada arquivo com `state !== 'passed'`, um token `nome ✘M (Nms)` — SÓ o número de
-// falhas (nunca os `✔`), e SEMPRE o tempo da ÚLTIMA execução (`t.lastMs`, que o runner
-// preenche igual no cacheado e no vivo — por isso o número é o mesmo quente ou frio; o
-// cache fica invisível). `(🐢 Nms)` quando esse tempo passa de `HOG_MS`. `deltaTag` só
-// quando o arquivo re-rodou de fato (há `t.prevMs`, do run ANTERIOR) e a variação é ≥20%.
-// Soft-wrap na largura, nunca parte um token.
+// ─── compactFails — o que uma fase deixou para trás, em UMA linha ─────
+// O detalhe de uma fase é o MESMO para todo kind: um token por arquivo que precisa de
+// atenção — VERMELHO (`nome ✘M`) OU HOG (`nome 🐢N`, um arquivo acima de `HOG_MS`). Um
+// arquivo que é os dois: `nome ✘M 🐢10`. Um hog NÃO conta como falha, mas ganha o badge
+// da tartaruga. Sem isto, uma fase toda verde com hogs mostrava só a linha-título
+// enquanto a `eval` (com vermelhos) mostrava um bloco — pareciam kinds diferentes.
+//
+// O TEMPO é BADGE GROSSO — `🐢10` = 10 SEGUNDOS (`🐢` sempre significa segundos), nunca
+// `(🐢 10064ms)`. Um arquivo abaixo de `HOG_MS` não carrega tempo NENHUM: a precisão de ms
+// num cacheado não diz nada e só custa tokens. MS só aparece no nível do teste individual
+// (`-v:3`).
+//
+// O `deltaTag` (`+50%`/`-40%`) SÓ para um HOG que re-rodou (`t.prevMs`): 20% num teste de
+// 40ms é ruído de GC; 20% num hog de 10s é otimização real, e é ela que a seta recompensa.
+//
+// VERMELHOS sempre por inteiro. HOGS cortados nos `HOG_CAP` mais lentos, o resto vira
+// `+N more 🐢`. Soft-wrap.
+const HOG_CAP = 5
+const hogBadge = ms => `${glyphs.hog}${Math.round(ms / 1000)}`
 export function compactFails(main, { width = 80 } = {}) {
-  const bad = (main.tests || []).filter(t => t.state !== 'passed')
-  if (!bad.length) return ''
+  const msOf = t => t.lastMs || Math.round(t.duration || 0)
+  const isRed = t => t.state !== 'passed'
+  const isHog = t => msOf(t) > HOG_MS
+  const flagged = (main.tests || []).filter(t => isRed(t) || isHog(t))
+  if (!flagged.length) return ''
+
+  const reds = flagged.filter(isRed).sort((a, b) => msOf(b) - msOf(a))
+  const allHogs = flagged.filter(t => isHog(t) && !isRed(t)).sort((a, b) => msOf(b) - msOf(a))
+  const hogs = allHogs.slice(0, HOG_CAP)
+  const hidden = allHogs.length - hogs.length
+
   const tok = t => {
-    const s = t._cached ? null : summary(t)
-    const fail = t._cached ? (t.failCount || 1) : (s.failed + s.exception)
-    const ms = t.lastMs || Math.round(t.duration || 0)
-    const hog = ms > HOG_MS ? `${glyphs.hog} ` : ''
-    const timing = ms ? gray(` (${hog}${ms}ms)`) : ''
-    const delta = t.prevMs ? deltaTag(ms, t.prevMs) : ''
-    return `${t.name} ${glyphs.failed}${fail}${timing}${delta}`
+    const ms = msOf(t)
+    // Badge `🐢N` (N segundos) p/ hog; nada p/ um arquivo abaixo de `HOG_MS`. `deltaTag` só
+    // p/ um HOG que re-rodou (`t.prevMs`) — variação num teste rápido é ruído; num hog é
+    // ganho real.
+    const timing = isHog(t)
+      ? ` ${gray(hogBadge(ms))}${t.prevMs ? deltaTag(ms, t.prevMs) : ''}`
+      : ''
+    if (isRed(t)) {
+      const s = t._cached ? null : summary(t)
+      const fail = t._cached ? (t.failCount || 1) : (s.failed + s.exception)
+      return `${t.name} ${glyphs.failed}${fail}${timing}`
+    }
+    return `${t.name}${timing}`
   }
-  const tokens = bad.map(tok)
+
+  // Vermelhos e hogs são grupos distintos — o de hogs começa em linha nova, para o
+  // `nome ✘M` e o `nome 🐢Ns` não se misturarem no meio de uma linha.
+  const groups = [reds.map(tok)]
+  if (hogs.length) {
+    const hogTokens = hogs.map(tok)
+    if (hidden > 0) hogTokens.push(gray(`+${hidden} more ${glyphs.hog}`))
+    groups.push(hogTokens)
+  }
+
   const lines = []
-  let cur = ''
-  for (const tk of tokens) {
-    const add = cur ? cur + '  ' + tk : tk
-    if (stripAnsi(add).length > width && cur) { lines.push(cur); cur = tk }
-    else cur = add
+  for (const group of groups) {
+    if (!group.length) continue
+    let cur = ''
+    for (const tk of group) {
+      const add = cur ? cur + '  ' + tk : tk
+      if (stripAnsi(add).length > width && cur) { lines.push(cur); cur = tk }
+      else cur = add
+    }
+    if (cur) lines.push(cur)
   }
-  if (cur) lines.push(cur)
   return lines.join('\n')
 }
 
 // ─── fullView(main) — complete output ─────────────────────────
 // `--hogs` NÃO passa mais por aqui — é `hogReport()`, uma leitura de tempo cega a erro. Isto
-// é sempre o relatório orientado a FALHA (v0-v3).
+// é sempre o relatório orientado a ATENÇÃO (v0-v3).
 //
-// v0-v2: a linha-título da fase (`phaseLine`) e — se há vermelho — os arquivos falhos numa
-// linha compacta (`compactFails`). NENHUM `checkView` por baixo: o detalhe é `-v:3
-// <arquivo>` (que força a re-execução). v3: o caminho verboso de sempre, árvore inteira.
+// **v0-v1** (escopo largo): a linha-título da fase (`phaseLine`) e — se há vermelho OU hog —
+//   os arquivos que pedem atenção numa linha compacta (`compactFails`). NENHUM `checkView`.
+// **v2** (o nível que escopo estreito assume): o mesmo, MAIS a linha do erro + o endereço no
+//   stack (`checkView`) por baixo de cada arquivo vermelho. SEM o output do teste (`log()`).
+// **v3**: v2 + o output do teste. `view()` decide isso pelo `verbosity`.
 export function fullView(main, op = {}) {
   let verbosity = op.verbosity ?? 1
   const width   = op.width    ?? process.stdout.columns ?? 80
@@ -448,17 +501,39 @@ export function fullView(main, op = {}) {
   if (verbosity === 0 && allPassed) return ''
   if (verbosity === 0) verbosity = 1
 
-  if (verbosity <= 2) {
+  if (verbosity <= 1) {
     // A linha-título vai à largura CHEIA (dotfill até a borda); o que vem abaixo dela é
-    // indentado 2 pelo chamador, então soft-wrap com `width - 2`.
+    // indentado 2 pelo chamador, então soft-wrap com `width - 2`. `compactFails` já cobre
+    // vermelho E hog — um caminho só, sem ramo por `allPassed`.
     const lines = [phaseLine(main, { width, title })]
-    const ms = phaseMs(main)
-    if (allPassed) {
-      if (ms > HOG_MS) for (const t of sortSlow(gatherSlowLeaves(main))) lines.push(slowRow(t))
-      return lines.filter(Boolean).join('\n')
-    }
     const cf = compactFails(main, { width: width - 2 })
     if (cf) lines.push(cf)
+    return lines.join('\n')
+  }
+
+  if (verbosity === 2) {
+    // Escopo estreito: a linha compacta + a linha do erro e o endereço no stack por baixo de
+    // cada arquivo vermelho. O `log()` do teste fica para o `-v:3`.
+    const lines = [phaseLine(main, { width, title })]
+    const cf = compactFails(main, { width: width - 2 })
+    if (cf) lines.push(cf)
+    // Mesma ordem do bloco compacto — vermelhos do mais lento pro menos.
+    const msOf = t => t.lastMs || Math.round(t.duration || 0)
+    const bad = (main.tests || []).filter(t => t.state !== 'passed').sort((a, b) => msOf(b) - msOf(a))
+    for (const t of bad) {
+      const errs = gatherChecks(t).filter(c => c.state !== 'passed')
+      const exs  = gatherExceptions(t)
+      if (!errs.length && !exs.length) continue
+      lines.push(gray(`  ${t.name}`))
+      for (const ex of exs) {
+        const v = errorView(ex.error, { width: width - 4 })
+        if (v) lines.push(v.split('\n').map(l => `    ${l}`).join('\n'))
+      }
+      for (const c of errs) {
+        const v = checkView(c, { width: width - 4 })
+        if (v) lines.push(v.split('\n').map(l => `    ${l}`).join('\n'))
+      }
+    }
     return lines.join('\n')
   }
 
@@ -531,4 +606,4 @@ export function hogReport(mains, { width = 80, standalone = false } = {}) {
   return lines.join('\n')
 }
 
-export default { view, fullView, summary, glyphs, JUSTIFY_MS, HOG_MS, hogReport, sumLeafDurations, bgPhase, phaseLine, progressBar, compactFails, failInfo, deltaTag }
+export default { view, fullView, summary, glyphs, JUSTIFY_MS, HOG_MS, hogReport, sumLeafDurations, bgPhase, phaseLine, phaseMs, phaseHogSecs, progressBar, compactFails, failInfo, deltaTag }

@@ -18,9 +18,9 @@ import { parse as parseYaml } from 'bun:yaml'
 
 import test from './test.js'
 import { check, checkFail, checkException } from './check.js'
-import { scan } from './scanner.js'
+import { scan, findTarget } from './scanner.js'
 import { TestCache } from './cache.js'
-import { view, fullView, summary, glyphs, checkView, hogReport, failInfo, phaseLine, phaseMs, progressBar, link, HOG_MS } from './viewer.js'
+import { view, fullView, summary, glyphs, checkView, hogReport, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, HOG_MS } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
          beforeEach, afterEach, withTempDir} from './shims.js'
 
@@ -211,6 +211,7 @@ const args = process.argv.slice(2)
 const hogs = args.includes('--hogs') || args.includes('-h')
 let verbosity = 1
 const _vArg = args.find(a => /^(-v)?:?([0123])$/.test(a))
+const _vExplicit = !!_vArg
 if (_vArg) verbosity = parseInt(_vArg.match(/([0123])$/)[1])
 // `--hogs` é um MODO à parte, independente de `-v:N` — só tempo, cego a erro (nem os fails
 // rápidos contam como hog). Sem isto, `-v:3` ainda estufaria a saída ANTES da lista final:
@@ -241,8 +242,31 @@ const _declaredPhases = new Set(fs.existsSync(_yamlNearCwd)
   ? Object.keys(parseYaml(fs.readFileSync(_yamlNearCwd, 'utf8')) || {}).filter(k => k !== 'boot' && k !== 'exclude')
   : [])
 const phaseArg = positional.find(a => _declaredPhases.has(a) && !fs.existsSync(a))
-const filterTerms = positional.filter(a => a !== phaseArg && !fs.existsSync(a))
-const rawTarget = positional.find(a => fs.existsSync(a))
+let filterTerms = positional.filter(a => a !== phaseArg && !fs.existsSync(a))
+let rawTarget = positional.find(a => fs.existsSync(a))
+
+// **O storage é o índice.** Um termo que NÃO é path (`utest 3.2`, `utest button`) é
+// resolvido contra as chaves de `.utest/results.json` ANTES de qualquer scan: se casa
+// EXATAMENTE um arquivo, ele vira o `rawTarget` e o termo some — a rodada acha e executa só
+// aquele teste, sem varrer o repo. Casou vários (`utest eval` já é fase; `utest 2` casaria
+// a frente toda) → segue como filtro, o scan resolve. Zero casos → segue como filtro
+// (talvez o storage esteja vazio; o scan tenta).
+if (!rawTarget && filterTerms.length === 1) {
+  try {
+    const { TestCache: _TC } = await import('./cache.js')
+    const _idxRoot = [process.cwd(), path.dirname(_yamlNearCwd)].find(d => fs.existsSync(path.resolve(d, 'TEST.yaml'))) || process.cwd()
+    const _term = filterTerms[0].toLowerCase()
+    // Dedup por relpath — o mesmo arquivo pode aparecer em duas fases do storage (`unit` e
+    // `eval`); ainda é UM arquivo.
+    const _paths = new Set()
+    for (const e of _TC(_idxRoot).results.list())
+      if (e.relpath.toLowerCase().includes(_term) && fs.existsSync(e.abspath)) _paths.add(e.abspath)
+    if (_paths.size === 1) {
+      rawTarget = [..._paths][0]
+      filterTerms = []
+    }
+  } catch {}
+}
 
 const _isFile = rawTarget && fs.statSync(rawTarget).isFile()
 const targetDir = _isFile ? path.dirname(rawTarget) : rawTarget
@@ -250,18 +274,25 @@ const root = path.resolve(targetDir || '.')
 const configPath = [root, process.cwd()].map(d => path.resolve(d, 'TEST.yaml')).find(p => fs.existsSync(p))
   || path.resolve(process.cwd(), 'TEST.yaml')
 
-// `-v:3` é "a saída completa de uma execução" — o mesmo que `--force`. Um `-v:3` sobre o
-// cache não executa nada e não mostra nada, o que deixa o modo de investigação sem uso.
-// Ligar `force` junto — MAS só quando o escopo é DE VERDADE estreito: um path que não é a
-// raiz do projeto, ou termos de filtro. `.`/a raiz e uma fase inteira (`eval`) NÃO contam —
-// `-v:3` ali é o `--force` largo que o `docs/CRASH-LOG.md` tirou do procedimento (o pico de
-// spawn da fase `eval`/`int` dispara o `systemd-oomd` e mata o editor junto).
+// **Escopo estreito É o pedido de drill-in** — RE-EXECUTA (`force`) e sobe de nível, em dois
+// degraus:
+//   - uma FRENTE / FEATURE (um diretório que não é a raiz, ou um termo de filtro que casa
+//     vários) → `-v:2`: a linha do erro + o endereço no stack por baixo de cada vermelho.
+//   - um ARQUIVO só (`utest 3.2.eval.js`) → `-v:3`: `-v:2` + o output do teste (`log()`).
+// Um `-v:N` explícito na linha manda — `utest 3.2.eval.js -v:1` respeita o 1.
+//
+// Escopo LARGO (`.`, a raiz, uma fase inteira) NÃO fura o cache nem com `-v:3` — ali seria
+// o `--force` largo que o `docs/CRASH-LOG.md` tirou do procedimento (o pico de spawn da
+// fase `eval`/`int` dispara o `systemd-oomd` e mata o editor junto).
 const _rootIsProject = path.resolve(rawTarget || '.') === path.dirname(configPath)
 const narrowScope = (!!rawTarget && !_rootIsProject) || filterTerms.length > 0
-if (verbosity >= 3 && !force && !watch) {
-  if (narrowScope) force = true
-  else process.stderr.write('\x1b[33m-v:3 em escopo largo (raiz ou fase inteira) não fura o cache — rode filtrado: um path de arquivo/subdir, ou um termo\x1b[39m\n')
+if (narrowScope && !watch) {
+  if (!force) force = true
+  if (!_vExplicit) verbosity = Math.max(verbosity, _isFile ? 3 : 2)
+} else if (verbosity >= 3 && !force && !watch) {
+  process.stderr.write('\x1b[33m-v:3 em escopo largo (raiz ou fase inteira) não fura o cache — rode filtrado: um path de arquivo/subdir, ou um termo\x1b[39m\n')
 }
+globalThis.utestVerbosity = verbosity
 const width = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
 const startAll = process.hrtime.bigint()
 
@@ -291,8 +322,11 @@ if (phaseArg) phaseNames = phaseNames.filter(p => p === phaseArg)
 installProcessExitTrap()
 
 // "cada fase em tempo real": uma barra de progresso reescrita a cada arquivo. Só num TTY
-// interativo, fora do `-v:3` (que já faz streaming por-teste), do `--json` e do `--hogs`.
-const streamPhase = process.stdout.isTTY && verbosity < 3 && !asJson && !hogs && !watch
+// interativo, fora do `-v:3` (que já faz streaming por-teste), do `--json`, do `--hogs`, e
+// do filho do `--watch` (`--no-stream`) — o watch roda em silêncio e só imprime o
+// relatório final, um por vez, no log.
+const noStream = args.includes('--no-stream')
+const streamPhase = process.stdout.isTTY && verbosity < 3 && !asJson && !hogs && !watch && !noStream
 
 // ─── Roda UMA fase: scan (ou provider) → executa cada entry → devolve o nó da fase ────────
 async function runPhase(phase) {
@@ -311,8 +345,12 @@ async function runPhase(phase) {
       // `scan()` já restringe por `root` andando o diretório; um provider (`eval`: as
       // entries vêm de `loadFronts()`, não de um walk) não ganha isso de graça — sem
       // filtrar aqui, `bun utest/utest.js plans/1-motor` varria o CORPUS INTEIRO, não só
-      // a frente pedida. Mesma regra: só entries cujo caminho more sob `root`.
-      if (rawTarget) {
+      // a frente pedida. Mesma regra: só entries cujo caminho more sob `root`. `_isFile`
+      // corta para UMA entry logo (`utest 3.2` → um `.eval.js`), sem instanciar as outras 76.
+      if (_isFile) {
+        const absFile = path.resolve(rawTarget)
+        provided = provided.filter(e => e.path === absFile)
+      } else if (rawTarget) {
         const rootPrefix = root.endsWith(path.sep) ? root : root + path.sep
         provided = provided.filter(e => e.path === root || e.path.startsWith(rootPrefix))
       }
@@ -320,6 +358,22 @@ async function runPhase(phase) {
         ...e, target: e.target ?? null, extraDeps: e.extraDeps ?? [],
         cache: cache.read(e.path, e.target ?? null, { extraDeps: e.extraDeps ?? [] }),
       }))
+    } else if (_isFile) {
+      // UM arquivo, fase SEM provider: nenhum walk. `findTarget` (puro) acha o alvo pareado;
+      // `cache.read` o resto. Só produz entry se o arquivo pertence a ESTA fase — um
+      // `.eval.js` não vira entry da fase `unit` (senão `utest 3.2` rodaria as duas).
+      const absFile = path.resolve(rawTarget)
+      const cfg = cfgRaw[phase] || {}
+      const inc = cfg.include || ['**/*.t.js', '**/*.test.js']
+      const belongs = inc.some(g => {
+        const re = new RegExp('^' + g.replace(/[.]/g, '\\.').replace(/\*\*\//g, '(.*/)?').replace(/\*/g, '[^/]*') + '$')
+        return re.test(path.relative(path.dirname(configPath), absFile))
+      })
+      if (belongs) {
+        const target = findTarget(absFile)
+        cache = TestCache(path.dirname(configPath))
+        entries = [{ path: absFile, target, cache: cache.read(absFile, target) }]
+      }
     } else {
       ; ({ entries, uncovered, cache } = scan(root, configPath, phase))
     }
@@ -379,8 +433,11 @@ async function runPhase(phase) {
     })
     // Verificação de 2º nível: o cache de tempo disse HIT; o histórico concorda que nada
     // mudou? Discordar é sinal de furo na regra do cache — reporta, não corrige (o cache
-    // de tempo continua sendo a autoridade sobre re-rodar).
-    if (rec && cache?.results && !cache.results.fresh(phase, entry.path, entry.extraDeps ?? [])) {
+    // de tempo continua sendo a autoridade sobre re-rodar). É diagnóstico de MANUTENÇÃO
+    // do cache, não do teste — some no `-v:1` default (uma rodada larga cospe uma linha
+    // por vermelho cacheado, e o dono não pode agir sobre nenhuma); aparece a partir de
+    // `-v:2`, para quem está de fato investigando o cache.
+    if (verbosity >= 2 && rec && cache?.results && !cache.results.fresh(phase, entry.path, entry.extraDeps ?? [])) {
       process.stderr.write(`\x1b[33m[cache] ${path.relative(root, entry.path)}: cache diz HIT mas o histórico está stale (mtime/deps mudaram desde o último run gravado)\x1b[39m\n`)
     }
     continue
@@ -591,7 +648,14 @@ for (const { main, uncovered } of phaseResults) {
 }
 const covLine = srcTotal ? `coverage: ${Math.round((srcCovered / srcTotal) * 100)}%` : 'coverage: —'
 
+// O bloco tight (sem moldura) é para uma rodada REALMENTE limpa — verde E rápida. Um hog
+// é digno de atenção do mesmo jeito que um vermelho: ganha a moldura e o bloco de detalhe
+// (`fullView` → `compactFails`, que lista vermelho E hog). Assim `unit` com hogs e `eval`
+// com vermelhos têm a MESMA forma — era essa a assimetria.
+const anyHog = rendered.some(r =>
+  (r.main.tests || []).some(t => (t.lastMs || Math.round(t.duration || 0)) > HOG_MS))
 const anyRed = rendered.some(r => r.main.state !== 'passed')
+const framed = anyRed || anyHog
 
 // `--hogs` — modo de tempo, formato próprio, cego a falha.
 if (hogs) {
@@ -604,22 +668,22 @@ if (hogs) {
     const left = [`${phase}:`, `${glyphs.passed} ${s.total}`,
       s.failed ? `${glyphs.failed} ${s.failed}` : '',
       s.exception ? `${glyphs.exception} ${s.exception}` : ''].filter(Boolean).join('  ')
-    const right = `\x1b[90m(${phaseMs(main)}ms)\x1b[39m`
+    const right = `\x1b[90m(${Math.round(phaseMs(main) / 1000)}s)\x1b[39m`
     const gap = Math.max(1, width - stripAnsi(left).length - stripAnsi(right).length)
     process.stdout.write(`${left}${' '.repeat(gap)}${right}\n`)
   }
 
-// TUDO VERDE → bloco tight, sem frame: `utest results` / `NOME (Σms) 📄 🧪 ✔` por fase /
-// `coverage: N%`. O `(Σms)` é a soma do tempo da última execução dos arquivos da fase
-// (`phaseMs`) — o mesmo número quente ou frio. `(🐢 n Σms)` se a fase tem hog.
-} else if (!anyRed) {
+// RODADA LIMPA (verde E sem hog) → bloco tight, sem frame: `utest results` / `NOME (Σs)
+// 📄 🧪 ✔` por fase / `coverage: N%`. O `(Σs)` é a soma do tempo da última execução dos
+// arquivos da fase (`phaseMs`), em SEGUNDOS — o mesmo número quente ou frio. Sem hog aqui
+// (por definição desta forma), então o parên é só `(Ns)`.
+} else if (!framed) {
   process.stdout.write('\x1b[1mutest results\x1b[22m\n')
   const rows = rendered.map(({ phase, main }) => {
     const s = summary(main)
-    const hogN = (main.tests || []).filter(t => (t.lastMs || Math.round(t.duration || 0)) > HOG_MS).length
     return {
       name: phase.toUpperCase(),
-      paren: `(${hogN ? `${glyphs.hog} ${hogN} ` : ''}${phaseMs(main)}ms)`,
+      paren: `(${Math.round(phaseMs(main) / 1000)}s)`,
       counts: `📄${(main.tests || []).length} 🧪${s.tests} ${glyphs.passed}${s.passed}`,
     }
   })
@@ -631,16 +695,28 @@ if (hogs) {
   }
   process.stdout.write(`\x1b[1m${covLine}\x1b[22m\n`)
 
-// HÁ VERMELHO → relatório emoldurado: frame, linha-título por fase (saída indentada 2), o
-// `tip:` entre réguas, a linha `coverage`. Lê SEMPRE do mesmo registro — quente == frio.
+// HÁ VERMELHO OU HOG → relatório emoldurado: frame, linha-título por fase (saída indentada
+// 2), o `tip:` entre réguas, a linha `coverage`. Lê SEMPRE do mesmo registro — quente == frio.
 } else {
   process.stdout.write(`${rule}\n\x1b[1mutest results\x1b[22m\n${rule}\n`)
-  let firstRed = null
-  for (const { phase, main } of rendered) {
-    if (!firstRed) {
-      const t = main.tests.find(t => t.state !== 'passed')
-      if (t) firstRed = { name: t.name, path: t.address ? path.resolve(root, t.address) : null }
+  const msOf = t => t.lastMs || Math.round(t.duration || 0)
+  const hasOut = (t) => (t.output || []).length > 0 || (t.tests || []).some(hasOut)
+  // O `tip:` aponta para o MESMO arquivo que encabeça o bloco de detalhe — o vermelho mais
+  // LENTO (a ordem que `compactFails` usa). Sem vermelho (rodada hog-only), o hog mais lento.
+  // O texto depende de ONDE estamos: largo (`-v:1`) → "rode este arquivo" (aí re-executa em
+  // `-v:3`); estreito num front (`-v:2`) com output engolido → "-v:3 to see full output";
+  // arquivo só (`-v:3`) → sem tip, já está tudo na tela.
+  const ref = (t) => ({ name: t.name, path: t.address ? path.resolve(root, t.address) : null, ms: msOf(t), hasOutput: hasOut(t) })
+  let slowestRed = null, slowestHog = null
+  for (const { main } of rendered) {
+    for (const t of main.tests) {
+      if (t.state !== 'passed' && (!slowestRed || msOf(t) > slowestRed.ms))
+        slowestRed = ref(t)
+      if (t.state === 'passed' && msOf(t) > HOG_MS && (!slowestHog || msOf(t) > slowestHog.ms))
+        slowestHog = ref(t)
     }
+  }
+  for (const { phase, main } of rendered) {
     // A linha-título da fase vai à largura CHEIA do terminal (dotfill até a borda, zero
     // espaço sobrando); só o que vem ABAIXO dela é que indenta 2.
     const report = fullView(main, { verbosity, width, title: phase, nameTerms: filterTerms })
@@ -649,26 +725,36 @@ if (hogs) {
     process.stdout.write(head + '\n')
     for (const l of rest) process.stdout.write((l ? '  ' + l : l.slice(0, width - 2)) + '\n')
   }
-  if (firstRed) {
+  // `-v:3` estreito já mostra tudo — nenhum tip. `-v:2` estreito: tip só se um vermelho tem
+  // `log()` engolido. `-v:1` largo: sempre, apontando para o arquivo (que re-executa fundo).
+  const pointer = slowestRed || slowestHog
+  const tipCmd = pointer
+    ? (verbosity >= 2
+        ? (slowestRed?.hasOutput ? { flag: ' -v:3', why: 'full output' } : null)
+        : { flag: '', why: slowestRed ? 'failure details' : 'what is slow' })
+    : null
+  if (pointer && tipCmd) {
     // `utest <arquivo>` vira um OSC 8 hyperlink para o `file://` do teste — no terminal do
     // VS Code (e outros que suportam) é clicável e abre o arquivo; onde não suporta, some o
     // escape e fica só o texto.
-    const cmd = `utest ${firstRed.name}`
-    const shown = firstRed.path ? link('file://' + firstRed.path, cmd) : cmd
-    process.stdout.write(`${rule}\n\x1b[90m tip: run  \x1b[4m${shown}\x1b[24m  to see failure details\x1b[39m\n`)
+    const cmd = `utest ${pointer.name}${tipCmd.flag}`
+    const shown = pointer.path ? link('file://' + pointer.path, cmd) : cmd
+    process.stdout.write(`${rule}\n\x1b[90m tip: run  \x1b[4m${shown}\x1b[24m  to see ${tipCmd.why}\x1b[39m\n`)
   }
   process.stdout.write(`${rule}\n`)
   // linha final: `coverage: N%` à esquerda, o bloco-direito da linha-título à direita —
-  // `ms` = Σ do tempo da última execução de TODOS os arquivos, todas as fases.
+  // `(Ns 🐢M)` = Σ do tempo da última execução de TODOS os arquivos + total de hogs, todas
+  // as fases.
   const finalSum = { passed: 0, failed: 0, exception: 0, total: 0, tests: 0 }
-  let totalFiles = 0, totalMs = 0
+  let totalFiles = 0, totalMs = 0, totalHogSecs = 0
   for (const { main } of phaseResults) {
     const s = summary(main)
     finalSum.passed += s.passed; finalSum.failed += s.failed
     finalSum.exception += s.exception; finalSum.total += s.total; finalSum.tests += s.tests
     totalFiles += (main.tests || []).length; totalMs += phaseMs(main)
+    totalHogSecs += phaseHogSecs(main)
   }
-  const counts = phaseLine(finalSum, { title: '', ms: totalMs, files: totalFiles, bare: true })
+  const counts = phaseLine(finalSum, { title: '', ms: totalMs, files: totalFiles, hogSecs: totalHogSecs, bare: true })
   const gap = Math.max(1, width - stripAnsi(covLine).length - stripAnsi(counts).length)
   process.stdout.write(`\x1b[1m${covLine}\x1b[22m${' '.repeat(gap)}${counts}\n`)
 }
@@ -685,7 +771,12 @@ if (!watch) {
 // ─── Watch mode ───────────────────────────────────────────────────────────────
 if (watch) {
   globalThis.utestAllowDestructiveOutput = true
-  const runArgs = args.filter(a => a !== '--watch' && a !== '-w')
+  // O filho carrega sempre as FLAGS e a FASE (`utest eval --watch` segue escopando `eval`).
+  // Só o positional de ESCOPO (a pasta/termo) é substituível — quando um teste único muda,
+  // ELE vira o alvo; se a pasta continuasse na linha, virariam dois positionais e o
+  // `fs.existsSync` da pasta ganharia, varrendo tudo.
+  const baseArgs  = args.filter(a => (a.startsWith('-') && a !== '--watch' && a !== '-w') || a === phaseArg)
+  const scopeArgs = args.filter(a => !a.startsWith('-') && a !== phaseArg)
   let debounce = null
   let child = null
   let lastChildExit = 0  // epoch ms when the last child process finished
@@ -693,16 +784,32 @@ if (watch) {
   const watchLine = () =>
     process.stdout.write(`\x1b[90mWatching ${root} — press Ctrl+C to stop\x1b[39m\n`)
 
+  let changed = new Set()   // arquivos tocados desde a última rodada
+  const isTestFile = f => /\.(t|test|eval|it|integration|rendering)\.(js|ts)$|\.tuit$/.test(f)
+
   const rerun = () => {
     clearTimeout(debounce)
     debounce = null
     if (child) { try { child.kill() } catch { } }
     process.stdout.write('\x1b[2J\x1b[H') // clear screen
-    child = Bun.spawn(['bun', import.meta.path, ...runArgs, '--force'], {
+
+    // **Delta, não varredura.** Se TODO arquivo tocado é um teste, roda só esses — o caminho
+    // `_isFile` não escaneia. Se algum é FONTE (um `.js` que testes importam), aí sim o run
+    // cacheado completo: o scan anda a árvore mas o cache de tempo pula quem não mudou (só o
+    // custo do walk, ~1s), e o dep-graph re-roda os testes que dependem da fonte. `--force`
+    // largo continua PROIBIDO aqui (docs/CRASH-LOG.md).
+    const touched = [...changed]
+    changed = new Set()
+    // Um único teste tocado → roda só ele (`_isFile`, sem scan), substituindo o escopo
+    // original. Vários, ou uma fonte no meio → mantém o escopo original, run cacheado
+    // completo (o scan anda a árvore mas o cache pula quem não mudou).
+    const scoped = (touched.length === 1 && isTestFile(touched[0]))
+      ? [path.resolve(root, touched[0])]
+      : scopeArgs
+
+    child = Bun.spawn(['bun', import.meta.path, ...baseArgs, ...scoped, '--no-stream'], {
       stdout: 'inherit', stderr: 'inherit',
     })
-    // Reprint the watch line after the child finishes, and record exit time so
-    // we can ignore the cache-write mtime events that follow immediately.
     child.exited.then(() => {
       lastChildExit = Date.now()
       watchLine()
@@ -714,7 +821,8 @@ if (watch) {
     // Skip for 1.5 s after a run ends — cache writes (utimesSync) trigger this too
     if (Date.now() - lastChildExit < 1500) return
     if (!/\.(js|ts|yaml|json|md)$/.test(filename)) return
-    if (/node_modules|\.bot[/\\]/.test(filename)) return
+    if (/node_modules|\.bot[/\\]|\.utest[/\\]/.test(filename)) return
+    changed.add(filename)
     clearTimeout(debounce)
     debounce = setTimeout(rerun, 80)
   })

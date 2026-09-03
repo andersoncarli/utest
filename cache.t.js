@@ -445,4 +445,18 @@ test('cache: bordas que não podem derrubar o runner', ({ test }) => {
     check(cache.results.fresh('unit', at('m.t.js')), false, 'mtime mudou → stale')
     cleanup()
   })
+
+  test('results.list — o índice: chaves por fase, ou de todas', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.results.record('unit', at('a.t.js'), { ms: 1, state: 'passed' })
+    cache.results.record('unit', at('b.t.js'), { ms: 2, state: 'passed' })
+    cache.results.record('eval', at('a.t.js'), { ms: 3, state: 'passed' })
+    const uni = cache.results.list('unit')
+    check(uni.length, 2, 'só a fase unit')
+    check(uni.every(e => e.phase === 'unit' && e.abspath.endsWith(e.relpath)), true, 'phase/relpath/abspath')
+    const all = cache.results.list()
+    check(all.length, 3, 'sem fase → todas')
+    check(new Set(all.map(e => e.relpath)).size, 2, 'a.t.js aparece em 2 fases, b.t.js em 1')
+    cleanup()
+  })
 })

@@ -107,6 +107,16 @@ export function TestCache(root) {
   }
   const results = {
     get: (phase, p) => phaseFiles(phase)[relative(projectRoot, p)] || null,
+    // As chaves (relpaths) de uma fase, ou de todas. É o ÍNDICE: `utest 3.2` resolve o
+    // arquivo daqui, sem escanear o repo. `{ phase, relpath, abspath }[]`.
+    list: (phase) => {
+      const s = storeLoad()
+      const phs = phase ? [phase] : Object.keys(s.phases)
+      return phs.flatMap(ph =>
+        Object.keys(s.phases[ph]?.files || {}).map(relpath => ({
+          phase: ph, relpath, abspath: join(projectRoot, relpath),
+        })))
+    },
     record: (phase, p, { ms, tests, checks, failCount, state, extraDeps = [] } = {}) => {
       phaseFiles(phase)[relative(projectRoot, p)] = {
         ms: Math.round(ms || 0),
@@ -119,9 +129,18 @@ export function TestCache(root) {
         at: Date.now(),
       }
     },
-    // Um write só, no fim da fase — não um por arquivo.
+    // Um write só, no fim da fase — não um por arquivo. Antes de escrever, poda as linhas
+    // cujo arquivo sumiu do disco (renomeado/apagado): o storage é o índice E a verificação
+    // de 2º nível, uma linha órfã suja as duas.
     flush: () => {
-      try { mkdirSync(dirname(resultsFile), { recursive: true }); writeFileSync(resultsFile, JSON.stringify(storeLoad(), null, 0)) } catch {}
+      try {
+        const s = storeLoad()
+        for (const ph of Object.values(s.phases))
+          for (const rp of Object.keys(ph.files || {}))
+            if (!existsSync(join(projectRoot, rp))) delete ph.files[rp]
+        mkdirSync(dirname(resultsFile), { recursive: true })
+        writeFileSync(resultsFile, JSON.stringify(s, null, 0))
+      } catch {}
     },
     // O histórico ainda bate com a realidade do disco? (mesmo mtime do teste, e
     // nenhuma dep mais nova que quando gravamos). MESMA pergunta que a regra do
