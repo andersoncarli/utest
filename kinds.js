@@ -71,7 +71,17 @@ const ENTRY_PROVIDERS = new Map()
 export const registerEntries = (phase, fn) => { ENTRY_PROVIDERS.set(phase, fn); return fn }
 export const entriesFor = phase => ENTRY_PROVIDERS.get(phase) ?? null
 
+// `registerPhaseSetup(phase, fn)` — um recurso que a fase inteira compartilha, montado UMA
+// vez antes das entries e derrubado depois. `fn() → Promise<teardown | void>`. É o que
+// evita cada `.eval.js` de browser subir o próprio Chromium: o `TEST.boot.js` faz
+// `chromium.launchServer()` aqui e exporta o `wsEndpoint` num env que sobrevive ao `sh()`.
+const PHASE_SETUPS = new Map()
+
+export const registerPhaseSetup = (phase, fn) => { PHASE_SETUPS.set(phase, fn); return fn }
+export const phaseSetupFor = phase => PHASE_SETUPS.get(phase) ?? null
+
 export default {
   register, kinds, testRe, loaderFilter, stripKind, kindOf,
   registerExecutor, executorFor, registerEntries, entriesFor,
+  registerPhaseSetup, phaseSetupFor,
 }

@@ -13,17 +13,18 @@ export async function loadFile(abs) {
   const existing = test.main.tests.filter(t => t.address === abs || t._address === abs)
   if (existing.length > 0) return
 
+  let _importTimer = null
   try {
     await Promise.race([
       import(abs),
-      new Promise((_, r) => setTimeout(() => r(new Error(`Import Timeout (1s): ${abs}`)), 1000))
+      new Promise((_, r) => { _importTimer = setTimeout(() => r(new Error(`Import Timeout (1s): ${abs}`)), 1000) })
     ])
     for (const t of test.main.tests)
       if (!t.address && !t._address) t._address = abs
   } catch (e) {
     const t = test(`load ${path.basename(abs)}`, () => {})
     t.state = 'exception'; t.error = e; t.address = abs
-  } finally { test._loadingFile = prev }
+  } finally { if (_importTimer) clearTimeout(_importTimer); test._loadingFile = prev }
 }
 
 // ─── Execute ──────────────────────────────────────────────────
@@ -72,6 +73,7 @@ export async function runTest(t, op = {}) {
 
     const effectiveTimeout = t.op?.timeout || timeout
     const releaseConsole = captureConsole(t)
+    let _timeoutTimer = null
     try {
       await Promise.race([
         (async () => {
@@ -81,9 +83,11 @@ export async function runTest(t, op = {}) {
           else { const done = new Promise((res, rej) => { r = t.fn.call(t, (e) => e ? rej(e) : res(), context) }); await done; return }
           if (r instanceof Promise) await r
         })(),
-        new Promise((_, r) => setTimeout(() => r(new Error(`Timeout (${effectiveTimeout}ms)`)), effectiveTimeout))
+        // O timer TEM que ser limpo quando o trabalho ganha — um `setTimeout` de 10s de um
+        // passo de `eval` já pronto seguraria o event loop por 10s depois do relatório.
+        new Promise((_, r) => { _timeoutTimer = setTimeout(() => r(new Error(`Timeout (${effectiveTimeout}ms)`)), effectiveTimeout) })
       ])
-    } finally { releaseConsole() }
+    } finally { if (_timeoutTimer) clearTimeout(_timeoutTimer); releaseConsole() }
 
     for (const child of t.tests) {
       await runTest(child, op)

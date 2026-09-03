@@ -350,7 +350,7 @@ fs.watch(root, { recursive: true }, (_, filename) => {
   // Skip for 1.5 s after a run ends — cache writes (utimesSync) trigger this too
   if (Date.now() - lastChildExit < 1500) return
   if (!/\.(js|ts|yaml|json|md)$/.test(filename)) return
-  if (/node_modules|\.bot[/\\]/.test(filename)) return
+  if (/node_modules|\.utest[/\\]/.test(filename)) return
   clearTimeout(debounce)
   debounce = setTimeout(rerun, 80)
 })

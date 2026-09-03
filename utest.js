@@ -34,7 +34,7 @@ import cl from '../utils/src/cl.js'
 import forEach from '../utils/src/forEach.js'
 import dotfill from '../utils/src/dotfill.js'
 import hash53 from '../utils/src/hash53.js'
-import { loaderFilter, kindOf, executorFor, entriesFor } from './kinds.js'
+import { loaderFilter, kindOf, executorFor, entriesFor, phaseSetupFor } from './kinds.js'
 import { captureConsole } from './console-capture.js'
 
 const realProcessExit = process.exit.bind(process)
@@ -131,6 +131,7 @@ async function runTest(t, ctx, timeout = 1000) {
     debug: (...a) => t.output.push(['debug', a]),
   }
 
+  let _timeoutTimer = null
   try {
     const eff = t.op?.timeout || timeout
     await Promise.race([
@@ -178,7 +179,10 @@ async function runTest(t, ctx, timeout = 1000) {
         }
         for (const child of t.tests) await runTest(child, ctx, timeout)
       })(),
-      new Promise((_, r) => setTimeout(() => r(new Error(`Timeout (${eff}ms)`)), eff))
+      // O timer TEM que ser limpo quando o trabalho ganha a corrida — senão um
+      // `setTimeout(…, 10000)` de um passo de `eval` já concluído segura o event loop
+      // por 10s depois do relatório (o "teardown misterioso" que o `--trace` denunciava).
+      new Promise((_, r) => { _timeoutTimer = setTimeout(() => r(new Error(`Timeout (${eff}ms)`)), eff) })
     ])
 
     if (t.state === 'running')
@@ -187,6 +191,7 @@ async function runTest(t, ctx, timeout = 1000) {
   } catch (e) {
     t.state = 'exception'; t.error = e
   } finally {
+    if (_timeoutTimer) clearTimeout(_timeoutTimer)
     // O veredito acabou de ser dado, mas `check.bind(t)` continua válido: um
     // `setTimeout`/promise solta ainda pode empurrar checks para dentro de
     // `t.checks` DEPOIS desta linha. Sem selar, essa falha não conta para o
@@ -229,6 +234,16 @@ const showUnc = args.includes('--uncovered') || args.includes('-u')
 // humano, os hogs e o total são suprimidos; o exit code segue a mesma regra (1 se há
 // falha/exceção).
 const asJson = args.includes('--json')
+// `--trace` / `--trace=<path>`: apêndice ao relatório normal — a árvore de
+// PARA-ONDE-FOI-A-PAREDE. Camada auto por fase: fase com provider (`eval`/`int`) →
+// regiões de wall-time (`boot`, `provider`, `entry`, `sweepFeature`, cada `sh:`) + o
+// interior do subprocesso via `--import trace-preload.mjs`; fase de motor in-process →
+// `probe.tree()`. Só escopo filtrado (mesmo motivo do `-v:3` largo). Com `=<path>` (ou
+// um positional logo após), grava o `trace.json` no formato Chrome Trace Event —
+// carregável em chrome://tracing e Perfetto.
+const _traceArg = args.find(a => a === '--trace' || a.startsWith('--trace='))
+const trace = !!_traceArg
+const traceOut = _traceArg?.includes('=') ? _traceArg.slice('--trace='.length) : null
 const timeoutArg = args.find(a => a.startsWith('--timeout=') || a.startsWith('-to='))
 const timeout = timeoutArg ? parseInt(timeoutArg.split('=')[1]) : 1000
 const positional = args.filter(a => !a.startsWith('-') && !/^(-v)?:?([0123])$/.test(a))
@@ -296,6 +311,26 @@ globalThis.utestVerbosity = verbosity
 const width = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
 const startAll = process.hrtime.bigint()
 
+// `--trace` só em escopo filtrado — o mesmo motivo do `-v:3` largo. Se largo, avisa e
+// segue sem traçar (o relatório normal roda igual).
+let T = null
+const doTrace = trace && (narrowScope || _isFile)
+if (trace && !doTrace) {
+  process.stderr.write('\x1b[33m--trace só em escopo filtrado — um path de arquivo/subdir, ou um termo\x1b[39m\n')
+}
+if (doTrace && (hogs || asJson)) {
+  process.stderr.write('\x1b[33m--trace ignorado junto de --hogs/--json\x1b[39m\n')
+}
+if (doTrace && !hogs && !asJson) {
+  T = await import('./trace.js')
+  globalThis.__utestTrace = T
+  // `performance.now()` aqui = ms desde o boot do processo (bun startup + os imports do
+  // topo deste arquivo). Passado como `lead`, vira o span inicial da árvore — o total
+  // passa a bater com o `time` real.
+  T.install(`utest ${rawTarget ? path.basename(rawTarget) : filterTerms.join(' ')}`, performance.now())
+  T.mark('boot')
+}
+
 // ─── Project boot ─────────────────────────────────────────────────────────────
 // Opt-in via TEST.yaml `boot: <path>` (resolved relative to the config file).
 // A target project may need its own globals registered (e.g. soml's `bootstrap()`)
@@ -304,6 +339,7 @@ if (fs.existsSync(configPath)) {
   const cfg = parseYaml(fs.readFileSync(configPath, 'utf8')) || {}
   if (cfg.boot) await import(path.resolve(path.dirname(configPath), cfg.boot))
 }
+if (T) T.end()   // fecha `boot`
 
 // ─── Phases ───────────────────────────────────────────────────────────────────
 // `TEST.yaml` pode declarar mais de uma fase (`unit`, `tui`, `integration`, `eval`, ...),
@@ -326,7 +362,7 @@ installProcessExitTrap()
 // do filho do `--watch` (`--no-stream`) — o watch roda em silêncio e só imprime o
 // relatório final, um por vez, no log.
 const noStream = args.includes('--no-stream')
-const streamPhase = process.stdout.isTTY && verbosity < 3 && !asJson && !hogs && !watch && !noStream
+const streamPhase = process.stdout.isTTY && verbosity < 3 && !asJson && !hogs && !watch && !noStream && !doTrace
 
 // ─── Roda UMA fase: scan (ou provider) → executa cada entry → devolve o nó da fase ────────
 async function runPhase(phase) {
@@ -335,13 +371,15 @@ async function runPhase(phase) {
   try {
     if (provider) {
       // Sem alvo pareado (`.eval.js` não tem `.js` irmão): `TestCache` cai em `readSelf`
-      // (sidecar em `.bot/.utest/`), o mesmo caminho que um `.t.js` sem alvo já usa — cache
+      // (sidecar em `.utest/`), o mesmo caminho que um `.t.js` sem alvo já usa — cache
       // de graça, nenhuma segunda implementação. Raiz do PROJETO (não `root`, que um alvo
       // de arquivo estreita pro diretório dele) — as entries de uma fase com provider não
       // são scoped por `root`, então o cache não pode ser, ou um `_isFile` numa árvore vira
       // sidecar espalhado pelo repo inteiro.
       cache = TestCache(path.dirname(configPath))
+      const _pn = T?.mark('provider')
       let provided = await provider()
+      if (_pn) T.end(_pn)
       // `scan()` já restringe por `root` andando o diretório; um provider (`eval`: as
       // entries vêm de `loadFronts()`, não de um walk) não ganha isso de graça — sem
       // filtrar aqui, `bun utest/utest.js plans/1-motor` varria o CORPUS INTEIRO, não só
@@ -385,6 +423,16 @@ async function runPhase(phase) {
   if (_isFile) {
     const absFile = path.resolve(rawTarget)
     entries = entries.filter(e => e.path === absFile)
+  }
+
+  // Recurso compartilhado pela fase (`registerPhaseSetup` via `boot:`) — a fase `eval` sobe
+  // UM Chromium aqui, uma vez, e o derruba no fim. Só quando há entries a rodar.
+  let phaseTeardown = null
+  const phaseSetup = phaseSetupFor(phase)
+  if (phaseSetup && entries.length) {
+    const _ps = T?.mark('phaseSetup ' + phase)
+    try { phaseTeardown = await phaseSetup() } catch (e) { process.stderr.write(`[utest] phaseSetup(${phase}) falhou: ${e?.message ?? e}\n`) }
+    if (_ps) T.end(_ps)
   }
 
   const main = { name: phase, tests: [], checks: [], state: 'pending', duration: 0 }
@@ -453,6 +501,7 @@ async function runPhase(phase) {
   // real FORA da janela que virava `suite.duration` — o arquivo aparecia como "1.7ms" no
   // relatório por arquivo mesmo levando 5s de parede real. `entryStart` cobre tudo.
   const entryStart = process.hrtime.bigint()
+  const _entryNode = T?.mark('entry ' + path.basename(entry.path))
 
   // ── Build context: base utils + target module exports ────────────────────
   const ctx = { ...baseCtx }
@@ -489,7 +538,9 @@ async function runPhase(phase) {
   let loadErr = targetErr
   try {
     if (!loadErr && executor) {
+      const _sw = provider ? T?.mark('sweepFeature') : null
       const steps = await executor(entry, { kind: kindOf(path.basename(entry.path)) })
+      if (_sw) T.end(_sw)
       for (const step of steps) test(step.name, step.fn, step.op)
     } else if (!loadErr) {
       await import(entry.path)
@@ -498,7 +549,24 @@ async function runPhase(phase) {
     test.end()
   }
 
+  // Fase de motor in-process (sem provider): instala `probe` sobre o registry + os
+  // internos do compilador para a sub-árvore de função aparecer no apêndice de trace.
+  let _probe = null
+  if (doTrace && !provider) {
+    try {
+      ;({ probe: _probe } = await import('./probe.js'))
+      if (globalThis.pixel?._registry) _probe(globalThis.pixel._registry)
+      const somlPath = path.resolve(path.dirname(configPath), 'soml.js')
+      if (fs.existsSync(somlPath)) {
+        const { __internals } = await import(somlPath)
+        if (__internals) _probe(__internals)
+      }
+      _probe.reset()
+    } catch { _probe = null }
+  }
+
   if (loadErr) {
+    if (_entryNode) T.end(_entryNode)
     const node = {
       name: path.basename(entry.path), state: 'exception', error: loadErr,
       address: path.relative(root, entry.path),
@@ -524,6 +592,14 @@ async function runPhase(phase) {
       if (v) process.stdout.write(v + '\n')
     }
   }
+
+  if (_probe) {
+    let out = ''
+    _probe.tree({ write: s => { out += s }, top: 25 })
+    suite._probeTree = out
+    _probe.restore()
+  }
+  if (_entryNode) T.end(_entryNode)
 
   suite.duration = Number(process.hrtime.bigint() - entryStart) / 1e6
   // O relatório mostra SEMPRE o tempo da ÚLTIMA execução real (`lastMs`), nunca o tempo
@@ -576,6 +652,12 @@ async function runPhase(phase) {
   }
 
   cache?.results?.flush()   // um write por fase, não por arquivo
+
+  if (phaseTeardown) {
+    const _pt = T?.mark('phaseTeardown ' + phase)
+    try { await phaseTeardown() } catch {}
+    if (_pt) T.end(_pt)
+  }
 
   main.duration = Number(process.hrtime.bigint() - phaseStart) / 1e6
   const s = summary(main)
@@ -759,6 +841,35 @@ if (hogs) {
   process.stdout.write(`\x1b[1m${covLine}\x1b[22m${' '.repeat(gap)}${counts}\n`)
 }
 
+// ─── Apêndice de trace (`--trace`) — a árvore de PARA-ONDE-FOI-A-PAREDE, DEPOIS do
+// relatório normal. Regiões de wall-time (pai) + a sub-árvore `probe.tree()` de cada
+// arquivo de motor.
+if (T) {
+  // Só vale o apêndice se ALGUM arquivo de fato rodou — um termo que não casou nada
+  // deixa a árvore com só `boot`/`provider` e nada a dizer.
+  const ranSomething = rendered.some(r => (r.main.tests || []).some(t => !t._cached))
+  if (ranSomething) {
+    process.stdout.write(`\n${rule}\n\x1b[1mtrace\x1b[22m — para onde foi a parede\n${rule}\n`)
+    T.tree({ width })
+    for (const { main } of rendered)
+      for (const t of (main.tests || []))
+        if (t._probeTree) {
+          process.stdout.write(`\n\x1b[1m${t.name}\x1b[22m \x1b[90m— grafo de função (probe)\x1b[39m\n`)
+          process.stdout.write(t._probeTree)
+        }
+    // A árvore acima é até AQUI; o `time` de parede ainda soma ~Ns de teardown do `bun`.
+    // `finalize` fecha um span `(runtime teardown)` no `process.on('exit')` e, com um path,
+    // grava o `trace.json` já com ele — o total do arquivo bate com o `time`.
+    const p = traceOut ? path.resolve(traceOut) : null
+    T.finalize(p)
+    if (p)
+      process.stdout.write(`${rule}\n\x1b[90m trace.json → \x1b[4m${link('file://' + p, p)}\x1b[24m  (chrome://tracing · perfetto.dev) — inclui o teardown\x1b[39m\n`)
+    process.stdout.write(`${rule}\n`)
+  } else {
+    process.stderr.write('\x1b[33m--trace: nenhum arquivo casou o escopo — nada a traçar\x1b[39m\n')
+  }
+}
+
 // exit code — independente do formato acima
 const grand = phaseResults.reduce((a, { main }) => {
   const s = summary(main); a.failed += s.failed; a.exception += s.exception; return a
@@ -821,7 +932,7 @@ if (watch) {
     // Skip for 1.5 s after a run ends — cache writes (utimesSync) trigger this too
     if (Date.now() - lastChildExit < 1500) return
     if (!/\.(js|ts|yaml|json|md)$/.test(filename)) return
-    if (/node_modules|\.bot[/\\]|\.utest[/\\]/.test(filename)) return
+    if (/node_modules|\.utest[/\\]/.test(filename)) return
     changed.add(filename)
     clearTimeout(debounce)
     debounce = setTimeout(rerun, 80)

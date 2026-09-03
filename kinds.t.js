@@ -1,7 +1,7 @@
 // O vocabulário de sufixos é o que decide se um arquivo entra na suíte e se ele
 // recebe o shim. Estava duplicado em cinco lugares; um esquecido não dá erro —
 // o arquivo só some, ou entra sem shim.
-import { testRe, loaderFilter, stripKind, kinds, register } from './kinds.js'
+import { testRe, loaderFilter, stripKind, kinds, register, registerPhaseSetup, phaseSetupFor } from './kinds.js'
 
 test('kinds: o vocabulário reconhecido', ({ test }) => {
 
@@ -58,6 +58,13 @@ test('kinds: o gancho de extensão', ({ test }) => {
     register('eval')
     register('eval')
     check(kinds().length, antes, 'não duplica um tipo já registrado')
+  })
+
+  test('registerPhaseSetup — um recurso que a fase monta 1×', ({ check }) => {
+    check(phaseSetupFor('bogus'), null, 'fase sem setup → null')
+    const fn = async () => () => {}
+    registerPhaseSetup('demo', fn)
+    check(phaseSetupFor('demo'), fn, 'depois de registrar, devolve a fn')
   })
 })
 

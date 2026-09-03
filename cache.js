@@ -273,9 +273,10 @@ export function TestCache(root) {
   }
 
   // ── Sem alvo: não há segundo comum para sincronizar, então o resultado vai
-  //    para um sidecar. O grafo de deps continua valendo.
+  //    para um sidecar em `.utest/`, junto do `results.json`. O grafo de deps continua
+  //    valendo.
   const selfFile = testPath =>
-    join(root, '.bot', '.utest', relative(root, testPath).replace(/[/\\]/g, '__') + '.json')
+    join(root, '.utest', relative(root, testPath).replace(/[/\\]/g, '__') + '.json')
 
   const readSelf = (testPath, extraDeps = []) => {
     try {

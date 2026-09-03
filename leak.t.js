@@ -87,4 +87,19 @@ test('vazamento: async solto', ({ test }) => {
     setTimeout(() => { chegou = true }, 50)
     check(chegou, false, 'no fim do corpo, o trabalho solto ainda não chegou')
   })
+
+  test('timer do timeout é limpo quando o trabalho ganha a corrida', async ({ check }) => {
+    // `runTest`/`runner.js` corriam `Promise.race([work, timeoutPromise])` e NUNCA
+    // limpavam o `setTimeout` quando `work` vencia. Para um passo de `eval`
+    // (`STEP_TIMEOUT` = 10s) isso segurava o event loop por 10s DEPOIS do relatório —
+    // o "teardown misterioso" que o `utest --trace` denunciou. Réplica da mecânica:
+    let timer = null
+    const raced = await Promise.race([
+      (async () => 'work')(),
+      new Promise((_, r) => { timer = setTimeout(() => r(new Error('Timeout')), 10_000) }),
+    ]).finally(() => { if (timer) clearTimeout(timer) })
+    check(raced, 'work', 'o trabalho venceu')
+    // se o timer não fosse limpo, `timer._destroyed` seria false e o loop ficaria vivo 10s
+    check(!!(timer && timer._destroyed), true, 'o timer foi cancelado, não fica pendurado')
+  })
 })
