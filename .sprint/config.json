@@ -1,0 +1,26 @@
+{
+  "project": "utest",
+  "created": "2026-09-03",
+  "schema": 1,
+  "paths": {
+    "plans": "plans",
+    "sprints": "sprints"
+  },
+  "test": "bun utest.js .",
+  "ignore": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "CHANGELOG.md",
+    "README.md",
+    "STATUS.md",
+    "HANDOFF.md",
+    "MOCKUP.md",
+    "TEST-MASTER-PLAN.md",
+    "TEST-MASTER-PLAN-2.md",
+    "TEST-PROBLEMS-I-FOUND.md",
+    "TEST-SPEC.md",
+    "TEST-SPEC-1.md",
+    "docs/SPRINT-EXPERIENCE.md"
+  ]
+}

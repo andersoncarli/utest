@@ -24,6 +24,7 @@ bot testio unit -v:2
 | `--force` \| `-f` | ignora o cache. **Escopo largo está fora do procedimento** (`soml/docs/CRASH-LOG.md`): o pico de spawn da fase `eval`/`int` sob pressão de memória dispara o `systemd-oomd` e mata o editor junto. Use só sobre conteúdo filtrado — um arquivo, um `plans/N/N.F.eval.js`. Exemplo canônico: `utest chromium --force` (a fase `chromium` sobe o browser uma vez só). |
 | `--json` | uma linha JSON por arquivo (`{phase,file,feature,state,cached,tests,checks,failCount,fails,ms}`), nada mais no stdout. `fails[]` = `[{line,code}]` dos checks vermelhos (só nos NÃO cacheados — o cache não guarda `checks[]`). Para consumidor de máquina — `sprint eval --sweep` usa isto. Exit 1 se há falha. |
 | `--hogs` \| `-h` | só a lista de arquivos >1000ms, cega a passou/falhou |
+| `--trace` \| `--trace=<path>` | **apêndice ao relatório normal: a árvore de PARA-ONDE-FOI-A-PAREDE.** Camada auto por fase: fase com provider (`eval`/`int`) → regiões de wall-time (`(bun+imports startup)`, `boot`, `provider`, `entry`, `sweepFeature`, cada `sh:`) + o INTERIOR do subprocesso (o `.eval.js` splica `bun --import trace-preload.mjs`; `input.check.mjs` marca `chromium`/`serve`/`bundle`/`open`/`gestos`/`teardown`); fase de motor in-process → `probe.tree()` sobre `pixel._registry` + `soml.__internals`. Tempos **alinhados à direita**; o `(untracked)` de cada nó é explícito e **a soma bate com o `time` real**. Com `=<path>` grava `trace.json` no formato **Chrome Trace Event** (chrome://tracing, perfetto.dev) — escrito no `process.on('exit')`, então inclui o `(runtime teardown)` do bun (~10s num processo que importou soml+sprint-cli+playwright). Só escopo filtrado; ignorado com `--hogs`/`--json`. Sob `--trace` o teto do `sh()` sobe de 10s p/ 60s (o kill mataria o filho antes do fragmento). |
 | `--uncovered` \| `-u` | lista arquivos-alvo sem `.t.js` pareado |
 | `--watch` \| `-w` | re-roda ao salvar, em SILÊNCIO (sem barra), RESPEITANDO o cache (sem `--force`). **Delta, não varredura**: se UM arquivo de teste mudou, roda só ele (sem scan); se mudou uma fonte, o run cacheado completo (o scan anda a árvore mas o cache pula quem não mudou). O relatório final aparece de uma vez, no log. |
 
@@ -110,6 +111,51 @@ coverage: 24%                          (68s 🐢49) ✘45 📄196 🧪1408 ✔36
 
 O par `received: false` / `expected: true` de um `check(expr, true)` não aparece nem em
 `-v:3` (a linha-fonte já diz tudo); um `check(x, 40)` continua mostrando os dois valores.
+
+### `--trace` — a árvore de PARA-ONDE-FOI-A-PAREDE
+
+Apêndice ao relatório normal, num escopo filtrado. Tempos alinhados à direita; o
+`(untracked)` de cada nó explícito; **a soma bate com o `time` real**. Um hog de
+`.eval.js` (`utest 3.2 --trace`) — o custo mora num `Bun.spawnSync` que dirige Chromium,
+então a folha `sh:` abre nos marcos que `input.check.mjs` declara:
+```
+trace — para onde foi a parede
+utest 3.2.eval.js               8147ms  100%
+  (bun + imports startup)       2037ms   25%
+  entry 3.2.eval.js             5842ms   72%
+    sweepFeature                5840ms   72%
+      sh: bash -c '             5797ms   71%
+        serve apps/hello…       1834ms   23%
+        open /                  1191ms   15%
+        gestos /?format=wc      1043ms   13%
+        chromium                 612ms    8%
+        bundle apps/hello…       525ms    6%
+        (untracked)              459ms    6%   ← bun startup do input.check + page.close
+  boot                          104ms    1%
+```
+Os segundos do "hog" são `waitForTimeout`/`Bun.sleep` deliberados do check, não o motor.
+Com `--trace=<path>` grava o `trace.json` — inclui o `(runtime teardown)` do bun (~10s
+num processo que importou soml+sprint-cli+playwright), invisível na árvore do terminal.
+
+Um hog de motor (`utest shell.t.js --trace`) — o custo É in-process, então a camada é
+`probe.tree()` sobre `pixel._registry` + `soml.__internals`:
+```
+shell.t.js — grafo de função (probe)
+processDict · 21 · self 4.1ms (43%) · total 9.6ms (100%)
+  factoryDefaultsFor · 42 · self 2.9ms (30%) · total 4.6ms (48%)
+    mergeProps · 84 · self 1.3ms (14%) · total 1.3ms (14%)
+```
+
+> O `--trace` denunciou um bug antigo: `runTest`/`loadFile` corriam
+> `Promise.race([work, setTimeout(…, eff)])` sem **nunca limpar o timer** — um
+> `setTimeout(10000)` por passo de `eval` segurava o event loop 10s além do relatório.
+> `clearTimeout` no `finally` das corridas (`utest.js`, `runner.js`); coberto em
+> `leak.t.js`.
+
+**Guarda de RAM nos checks de browser.** `connectOrLaunch` (`apps/eval-mouse/gestures.check.mjs`)
+é a única porta pro Chromium: flags leves (~−26% RSS) e, se `MemAvailable <
+CHECK_MIN_FREE_MB` (default 1600), o check PULA (`SEM RAM`, exit 0) — um passo de browser
+não fica vermelho por falta de RAM, e não dispara o `systemd-oomd` (`soml/docs/CRASH-LOG.md`).
 
 ## `.utest/results.json` — o histórico hierárquico, e por que quente == frio
 
@@ -286,6 +332,8 @@ para rodar `.eval.js` em ms em vez de minutos — esta documentado em
 | `scanner.js` | Descoberta de arquivos de teste (e dona do cache) |
 | `cache.js` | `TestCache(root)` — a regra do cache de tempo, o grafo de deps, e `results` (o histórico hierárquico `.utest/results.json` + o cross-check `fresh()`) |
 | `probe.js` | `probe(fn\|obj\|Map)` — instrumenta chamadas para achar hogs: conta, mede self-time (chamada aninhada nao conta duas vezes). DUAS vistas: `probe.report()` é a FLAT (uma linha por função, todos os callers somados — "quem custa"); `probe.tree()` / `probe.callers(name)` / `probe.edges()` é a de GRAFO (mantém a identidade do caller — "de ONDE, e quanto pesa cada contexto"). Complementa `spyOn` (que e para ASSERTAR sobre chamada, nao medir) |
+| `trace.js` | `install`/`mark`/`end`/`region` — cronômetro de REGIÕES de tempo aninhadas (o análogo de wall-time do `probe`: "que região custou", não "que função"). `wrapSpawns()` envolve `Bun.spawn*`; `region(name, fn, { fragPrefix })` enxerta os fragmentos que um subprocesso escreveu. O motor do `--trace` do `utest.js` |
+| `trace-preload.mjs` | carregado por `bun --import` que um `.eval.js` splica quando `UTEST_TRACE_PRELOAD` está no env; instala `globalThis.__uTrace` (region/mark) e despeja `<UTEST_TRACE_OUT>.<pid>` JSON no `exit`. Inerte sem o env |
 | `kinds.js` | Que sufixos o runner reconhece, e o `register()` que abre novos |
 | `viewer.js` | render do relatório: `phaseLine`/`phaseHogSecs` (linha-título `(Σs 🐢N)`, ordem `✘ 📄 🧪 ✔`), `progressBar` (barra viva), `compactFails` (vermelhos + 5 hogs numa linha, badge `🐢N`=segundos), `deltaTag` (só em hog que re-rodou), `checkView`/`fullView` |
 | `check.js` | Assertions e visual diffing |
@@ -311,3 +359,9 @@ para rodar `.eval.js` em ms em vez de minutos — esta documentado em
 - `cmds/testio/testio.js` — destino arquitetural do runner
 - `lib/adapters/io-engine.js` — IO log/cache/result projection
 - `tests/` — testes de integração E2E
+
+<!-- zss:begin -->
+## Gestão do trabalho
+
+Este projeto é gerido por **ZSS (Zero Scan Sprints)**: o estado do trabalho vive na ferramenta `sprint`, não em docs escritos à mão. Comece por `sprint boot`; o método está em [AGENTS.md](AGENTS.md) e em `.sprint/BOOT.md`.
+<!-- zss:end -->
