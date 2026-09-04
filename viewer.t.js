@@ -1,6 +1,6 @@
 // viewer.t.js — o relatório compacto (sprint 084c): barra por fase, vermelhos numa
 // linha, e o par `received: false / expected: true` que some.
-import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, deltaTag, fullView } from './viewer.js'
+import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, deltaTag, fullView, fileLine, displayLen, failLines } from './viewer.js'
 import cl from '../utils/src/cl.js'
 
 const strip = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[K/g, '')
@@ -229,6 +229,78 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check(out.includes('shell.t.js 🐢9'), true, 'o hog aparece no bloco com badge (8600ms → 9s)')
   })
 
+  test('a régua é em COLUNAS de terminal, não em unidades UTF-16', ({ check }) => {
+    // `'🐢'.length` é 2 (par surrogado) para 2 colunas; `'✔'.length` é 1 para 1 coluna. O
+    // que quebra a conta é o emoji com seletor de variação/ZWJ, onde `.length` conta 3-5
+    // para as mesmas 2 colunas.
+    check(displayLen('abc'), 3)
+    check(displayLen('🐢'), 2, 'emoji ocupa 2 colunas')
+    check(displayLen('✔'), 1, 'o check ocupa 1')
+    check(displayLen('\x1b[32m✔\x1b[39m'), 1, 'ANSI não conta')
+    check(displayLen('📄9 🧪133 ✔326'), 14)
+  })
+
+  test('fileLine cabe na largura pedida — o glifo não estoura a régua', ({ check }) => {
+    // A barra de título era medida com `.length`, e o `-v:2` ainda somava 2 de indentação
+    // por fora: cada linha de arquivo saía 2 colunas além da régua do relatório.
+    const t = { name: 'x.t.js', state: 'failed', checkCount: 97, failCount: 3, lastMs: 2400 }
+    for (const w of [40, 60, 80, 120]) {
+      check(displayLen(fileLine(t, { width: w })), w, `fileLine bate ${w} colunas exatas`)
+    }
+  })
+
+  test('fullView v2 — nenhuma linha passa da régua, contando a indentação do chamador', ({ check }) => {
+    const main = { tests: [
+      { name: 'a.t.js', state: 'passed', _cached: true, checkCount: 97, lastMs: 2400 },
+      { name: 'b.eval.js', state: 'failed', _cached: true, checkCount: 3, failCount: 2, lastMs: 80 },
+    ] }
+    const out = fullView(main, { verbosity: 2, width: 80, title: 'unit' })
+    // O chamador indenta 2 tudo que vem SOB a linha-título — é contra isso que a conta tem
+    // que fechar, não contra a linha crua.
+    const [head, ...rest] = out.split('\n')
+    check(displayLen(head) <= 80, true, 'a linha-título cabe')
+    for (const l of rest.filter(Boolean))
+      check(displayLen('  ' + l) <= 80, true, `cabe já indentada: ${strip(l).slice(0, 30)}`)
+  })
+
+  test('o vermelho cacheado se redesenha na largura de AGORA', ({ check }) => {
+    // O storage guarda o DADO do check, não a linha pronta: gravar formatado congelava a
+    // largura do terminal daquele run, e o replay estourava (ou encolhia) a régua depois.
+    const cached = { name: 'x.eval.js', state: 'failed', _cached: true, checkCount: 0, failCount: 1,
+      _failLines: [{ state: 'failed', lineCode: "check(alguma.expressao.bem.longa.que.nao.cabe(), 'valor')",
+        address: 'plans/5-apps/5.28-2-um-nome-de-feature-comprido.eval.js:110' }] }
+    for (const w of [60, 80, 140]) {
+      const out = failLines(cached, { width: w })
+      check(out.length, 1, `${w}: uma linha`)
+      check(displayLen(out[0]) <= w, true, `${w}: cabe na régua de agora`)
+    }
+    // E o conteúdo sobrevive aos dois cortes: o começo do código e o fim do endereço.
+    const wide = strip(failLines(cached, { width: 200 })[0])
+    check(wide.includes('check(alguma.expressao'), true, 'o código aparece')
+    check(wide.includes(':110'), true, 'a linha do endereço aparece')
+  })
+
+  test('uma linha pré-formatada de um results.json antigo é ignorada, não quebra', ({ check }) => {
+    const legado = { name: 'x.eval.js', state: 'failed', _cached: true, _failLines: ['✘ linha já pronta'] }
+    check(failLines(legado, { width: 80 }), [], 'string no lugar do dado não vira render')
+  })
+
+  test('fullView v2 — a visão por ARQUIVO: todo arquivo, verde inclusive', ({ check }) => {
+    // O `-v:1` só fala de quem pede atenção (vermelho/hog). O `-v:2` é a visão por arquivo:
+    // TODO arquivo ganha barra de título, do mais caro pro mais barato, com o tempo acima
+    // de 10ms. Sem isto, uma suíte verde imprimia as mesmas 3 linhas em v1, v2 e v3.
+    const main = { tests: [
+      { name: 'rapido.t.js', state: 'passed', _cached: true, checkCount: 5,  lastMs: 3 },
+      { name: 'lento.t.js',  state: 'passed', _cached: true, checkCount: 20, lastMs: 240 },
+    ] }
+    const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'unit' }))
+    check(out.includes('lento.t.js'), true, 'o arquivo verde aparece — v2 não é só vermelho')
+    check(out.includes('(240ms)'), true, 'o tempo acima de 10ms aparece')
+    check(out.includes('(3ms)'), false, 'abaixo de 10ms o tempo não vira coluna')
+    const lines = out.split('\n').filter(Boolean)
+    check(lines[1].startsWith('lento.t.js'), true, 'o mais caro vem primeiro')
+  })
+
   test('fullView v2 — escopo estreito: compacta + linha do erro + endereço, SEM log()', ({ check }) => {
     // `-v:2` (o nível que uma FRENTE/FEATURE assume) mostra, por baixo de cada vermelho, a
     // linha do check e o `f.js:NN` do stack — mas NÃO o `log()` do teste (isso é `-v:3`).
@@ -243,7 +315,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
       }],
     }] }
     const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'eval' }))
-    check(out.includes('x.eval.js ✘'), true, 'a linha compacta continua')
+    check(/x\.eval\.js .*✘1/.test(out), true, 'a barra de título do arquivo, com a contagem')
     check(out.includes('check(2 + 2, 5)'), true, 'a linha do check aparece')
     check(out.includes('x.eval.js:012'), true, 'o endereço do stack aparece')
     check(out.includes('saída engolida'), false, 'o log() do teste NÃO aparece no v2')

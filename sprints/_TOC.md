@@ -23,7 +23,7 @@ Legenda: ⚫ planejada · 🟠 implementando · 🟡 testada · 🟢 avaliada ·
 
 <details><summary>🟡 [1.3] sealed — check tardio reabre o veredito de quem o soltou — testada</summary>
 
-[003](sprints/003-a-regra-do-cache-sem-furo.report.md "report · Sprint retroativo. A regra do cache reescrita para não ter furo (bucket de segundo + grafo de deps); kinds.js nasce; leak.t.js trava o sealed.")
+[003](sprints/003-a-regra-do-cache-sem-furo.report.md "report · Sprint retroativo. A regra do cache reescrita para não ter furo (bucket de segundo + grafo de deps); kinds.js nasce; leak.t.js trava o sealed.") [007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.")
 
 </details>
 
@@ -51,7 +51,7 @@ Legenda: ⚫ planejada · 🟠 implementando · 🟡 testada · 🟢 avaliada ·
 
 <details><summary>🟡 [2.3] cacheFailure — vermelho reproduzível de eval não re-roda (sidecar) — testada</summary>
 
-[004](sprints/004-preparacao-do-eval-executor-entries-phasesetup.report.md "report · Sprint retroativo. Os três ganchos de extensão (executor/entries/phaseSetup), tuit.js, console-capture, cacheFailure e probe — a preparação do .eval.js.")
+[004](sprints/004-preparacao-do-eval-executor-entries-phasesetup.report.md "report · Sprint retroativo. Os três ganchos de extensão (executor/entries/phaseSetup), tuit.js, console-capture, cacheFailure e probe — a preparação do .eval.js.") [007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.")
 
 </details>
 
@@ -85,7 +85,7 @@ _(sem sprints ainda)_
 
 <details><summary>🟡 [3.3] kinds — vocabulário de sufixos num lugar; register() abre tipo nas 2 pontas — testada</summary>
 
-[003](sprints/003-a-regra-do-cache-sem-furo.report.md "report · Sprint retroativo. A regra do cache reescrita para não ter furo (bucket de segundo + grafo de deps); kinds.js nasce; leak.t.js trava o sealed.")
+[003](sprints/003-a-regra-do-cache-sem-furo.report.md "report · Sprint retroativo. A regra do cache reescrita para não ter furo (bucket de segundo + grafo de deps); kinds.js nasce; leak.t.js trava o sealed.") [007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.")
 
 </details>
 
@@ -97,7 +97,7 @@ _(sem sprints ainda)_
 
 <details><summary>🟠 [3.5] cobertura — todo arquivo do utest mapeado em TEST.yaml, sem leaks — implementando</summary>
 
-_(sem sprints ainda)_
+[008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa")
 
 </details>
 
@@ -107,7 +107,7 @@ _(sem sprints ainda)_
 
 <details><summary>🟡 [4.1] relatório compacto — phaseLine (Σs 🐢N), compactFails, verbosidade 0-3 — testada</summary>
 
-[001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [002](sprints/002-desacople-do-bot-e-a-evidencia-do-vazamento.report.md "report · Sprint retroativo. Desacople de bot/lib para utils/src, primeiros self-tests, e a evidência documentada do vazamento assíncrono cross-arquivo.") [006](sprints/006-report-compacto-probe-grafo-results-json.report.md "report · Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe grafo (tree/callers/edges), results.json (índice + quente==frio), verbosidade derivada do escopo.")
+[001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [002](sprints/002-desacople-do-bot-e-a-evidencia-do-vazamento.report.md "report · Sprint retroativo. Desacople de bot/lib para utils/src, primeiros self-tests, e a evidência documentada do vazamento assíncrono cross-arquivo.") [006](sprints/006-report-compacto-probe-grafo-results-json.report.md "report · Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe grafo (tree/callers/edges), results.json (índice + quente==frio), verbosidade derivada do escopo.") [008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa")
 
 </details>
 
@@ -147,25 +147,25 @@ _(sem sprints ainda)_
 
 <details><summary>🟡 [5.2] trace — cronômetro de regiões de wall-time; (untracked) explícito — testada</summary>
 
-_(sem sprints ainda)_
+[007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.")
 
 </details>
 
 <details><summary>🟡 [5.3] trace de subprocesso — trace-preload.mjs via bun --import, enxerto de fragmento — testada</summary>
 
-_(sem sprints ainda)_
+[007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.")
 
 </details>
 
 <details><summary>🟡 [5.4] trace.json — Chrome Trace Event; (runtime teardown) no exit — testada</summary>
 
-_(sem sprints ainda)_
+[007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.")
 
 </details>
 
 <details><summary>🟠 [5.5] --trace liga probe OU trace conforme a fase; teto do sh() sobe p/ 60s — implementando</summary>
 
-_(sem sprints ainda)_
+[007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.") [008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa")
 
 </details>
 

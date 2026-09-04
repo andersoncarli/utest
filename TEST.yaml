@@ -6,6 +6,11 @@ exclude:
 unit:
   exclude:
     - "**/*.it.js"
+    # INFRA — não é fonte a cobrir: `index.js` é um `import` de uma linha e
+    # `paths.js` são três consts. Contá-las como não-cobertas afunda a métrica
+    # sem apontar dívida real.
+    - "index.js"
+    - "paths.js"
   include:
     - "**/*.js"
 integration:

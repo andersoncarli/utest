@@ -12,11 +12,60 @@ const gray = s => `\x1b[90m${s}\x1b[39m`
 export const link = (uri, text) => `\x1b]8;;${uri}\x07${text}\x1b]8;;\x07`
 export const visibleLen = s => stripAnsi(String(s || '')).replace(/\x1b\]8;;[^\x07]*\x07/g, '').length
 
+// Largura em COLUNAS de terminal, não em unidades UTF-16. `'🐢'.length` é 2 (par
+// surrogado) e ele ocupa 2 colunas — bate por acidente; `'✔'.length` é 1 e ele ocupa 1.
+// Mas a coincidência acaba num emoji com seletor de variação ou ZWJ, onde `.length` conta
+// 3-5 para 2 colunas de tela. Contar por CODEPOINT e somar 2 só para os intervalos largos
+// (emoji e CJK) é o que mantém a régua honesta.
+const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹯＀-｠￠-￦]|[\u{1F300}-\u{1FAFF}]|[\u{1F000}-\u{1F2FF}]/u
+export const displayLen = (s) => {
+  let n = 0
+  for (const ch of stripAnsi(s).replace(/\x1b\]8;;[^\x07]*\x07/g, '')) {
+    if (ch === '️' || ch === '‍' || ch === '︎') continue   // VS16 / ZWJ / VS15 não ocupam coluna
+    n += WIDE.test(ch) ? 2 : 1
+  }
+  return n
+}
+
+// O `right` (o endereço, o tempo) é a informação de MENOR volume e MAIOR valor — é ele que
+// se mantém; quem cede é o `left`, cortado com `…`. Sem isto uma expressão longa de `check()`
+// empurrava a linha para além da régua, e o relatório vazava do terminal.
 function dotfill(left, fill, right, width = 80) {
-  const l = stripAnsi(left).length
-  const r = stripAnsi(right || '').length
+  const r = displayLen(right || '')
+  const room = width - r - 1                       // -1 = pelo menos um caractere de fill
+  let l = displayLen(left)
+  if (l > room) { left = truncEnd(left, room); l = displayLen(left) }
   const gap = Math.max(1, width - l - r)
   return `${left}${gray(fill.repeat(gap))}${right || ''}`
+}
+
+// Corta pelo COMEÇO — para caminho/endereço, onde o fim (`…nome.eval.js:045`) é o que
+// identifica.
+function truncStart(s, max) {
+  const plain = stripAnsi(String(s || ''))
+  if (displayLen(plain) <= max) return plain
+  let out = '', n = 0
+  for (const ch of [...plain].reverse()) {
+    const w = displayLen(ch)
+    if (n + w > max - 1) break
+    out = ch + out; n += w
+  }
+  return '…' + out
+}
+
+// Corta preservando os escapes ANSI já abertos (some com a cor no fim, que é o que o
+// `\x1b[39m` de quem montou a string fecha depois).
+function truncEnd(s, max) {
+  if (max <= 1) return '…'
+  let out = '', n = 0
+  const re = /(\x1b\[[0-9;]*m)|(\x1b\]8;;[^\x07]*\x07)|([\s\S])/gu
+  for (let m; (m = re.exec(String(s)));) {
+    if (m[1] || m[2]) { out += m[0]; continue }
+    const w = displayLen(m[3])
+    if (n + w > max - 1) break
+    out += m[3]; n += w
+  }
+  return out + '…'
 }
 
 // Lazy getters: evaluated per-access so cl.nocolor is respected at render time
@@ -34,10 +83,10 @@ export const glyphs = {
 export const JUSTIFY_MS = 100
 export const HOG_MS = 1000
 
-const RUNNER   = /utest2?\.js/i
+const RUNNER   = /utest\.js/i
 // Match exact runner/framework filenames (anchored) and node:/bun:/internal/ prefixes.
 // Avoid loose patterns like `test\.js` that would also match `io-engine.test.js`.
-const INTERNAL = /^(check|runner|worker|shims|setup|withTempDir)\.js$|^utest2?\.js$|^test\.js$|node:|bun:|internal\//i
+const INTERNAL = /^(check|runner|worker|shims|setup|withTempDir)\.js$|^utest\.js$|^test\.js$|node:|bun:|internal\//i
 
 // ─── Check View ───────────────────────────────────────────────
 function checkView(c, { width = 80 } = {}) {
@@ -63,7 +112,10 @@ function checkView(c, { width = 80 } = {}) {
   }
 
   const left = `${glyphs.failed} ${lineCode || 'check()'}`
-  let out = dotfill(left, '.', ' '+gray(addr), width)
+  // O endereço é longo em nome de arquivo de feature (`5.28-2-o-atalho-…eval.js:045`) e
+  // roubava a linha inteira do `check()`, que é o que se lê primeiro. Ele cede primeiro,
+  // pela ESQUERDA (o `:NNN` e o fim do nome são o que identifica), e só então o código.
+  let out = dotfill(left, '.', ' ' + gray(truncStart(addr, Math.max(16, Math.floor(width * 0.45)))), width)
   // `check(expr, true)` que falhou: `received: false` / `expected: true` não acrescenta
   // nada — a expressão já está no `lineCode` acima. `check.js` guarda `a`/`b` já como
   // string (`repr()`), então a comparação é contra `'false'`/`'true'`. Qualquer outro par
@@ -139,6 +191,60 @@ function gatherExceptions(t, out = []) {
   if (t.state === 'exception' && t.error) out.push(t)
   for (const child of t.tests || []) gatherExceptions(child, out)
   return out
+}
+
+// A barra de título de UM arquivo: `nome ✔97 ✘3 ------------------ (243ms)`. É a linha
+// que o `-v:2` mostra por arquivo — a mesma forma que o `view()` monta no `-v:3`, mas
+// derivada do REGISTRO (`checkCount`/`failCount`/`lastMs`), não da árvore viva, para o
+// arquivo que veio do cache render igual ao que acabou de rodar.
+export function fileLine(t, { width = 80, minMs = 10 } = {}) {
+  const ms = t.lastMs || Math.round(t.duration || 0)
+  const s = summary(t)
+  const passed = s.passed || t.checkCount || 0
+  const failed = (s.failed || 0) + (s.exception || 0) || (t.state !== 'passed' ? (t.failCount || 1) : 0)
+  const counts = `${glyphs.passed}${passed}${failed ? ` ${glyphs.failed}${failed}` : ''}`
+  // Abaixo do limiar o tempo não é informação — só a coluna que ele empurraria.
+  const time = ms >= minMs ? ` (${ms}ms)${ms > HOG_MS ? ` ${glyphs.hog}` : ''}` : ''
+  return dotfill(`${t.name} ${counts} `, '-', time, width)
+}
+
+// O bloco de erro de UM arquivo vermelho, já indentado: a linha do check/exceção e o
+// endereço no stack. Um arquivo que veio do CACHE não tem `checks`/`error` vivos — só as
+// linhas que a última execução real rendeu (`_failLines`, do storage). Renderizar a partir
+// delas é o que mantém `-v:2` idêntico quente e frio, a mesma regra que o tempo já segue.
+// `indent:false` é a forma que vai para o STORAGE — cru, sem os 4 espaços que só o
+// relatório quer; quem grava não pode assumir a moldura de quem lê.
+export function failLines(t, { width = 80, indent = true } = {}) {
+  const pad = block => indent ? block.split('\n').map(l => `    ${l}`).join('\n') : block
+  // O que o storage guarda é o DADO do check (`failInfo`), não a linha pronta: a largura do
+  // terminal de agora não é a de quando o resultado foi gravado, e uma linha pré-formatada
+  // chegaria estourando (ou curta demais) toda vez que a janela mudasse de tamanho.
+  // Um `results.json` gravado por uma versão anterior guarda a linha pronta (string) em vez
+  // do dado; ela não sabe se redesenhar, então é ignorada e o arquivo re-renderiza no
+  // próximo run de verdade.
+  const stored = (t._failLines || []).filter(c => c && typeof c === 'object')
+  const blocks = stored.length
+    ? stored.map(c => checkView(c, { width: width - 4 }))
+    : [
+      ...gatherExceptions(t).map(ex => errorView(ex.error, { width: width - 4 })),
+      ...gatherChecks(t).filter(c => c.state !== 'passed').map(c => checkView(c, { width: width - 4 })),
+    ]
+  return blocks.filter(Boolean).map(pad)
+}
+
+// O mínimo que `checkView` precisa para redesenhar a linha de um vermelho numa rodada
+// futura, em qualquer largura. Vai para o `results.json`.
+export function failData(t) {
+  return [
+    ...gatherExceptions(t).map(ex => ({
+      state: 'exception', error: { message: ex.error?.message ?? String(ex.error), stack: ex.error?.stack },
+    })),
+    ...gatherChecks(t).filter(c => c.state !== 'passed').map(c => ({
+      state: c.state, a: c.a, b: c.b,
+      lineCode: c.lineCode || extractLineCode(c.error || c.op?.error),
+      address: c.address || extractAddr(c.error || c.op?.error),
+    })),
+  ]
 }
 
 // Testes-folha acima de JUSTIFY_MS, MAIS FUNDOS PRIMEIRO — ordenado do mais lento pro menos,
@@ -392,7 +498,7 @@ export function progressBar(phase, done, total, file, { width = 80 } = {}) {
   const bar = '█'.repeat(filled) + '░'.repeat(BAR_W - filled)
   const left = `${cl.bold(phase.toUpperCase())} ${gray(`[${bar}]`)} `
   const right = ` ${gray(`${done}/${total}`)}`
-  const room = Math.max(0, width - stripAnsi(left).length - stripAnsi(right).length)
+  const room = Math.max(0, width - displayLen(left) - displayLen(right))
   const name = String(file || '')
   const shown = name.length > room ? '…' + name.slice(-(room - 1)) : name
   return dotfill(left + shown, '.', right, width)
@@ -487,9 +593,13 @@ export function compactFails(main, { width = 80 } = {}) {
 //
 // **v0-v1** (escopo largo): a linha-título da fase (`phaseLine`) e — se há vermelho OU hog —
 //   os arquivos que pedem atenção numa linha compacta (`compactFails`). NENHUM `checkView`.
-// **v2** (o nível que escopo estreito assume): o mesmo, MAIS a linha do erro + o endereço no
-//   stack (`checkView`) por baixo de cada arquivo vermelho. SEM o output do teste (`log()`).
-// **v3**: v2 + o output do teste. `view()` decide isso pelo `verbosity`.
+// **v2** (o nível que escopo estreito assume): a visão POR ARQUIVO — a linha-título da fase
+//   e, sob ela, uma barra por arquivo (`fileLine`: nome, `✔N ✘M`, dotfill, tempo acima de
+//   10ms), do mais caro pro mais barato, com a linha do erro (`checkView`) sob cada
+//   vermelho. SEM o output do teste (`log()`). Responde "quais arquivos e quanto tempo"
+//   sem descer aos testes individuais.
+// **v3**: v2 + a árvore por TESTE e o output do `log()`. `view()` decide isso pelo
+//   `verbosity`.
 export function fullView(main, op = {}) {
   let verbosity = op.verbosity ?? 1
   const width   = op.width    ?? process.stdout.columns ?? 80
@@ -512,27 +622,20 @@ export function fullView(main, op = {}) {
   }
 
   if (verbosity === 2) {
-    // Escopo estreito: a linha compacta + a linha do erro e o endereço no stack por baixo de
-    // cada arquivo vermelho. O `log()` do teste fica para o `-v:3`.
+    // A visão POR ARQUIVO: uma barra de título por arquivo (nome, contagem, tempo) e, sob
+    // cada vermelho, a linha do erro e o endereço no stack. É o degrau entre o resumo por
+    // fase (v1) e a árvore por teste (v3) — quem quer saber "quais arquivos, quanto tempo"
+    // sem ler 1300 nomes de teste. O `log()` do teste fica para o `-v:3`.
     const lines = [phaseLine(main, { width, title })]
-    const cf = compactFails(main, { width: width - 2 })
-    if (cf) lines.push(cf)
-    // Mesma ordem do bloco compacto — vermelhos do mais lento pro menos.
+    const files = terms.length
+      ? (main.tests || []).filter(t => hasDeepMatch(t, terms))
+      : (main.tests || [])
+    // `width - 2`: o chamador indenta 2 tudo que vem sob a linha-título da fase (que é a
+    // única a ir à largura CHEIA). Medir contra `width` aqui estourava a régua em 2 colunas.
     const msOf = t => t.lastMs || Math.round(t.duration || 0)
-    const bad = (main.tests || []).filter(t => t.state !== 'passed').sort((a, b) => msOf(b) - msOf(a))
-    for (const t of bad) {
-      const errs = gatherChecks(t).filter(c => c.state !== 'passed')
-      const exs  = gatherExceptions(t)
-      if (!errs.length && !exs.length) continue
-      lines.push(gray(`  ${t.name}`))
-      for (const ex of exs) {
-        const v = errorView(ex.error, { width: width - 4 })
-        if (v) lines.push(v.split('\n').map(l => `    ${l}`).join('\n'))
-      }
-      for (const c of errs) {
-        const v = checkView(c, { width: width - 4 })
-        if (v) lines.push(v.split('\n').map(l => `    ${l}`).join('\n'))
-      }
+    for (const t of [...files].sort((a, b) => msOf(b) - msOf(a))) {
+      lines.push(fileLine(t, { width: width - 2 }))
+      lines.push(...failLines(t, { width: width - 2 }))
     }
     return lines.join('\n')
   }
@@ -560,7 +663,7 @@ export function fullView(main, op = {}) {
     hogs              && `${glyphs.hog}${hogs}`,
   ].filter(Boolean).join('  ')
   const footRight = gray(`${Math.round(main.duration || 0)}ms`)
-  const gap = Math.max(1, width - stripAnsi(footLeft).length - stripAnsi(footRight).length) - 1
+  const gap = Math.max(1, width - displayLen(footLeft) - displayLen(footRight)) - 1
   lines.push(`${footLeft}${' '.repeat(gap)}${footRight}`)
 
   return lines.join('\n')
@@ -606,4 +709,4 @@ export function hogReport(mains, { width = 80, standalone = false } = {}) {
   return lines.join('\n')
 }
 
-export default { view, fullView, summary, glyphs, JUSTIFY_MS, HOG_MS, hogReport, sumLeafDurations, bgPhase, phaseLine, phaseMs, phaseHogSecs, progressBar, compactFails, failInfo, deltaTag }
+export default { view, fullView, failLines, failData, fileLine, summary, glyphs, JUSTIFY_MS, HOG_MS, hogReport, sumLeafDurations, bgPhase, phaseLine, phaseMs, phaseHogSecs, progressBar, compactFails, failInfo, deltaTag }

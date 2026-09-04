@@ -83,34 +83,34 @@ renderiza logs e testes intermediarios capturados pelo worker.
 ## Board
 
 <!-- board:begin -->
-### [1] core — Núcleo — coletor, asserção, veredito · implementando · sprint 4  [🟡🟡🟡🟠]
+### [1] core — Núcleo — coletor, asserção, veredito · implementando · sprint 7  [🟡🟡🟡🟠]
 - 🟡 **[1.1] test() — coletor de árvore + isolamento por arquivo (begin/end)** → [1.1](plans/1-core/1.1-test-coletor-de-rvore-isolamento-por-arquivo-begin-end-.md)
 - 🟡 **[1.2] check() — asserções por repr, checkFail / checkException** → [1.2](plans/1-core/1.2-check-asser-es-por-repr-checkfail-checkexception.md)
 - 🟡 **[1.3] sealed — check tardio reabre o veredito de quem o soltou** → [1.3](plans/1-core/1.3-sealed-check-tardio-reabre-o-veredito-de-quem-o-soltou.md)
 - 🟠 **[1.4] console-capture — console.* não vaza de teste verde** → [1.4](plans/1-core/1.4-console-capture-console-n-o-vaza-de-teste-verde.md)
 
-### [2] cache — Cache — a regra sem furo · implementando · sprint 6  [🟡🟡🟡🟡🟡]
+### [2] cache — Cache — a regra sem furo · implementando · sprint 7  [🟡🟡🟡🟡🟡]
 - 🟡 **[2.1] regra do mtime — segundo cravado + ms = contagem de checks; conjunto pareado** → [2.1](plans/2-cache/2.1-regra-do-mtime-segundo-cravado-ms-contagem-de-checks-conjunto-pareado.md)
 - 🟡 **[2.2] grafo de deps — IMPORT_RE (inclui efeito colateral), extraRoots, ciclo, atime** → [2.2](plans/2-cache/2.2-grafo-de-deps-import-re-inclui-efeito-colateral-extraroots-ciclo-atime.md)
 - 🟡 **[2.3] cacheFailure — vermelho reproduzível de eval não re-roda (sidecar)** → [2.3](plans/2-cache/2.3-cachefailure-vermelho-reproduz-vel-de-eval-n-o-re-roda-sidecar-.md)
 - 🟡 **[2.4] results.json — histórico por fase; índice (utest 3.2 sem scan) + cross-check fresh()** → [2.4](plans/2-cache/2.4-results-json-hist-rico-hier-rquico-por-fase-ndice-utest-3-2-sem-scan-cross-check-fresh-.md)
 - 🟡 **[2.5] output idêntico quente/frio — render lê sempre do storage** → [2.5](plans/2-cache/2.5-output-id-ntico-quente-frio-render-l-sempre-do-storage.md)
 
-### [3] scan — Scan — descoberta, pareamento, vocabulário · implementando · sprint 5  [🟡🟡🟡🟠🟠]
+### [3] scan — Scan — descoberta, pareamento, vocabulário · implementando · sprint 8  [🟡🟡🟡🟠🟠]
 - 🟡 **[3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão)** → [3.1](plans/3-scan/3.1-walk-por-glob-test-yaml-exclude-global-fase-include-padr-o-.md)
 - 🟡 **[3.2] findTarget — pareamento teste↔alvo, descasque progressivo, .eval.js↔.md de feature** → [3.2](plans/3-scan/3.2-findtarget-pareamento-teste-alvo-descasque-progressivo-eval-js-md-de-feature.md)
 - 🟡 **[3.3] kinds — vocabulário de sufixos num lugar; register() abre tipo nas 2 pontas** → [3.3](plans/3-scan/3.3-kinds-vocabul-rio-de-sufixos-num-lugar-register-abre-tipo-nas-2-pontas.md)
 - 🟠 **[3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup** → [3.4](plans/3-scan/3.4-ganchos-de-extens-o-registerexecutor-registerentries-registerphasesetup-eval-js-tuit-chromium-1x-.md)
 - 🟠 **[3.5] cobertura — todo arquivo do utest mapeado em TEST.yaml, sem leaks** → [3.5](plans/3-scan/3.5-cobertura-sources-sem-t-js-pareado-uncovered-.md)
 
-### [4] report — Report — compacto por desenho, expressivo quando precisa · implementando · sprint 6  [🟡🟡🟠🟠🟠]
+### [4] report — Report — compacto por desenho, expressivo quando precisa · implementando · sprint 8  [🟡🟡🟠🟠🟠]
 - 🟡 **[4.1] relatório compacto — phaseLine (Σs 🐢N), compactFails, verbosidade 0-3** → [4.1](plans/4-report/4.1-relat-rio-compacto-phaseline-s-n-compactfails-verbosidade-0-3-derivada-do-escopo.md)
 - 🟡 **[4.2] hogs — badge 🐢N = segundos sempre; deltaTag só em hog que re-rodou** → [4.2](plans/4-report/4.2-hogs-badge-n-segundos-sempre-deltatag-s-em-hog-que-re-rodou-hogs-modo-parte.md)
 - 🟠 **[4.3] drill-in — escopo estreito re-executa e sobe de nível; storage é o índice** → [4.3](plans/4-report/4.3-drill-in-escopo-estreito-re-executa-e-sobe-de-n-vel-storage-o-ndice-utest-3-2-sem-scan-.md)
 - 🟠 **[4.4] progressBar + --watch (delta, não varredura) + OSC-8 hyperlink no tip** → [4.4](plans/4-report/4.4-progressbar-watch-delta-n-o-varredura-osc-8-hyperlink-no-tip.md)
 - 🟠 **[4.5] --json — uma linha por arquivo p/ máquina (sprint eval --sweep)** → [4.5](plans/4-report/4.5--json-uma-linha-por-arquivo-p-m-quina-sprint-eval-sweep-.md)
 
-### [5] profiling — Profiling — que função custou, que região custou · implementando · sprint 6  [🟡🟡🟡🟡🟠]
+### [5] profiling — Profiling — que função custou, que região custou · implementando · sprint 8  [🟡🟡🟡🟡🟠]
 - 🟡 **[5.1] probe — instrumenta chamadas p/ hogs: 2 vistas (flat report / grafo tree)** → [5.1](plans/5-profiling/5.1-probe-instrumenta-chamadas-p-hogs-2-vistas-flat-report-grafo-tree-callers-edges-self-time.md)
 - 🟡 **[5.2] trace — cronômetro de regiões de wall-time; (untracked) explícito** → [5.2](plans/5-profiling/5.2-trace-cron-metro-de-regi-es-de-wall-time-install-mark-end-region-wrapspawns-untracked-expl-cito.md)
 - 🟡 **[5.3] trace de subprocesso — trace-preload.mjs via bun --import, enxerto de fragmento** → [5.3](plans/5-profiling/5.3-trace-de-subprocesso-trace-preload-mjs-via-bun-import-enxerto-de-fragmento-na-folha-sh-.md)

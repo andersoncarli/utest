@@ -39,7 +39,7 @@ export function test(name, fn = () => {}, op = {}) {
   return t
 }
 
-// ─── Isolated scope API (used by utest2.js) ─────────────────────
+// ─── Isolated scope API ─────────────────────────────────────────
 // Call test.begin() before import(file), test.end() after.
 // All top-level test() calls in the file go into the returned root.
 test.begin = (name = 'root') => {

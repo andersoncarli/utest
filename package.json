@@ -1,12 +1,11 @@
 {
   "name": "utest",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "",
   "main": "index.js",
   "bin": {
-    "utest": "./utest.js",
-    "utest2": "./utest2.js"
+    "utest": "./utest.js"
   },
   "scripts": {
     "dev": "bun --hot index.js",

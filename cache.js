@@ -117,13 +117,17 @@ export function TestCache(root) {
           phase: ph, relpath, abspath: join(projectRoot, relpath),
         })))
     },
-    record: (phase, p, { ms, tests, checks, failCount, state, extraDeps = [] } = {}) => {
+    record: (phase, p, { ms, tests, checks, failCount, state, failLines, extraDeps = [] } = {}) => {
       phaseFiles(phase)[relative(projectRoot, p)] = {
         ms: Math.round(ms || 0),
         tests: tests ?? 0,
         checks: checks ?? 0,
         failCount: failCount ?? 0,
         state: state || 'passed',
+        // O bloco de erro JÁ RENDERIZADO da última execução real. Um vermelho reusado do
+        // cache não tem `checks`/`error` vivos para reconstruir, e sem isto o `-v:2`
+        // degradava para o `-v:1` silenciosamente — a linha compacta e mais nada.
+        failLines: failLines?.length ? failLines : undefined,
         mtime: mtimeOf(p),
         depsNewest: newestDep(p, extraDeps),
         at: Date.now(),

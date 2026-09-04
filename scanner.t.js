@@ -115,6 +115,17 @@ test('scan: o que entra na suíte', ({ test }) => {
     cleanup()
   })
 
+  test('um include largo não faz a fonte sumir da cobertura', ({ check }) => {
+    // `include: '**/*.js'` (a fase `unit` deste repo) casa a FONTE junto do teste. Quem
+    // decide o que é teste é o kind, não o include — mandar a fonte para `tests` a fazia
+    // ser filtrada por `isTest` depois e sumir das duas listas: cobertura sempre 100%.
+    const d = fixture({ 'm.js': '', 'm.t.js': '', 'sozinho.js': '' })
+    const r = run(d, 'exclude:\n  - node_modules/**\nunit:\n  include:\n    - "**/*.js"\n')
+    check(r.names, ['m.t.js'])
+    check(r.uncoveredNames, ['sozinho.js'])
+    cleanup()
+  })
+
   test('o exclude global tira do caminho', ({ check }) => {
     const d = fixture({ 'a.t.js': '', 'node_modules/lib/b.t.js': '' })
     check(run(d).names, ['a.t.js'])

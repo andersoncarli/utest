@@ -20,7 +20,7 @@ import test from './test.js'
 import { check, checkFail, checkException } from './check.js'
 import { scan, findTarget } from './scanner.js'
 import { TestCache } from './cache.js'
-import { view, fullView, summary, glyphs, checkView, hogReport, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, HOG_MS } from './viewer.js'
+import { view, fullView, failLines, failData, summary, glyphs, checkView, hogReport, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, displayLen, HOG_MS } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
          beforeEach, afterEach, withTempDir} from './shims.js'
 
@@ -238,9 +238,11 @@ const asJson = args.includes('--json')
 // PARA-ONDE-FOI-A-PAREDE. Camada auto por fase: fase com provider (`eval`/`int`) →
 // regiões de wall-time (`boot`, `provider`, `entry`, `sweepFeature`, cada `sh:`) + o
 // interior do subprocesso via `--import trace-preload.mjs`; fase de motor in-process →
-// `probe.tree()`. Só escopo filtrado (mesmo motivo do `-v:3` largo). Com `=<path>` (ou
-// um positional logo após), grava o `trace.json` no formato Chrome Trace Event —
-// carregável em chrome://tracing e Perfetto.
+// `probe.tree()`. Essa DISSECAÇÃO é só em escopo filtrado (mesmo motivo do `-v:3` largo:
+// re-executa). Escopo largo responde a outra pergunta — "que parte da suíte custa" — e a
+// responde agregando por FRENTE/FEATURE o tempo já gravado, sem instrumentar nada. Com
+// `=<path>` (ou um positional logo após), grava o `trace.json` no formato Chrome Trace
+// Event — carregável em chrome://tracing e Perfetto.
 const _traceArg = args.find(a => a === '--trace' || a.startsWith('--trace='))
 const trace = !!_traceArg
 const traceOut = _traceArg?.includes('=') ? _traceArg.slice('--trace='.length) : null
@@ -292,8 +294,10 @@ const configPath = [root, process.cwd()].map(d => path.resolve(d, 'TEST.yaml')).
 // **Escopo estreito É o pedido de drill-in** — RE-EXECUTA (`force`) e sobe de nível, em dois
 // degraus:
 //   - uma FRENTE / FEATURE (um diretório que não é a raiz, ou um termo de filtro que casa
-//     vários) → `-v:2`: a linha do erro + o endereço no stack por baixo de cada vermelho.
-//   - um ARQUIVO só (`utest 3.2.eval.js`) → `-v:3`: `-v:2` + o output do teste (`log()`).
+//     vários) → `-v:2`: a visão POR ARQUIVO — uma barra de título por arquivo (nome,
+//     contagem, tempo acima de 10ms), mais a linha do erro sob cada vermelho.
+//   - um ARQUIVO só (`utest 3.2.eval.js`) → `-v:3`: `-v:2` + a árvore por TESTE e o
+//     output do `log()`. Sem nada para rodar (tudo cache), o `-v:3` cai no `-v:2`.
 // Um `-v:N` explícito na linha manda — `utest 3.2.eval.js -v:1` respeita o 1.
 //
 // Escopo LARGO (`.`, a raiz, uma fase inteira) NÃO fura o cache nem com `-v:3` — ali seria
@@ -311,13 +315,11 @@ globalThis.utestVerbosity = verbosity
 const width = parseInt(process.env.WIDTH || '') || process.stdout.columns || 80
 const startAll = process.hrtime.bigint()
 
-// `--trace` só em escopo filtrado — o mesmo motivo do `-v:3` largo. Se largo, avisa e
-// segue sem traçar (o relatório normal roda igual).
+// A INSTRUMENTAÇÃO (regiões + `probe`) só em escopo filtrado — o mesmo motivo do `-v:3`
+// largo: ela força re-execução. Um `--trace` largo não fica sem resposta; cai na agregação
+// por frente/feature lá embaixo, que lê o tempo já gravado e não re-roda nada.
 let T = null
 const doTrace = trace && (narrowScope || _isFile)
-if (trace && !doTrace) {
-  process.stderr.write('\x1b[33m--trace só em escopo filtrado — um path de arquivo/subdir, ou um termo\x1b[39m\n')
-}
 if (doTrace && (hogs || asJson)) {
   process.stderr.write('\x1b[33m--trace ignorado junto de --hogs/--json\x1b[39m\n')
 }
@@ -416,7 +418,7 @@ async function runPhase(phase) {
       ; ({ entries, uncovered, cache } = scan(root, configPath, phase))
     }
   } catch (e) {
-    if (e.code !== 'ENOENT') { console.error('[utest2] scan error:', e.message); realProcessExit(1) }
+    if (e.code !== 'ENOENT') { console.error('[utest] scan error:', e.message); realProcessExit(1) }
   }
   const seen = new Set()
   entries = entries.filter(e => !seen.has(e.path) && seen.add(e.path))
@@ -478,6 +480,7 @@ async function runPhase(phase) {
       failCount: rec?.failCount ?? c.failCount ?? (c.failed ? 1 : 0),
       lastMs: rec?.ms || 0,
       duration: 0, checks: [], tests: [], output: [],
+      _failLines: rec?.failLines,
     })
     // Verificação de 2º nível: o cache de tempo disse HIT; o histórico concorda que nada
     // mudou? Discordar é sinal de furo na regra do cache — reporta, não corrige (o cache
@@ -648,6 +651,7 @@ async function runPhase(phase) {
       tests: s.tests, checks: s.passed,
       failCount: (s.failed || 0) + (s.exception || 0),
       ms: suite.duration, state: suite.state, extraDeps: entry.extraDeps ?? [],
+      failLines: suite.state === 'passed' ? null : failData(suite),
     })
   }
 
@@ -722,11 +726,17 @@ const rendered = phaseResults.filter(r => r.main.tests.length > 0)
 
 // coverage — só as fases que escaneiam a árvore de fontes (`scan()` devolve `uncovered`).
 // Uma fase com PROVIDER (`eval`) não tem fonte a cobrir; não entra na conta.
+// Uma fase SEM NENHUM teste não mede cobertura de nada: o `include` dela não casou um
+// arquivo sequer, então cada fonte da árvore cai no `uncovered` dela e o denominador
+// inteiro passa a ser a fase que não existe. É o que a `integration` vazia
+// (`include: ['**/*.it.js']`, zero arquivos) fazia com o número do repo.
 let srcCovered = 0, srcTotal = 0
-for (const { main, uncovered } of phaseResults) {
-  if (!uncovered) continue
+const uncoveredAll = new Map()
+for (const { phase, main, uncovered } of phaseResults) {
+  if (!uncovered || !(main.tests || []).length) continue
   srcCovered += (main.tests || []).length
   srcTotal += (main.tests || []).length + uncovered.length
+  for (const f of uncovered) uncoveredAll.set(f, phase)
 }
 const covLine = srcTotal ? `coverage: ${Math.round((srcCovered / srcTotal) * 100)}%` : 'coverage: —'
 
@@ -743,7 +753,20 @@ const framed = anyRed || anyHog
 if (hogs) {
   process.stdout.write(hogReport(phaseResults, { width, standalone: true }) + '\n')
 
-// `-v:3` — a árvore por-teste já streamou durante a fase; aqui só a linha-resumo.
+// `-v:3` — a árvore por-teste já streamou durante a fase; aqui só a linha-resumo. Mas se
+// NADA rodou de verdade (tudo cache), não houve stream nenhum: cair na linha-resumo seca
+// deixaria o `-v:3` mais pobre que o `-v:1`. Nesse caso mostra a visão por ARQUIVO, que o
+// registro sustenta sem re-executar.
+} else if (verbosity >= 3 && !rendered.some(r => (r.main.tests || []).some(t => !t._cached))) {
+  for (const { phase, main } of rendered) {
+    const report = fullView(main, { verbosity: 2, width, title: phase, nameTerms: filterTerms })
+    if (!report) continue
+    const [head, ...rest] = report.split('\n')
+    process.stdout.write(head + '\n')
+    for (const l of rest) process.stdout.write((l ? '  ' + l : l) + '\n')
+  }
+  process.stdout.write(`\x1b[1m${covLine}\x1b[22m\n`)
+
 } else if (verbosity >= 3) {
   for (const { phase, main } of rendered) {
     const s = summary(main)
@@ -751,7 +774,7 @@ if (hogs) {
       s.failed ? `${glyphs.failed} ${s.failed}` : '',
       s.exception ? `${glyphs.exception} ${s.exception}` : ''].filter(Boolean).join('  ')
     const right = `\x1b[90m(${Math.round(phaseMs(main) / 1000)}s)\x1b[39m`
-    const gap = Math.max(1, width - stripAnsi(left).length - stripAnsi(right).length)
+    const gap = Math.max(1, width - displayLen(left) - displayLen(right))
     process.stdout.write(`${left}${' '.repeat(gap)}${right}\n`)
   }
 
@@ -759,7 +782,10 @@ if (hogs) {
 // 📄 🧪 ✔` por fase / `coverage: N%`. O `(Σs)` é a soma do tempo da última execução dos
 // arquivos da fase (`phaseMs`), em SEGUNDOS — o mesmo número quente ou frio. Sem hog aqui
 // (por definição desta forma), então o parên é só `(Ns)`.
-} else if (!framed) {
+// O bloco tight é a forma do `-v:1`. Pedir `-v:2` numa rodada limpa é pedir a visão POR
+// ARQUIVO — sem isto, v1/v2/v3 imprimiam as MESMAS três linhas sempre que a suíte estava
+// verde, e a flag parecia morta.
+} else if (!framed && verbosity < 2) {
   process.stdout.write('\x1b[1mutest results\x1b[22m\n')
   const rows = rendered.map(({ phase, main }) => {
     const s = summary(main)
@@ -837,8 +863,68 @@ if (hogs) {
     totalHogSecs += phaseHogSecs(main)
   }
   const counts = phaseLine(finalSum, { title: '', ms: totalMs, files: totalFiles, hogSecs: totalHogSecs, bare: true })
-  const gap = Math.max(1, width - stripAnsi(covLine).length - stripAnsi(counts).length)
+  const gap = Math.max(1, width - displayLen(covLine) - displayLen(counts))
   process.stdout.write(`\x1b[1m${covLine}\x1b[22m${' '.repeat(gap)}${counts}\n`)
+}
+
+// `--uncovered` responde QUAIS arquivos faltam — o número sozinho não diz onde agir.
+if (showUnc) {
+  const rows = [...uncoveredAll].map(([f, phase]) => ({ rel: path.relative(root, f), phase })).sort((a, b) => a.rel.localeCompare(b.rel))
+  process.stdout.write(`\n\x1b[1muncovered\x1b[22m \x1b[90m— fonte sem um teste que a exercite (${rows.length})\x1b[39m\n`)
+  for (const r of rows) process.stdout.write(`  ${r.rel} \x1b[90m${r.phase}\x1b[39m\n`)
+  if (!rows.length) process.stdout.write('  \x1b[90mnenhum — toda fonte tem teste pareado\x1b[39m\n')
+}
+
+// ─── `--trace` LARGO — onde foi a parede por FRENTE e por FEATURE ──────────────────────
+// Escopo filtrado disseca UMA execução (regiões + `probe`); largo responde outra pergunta,
+// "que parte da suíte custa", e a resposta já está no relatório — o `lastMs` por arquivo,
+// do storage. Agregar não instrumenta nada: não re-roda, não fura o cache, e por isso é o
+// único trace que um escopo largo pode pagar.
+if (trace && !doTrace && !asJson && !hogs) {
+  const feature = name => name.match(/^(\d+\.\d+)/)?.[1] ?? null
+  const fronts = new Map()
+  let grandMs = 0
+  for (const { main } of rendered) {
+    for (const t of (main.tests || [])) {
+      const ms = t.lastMs || Math.round(t.duration || 0)
+      grandMs += ms
+      const dir = path.dirname(t.address)
+      const front = dir === '.' ? '(raiz)' : dir.split('/').slice(0, 2).join('/')
+      const feat = feature(t.name) ?? '(sem feature)'
+      const f = fronts.get(front) ?? { ms: 0, feats: new Map() }
+      f.ms += ms
+      f.feats.set(feat, (f.feats.get(feat) ?? 0) + ms)
+      fronts.set(front, f)
+    }
+  }
+  const share = ms => grandMs ? ms / grandMs : 0
+  const pct = ms => `${String(Math.round(share(ms) * 100)).padStart(3)}%`
+  const secs = ms => `${String((ms / 1000).toFixed(1)).padStart(6)}s`
+  // Só o que é acionável: uma frente abaixo de 1% da parede não é onde o tempo mora, e
+  // listar as 40 leva de volta à saída verbosa que este modo veio substituir. O resto vai
+  // numa linha de resto, para a soma continuar fechando em 100%.
+  const ranked = [...fronts].sort((a, b) => b[1].ms - a[1].ms)
+  // Uma frente só (um repo plano, como o próprio `utest/`) não é agregação — é a linha do
+  // total escrita de outro jeito. Ali quem responde "onde foi o tempo" é o `-v:2`, que
+  // lista arquivo por arquivo.
+  if (ranked.length < 2) {
+    process.stderr.write('\x1b[33m--trace largo: uma frente só — a leitura por arquivo é o `-v:2`\x1b[39m\n')
+  } else {
+  const shown = ranked.filter(([, f]) => share(f.ms) >= 0.01)
+  const restMs = ranked.slice(shown.length).reduce((a, [, f]) => a + f.ms, 0)
+  process.stdout.write(`\n${rule}\n\x1b[1mtrace\x1b[22m — para onde foi a parede, por frente e feature\n${rule}\n`)
+  for (const [front, f] of shown) {
+    process.stdout.write(`\x1b[1m${front.padEnd(38)}\x1b[22m \x1b[90m${secs(f.ms)} ${pct(f.ms)}\x1b[39m\n`)
+    // Uma feature só, de mesmo tempo, é a linha da frente repetida — nada a decompor.
+    const feats = [...f.feats].sort((a, b) => b[1] - a[1]).filter(([, ms]) => share(ms) >= 0.01)
+    if (feats.length < 2) continue
+    for (const [feat, ms] of feats.slice(0, 6))
+      process.stdout.write(`  ${feat.padEnd(36)} \x1b[90m${secs(ms)} ${pct(ms)}\x1b[39m\n`)
+  }
+  if (restMs)
+    process.stdout.write(`\x1b[90m${`(+${ranked.length - shown.length} frentes <1%)`.padEnd(38)} ${secs(restMs)} ${pct(restMs)}\x1b[39m\n`)
+  process.stdout.write(`${rule}\n\x1b[90m um hog por dentro: \x1b[4mutest <feature|arquivo> --trace\x1b[24m — regiões + grafo de função\x1b[39m\n${rule}\n`)
+  }
 }
 
 // ─── Apêndice de trace (`--trace`) — a árvore de PARA-ONDE-FOI-A-PAREDE, DEPOIS do

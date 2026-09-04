@@ -23,8 +23,13 @@ function walk(dir, root, filter, out = { tests: [], sources: [] }) {
       if (!filter.excluded(rel)) walk(abs, root, filter, out)
       continue
     }
-    if (filter.included(rel)) out.tests.push(abs)
-    else if (!filter.excluded(rel) && SOURCE_RE.test(e.name)) out.sources.push(abs)
+    // Quem decide se é TESTE é o KIND (`.t.js`, `.tuit`, …), não o include. Um
+    // `include: '**/*.js'` (a fase `unit` deste repo) casa a fonte junto, e mandá-la
+    // para `tests` a fazia sumir das DUAS listas — `sourceFiles` vazio, `uncovered`
+    // sempre zero, cobertura sempre 100%.
+    if (filter.excluded(rel)) continue
+    if (filter.included(rel) && testRe().test(e.name)) out.tests.push(abs)
+    else if (SOURCE_RE.test(e.name)) out.sources.push(abs)
   }
   return out
 }

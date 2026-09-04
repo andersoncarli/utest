@@ -68,7 +68,6 @@ externo duro** ao submódulo irmão `../utils/` (`bus`, `is`, `toSource`, `calls
 | `worker.js` | base p/ execução isolada por arquivo (1 arquivo = 1 processo) | — | 7.1 |
 | `index.js` | `import './utest.js'` (bin) — INFRA | — | — |
 | `paths.js` | `ROOT`/`TEST_DIR`/`SRC_DIR` — INFRA | — | — |
-| `utest2.js` | cópia anterior do `utest.js` (sem `kinds`/`results`/`--trace`); 2º `bin` — **candidato a DELETE** | — | — |
 | `leak.t.js` | prende a mecânica do check tardio / `clearTimeout` — não tem alvo pareado | (é teste) | 1.3, 7.2 |
 
 ## Accomplishments (o que já está sólido)
@@ -97,10 +96,10 @@ externo duro** ao submódulo irmão `../utils/` (`bus`, `is`, `toSource`, `calls
 3. **Dois `runTest`** (`utest.js` e `runner.js`) mantidos em sincronia à mão — `console-capture.js`
    existe justamente porque um fix voltou pela cópia não-consertada.
 4. **Dois `plugin()` de load** (`utest.js` e `setup.js`) — divergência esperando acontecer.
-5. **`TEST.yaml`**: a fase `integration` vazia distorce `coverage: N%` (mistura no
-   denominador); `--uncovered`/`-u` é inerte (lido, nunca impresso). Precisa de um exclude
-   explícito de infra.
-6. **Código morto**: `shimmer.js` (0 refs), `utest2.js` (cópia anterior). Decidir DELETE.
+5. ~~**`TEST.yaml`**: a fase `integration` vazia distorce `coverage: N%`;
+   `--uncovered`/`-u` é inerte.~~ FECHADO — fase sem entries fora do denominador,
+   `index.js`/`paths.js` no exclude de infra, `--uncovered` imprime a lista.
+6. **Código morto**: `shimmer.js` (0 refs). Decidir DELETE.
 7. **Doc velha apontando para código que mudou de casa**: `STATUS.md` diz "o destino é
    `cmds/testio/testio.js`" (fora deste repo); `HANDOFF.md`/`TEST-MASTER-PLAN.md` falam de
    `~/bot/utest`. Decidir se o utest ABSORVE o isolamento ou é a referência de contrato.
@@ -123,7 +122,7 @@ padrões; a razão de cada um:
 
 **Não ignorado, mas sem `.t.js` próprio** (isso é dívida de TESTE, rastreada na feature
 [3.5], não "ignorado"): `utest.js`, `runner.js`, `shims.js`, `setup.js`, `tuit.js`,
-`migrate.js`, `console-capture.js`, `worker.js`, `shimmer.js`, `utest2.js`,
+`migrate.js`, `console-capture.js`, `worker.js`, `shimmer.js`,
 `trace-preload.mjs`, `paths.js`, `index.js`.
 
 **A diferença**: um arquivo *ignorado* nunca vai ter feature nem teste (é doc, é gerado, é

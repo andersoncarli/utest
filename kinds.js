@@ -2,10 +2,10 @@
  * kinds.js — que sufixos o utest reconhece, declarado UMA vez.
  *
  * O vocabulário (`.t.js`, `.test.js`, `.tuit`, `.it.js`) estava escrito à mão em
- * cinco lugares: o `TEST_RE` do scanner, o descascador de `findTarget`, e o
- * `filter` do plugin em `utest.js`, `utest2.js` e `setup.js`. Acrescentar um
- * tipo exigia achar os cinco, e um esquecido não dá erro — o arquivo
- * simplesmente some da suíte, ou entra sem o shim.
+ * vários lugares: o `TEST_RE` do scanner, o descascador de `findTarget`, e o
+ * `filter` do plugin em `utest.js` e `setup.js`. Acrescentar um tipo exigia
+ * achar todos, e um esquecido não dá erro — o arquivo simplesmente some da
+ * suíte, ou entra sem o shim.
  *
  * Daqui saem as duas formas de perguntar a mesma coisa: `TEST_RE` para quem
  * testa um nome, e `loaderFilter()` para o `build.onLoad` do plugin do Bun.
