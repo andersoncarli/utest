@@ -76,16 +76,25 @@ export function region(name, fn, op = {}) {
   } catch (e) { settle(); throw e }
 }
 
-// Envolve Bun.spawnSync / Bun.spawn — cada chamada vira uma região `sh:<cmd>`.
+// Envolve Bun.spawnSync / Bun.spawn — cada chamada vira uma região `sh:<cmd>`. CEDE quando
+// já está dentro de uma região `sh:` aberta (ex.: `engine.js#sh()`, feature 5.3, que já
+// embrulha o próprio `Bun.spawnSync` com `fragPrefix` para enxertar o trace do subprocesso
+// filho) — sem o guard, o patch global duplicava essa região por dentro, sem `fragPrefix`,
+// só ruído na árvore.
 export function wrapSpawns() {
   const label = (opts) => {
     const cmd = Array.isArray(opts) ? opts : opts?.cmd || []
     const flat = cmd.join(' ')
     return 'sh:' + (flat.length > 48 ? flat.slice(0, 45) + '…' : flat)
   }
+  const insideShRegion = () => {
+    const top = openStack[openStack.length - 1]
+    return !!top && top.name.startsWith('sh:')
+  }
   const rsync = Bun.spawnSync, rasync = Bun.spawn
-  Bun.spawnSync = (...a) => region(label(a[0]), () => rsync(...a))
+  Bun.spawnSync = (...a) => insideShRegion() ? rsync(...a) : region(label(a[0]), () => rsync(...a))
   Bun.spawn = (...a) => {
+    if (insideShRegion()) return rasync(...a)
     const frame = mark(label(a[0]))
     const p = rasync(...a)
     p.exited.finally(() => end(frame))

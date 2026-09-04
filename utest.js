@@ -331,6 +331,10 @@ if (doTrace && !hogs && !asJson) {
   // passa a bater com o `time` real.
   T.install(`utest ${rawTarget ? path.basename(rawTarget) : filterTerms.join(' ')}`, performance.now())
   T.mark('boot')
+  // Decompõe cada Bun.spawnSync/Bun.spawn em sub-regiões `sh:<cmd>` — sem isto, um
+  // arquivo que dispara CLI real via subprocesso (ex.: `run("eval.js", …)`) some inteiro
+  // dentro do `entry` opaco, e o apêndice não tem para onde apontar.
+  T.wrapSpawns()
 }
 
 // ─── Project boot ─────────────────────────────────────────────────────────────

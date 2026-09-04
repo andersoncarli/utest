@@ -111,7 +111,7 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟠 **[4.5] --json — uma linha por arquivo p/ máquina (sprint eval --sweep)** → [4.5](plans/4-report/4.5--json-uma-linha-por-arquivo-p-m-quina-sprint-eval-sweep-.md)
 - 🔵 **[4.6] v2 continuo: rio de passados, bloco cheio so nos falhos** → [4.6](plans/4-report/4.6-v2-continuo-rio-de-passados-bloco-cheio-so-nos-falhos.md)
 
-### [5] profiling — Profiling — que função custou, que região custou · implementando · sprint 8  [🟡🟡🟡🟡🟠]
+### [5] profiling — Profiling — que função custou, que região custou · implementando · sprint 10  [🟡🟡🟡🟡🟠]
 - 🟡 **[5.1] probe — instrumenta chamadas p/ hogs: 2 vistas (flat report / grafo tree)** → [5.1](plans/5-profiling/5.1-probe-instrumenta-chamadas-p-hogs-2-vistas-flat-report-grafo-tree-callers-edges-self-time.md)
 - 🟡 **[5.2] trace — cronômetro de regiões de wall-time; (untracked) explícito** → [5.2](plans/5-profiling/5.2-trace-cron-metro-de-regi-es-de-wall-time-install-mark-end-region-wrapspawns-untracked-expl-cito.md)
 - 🟡 **[5.3] trace de subprocesso — trace-preload.mjs via bun --import, enxerto de fragmento** → [5.3](plans/5-profiling/5.3-trace-de-subprocesso-trace-preload-mjs-via-bun-import-enxerto-de-fragmento-na-folha-sh-.md)

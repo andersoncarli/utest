@@ -171,7 +171,7 @@ _(sem sprints ainda)_
 
 <details><summary>🟠 [5.5] --trace liga probe OU trace conforme a fase; teto do sh() sobe p/ 60s — implementando</summary>
 
-[007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.") [008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa")
+[007](sprints/007-trace-a-arvore-de-para-onde-foi-a-parede.report.md "report · Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a árvore de para-onde-foi-a-parede; e o clearTimeout que fecha a fuga de 10s do event loop.") [008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa") [010](sprints/010-wrapspawns-cede-a-regiao-sh-ja-aberta-nao-duplica-engine-js-sh-.report.md "wrapSpawns cede a regiao sh: ja aberta (nao duplica engine.js#sh()) · `wrapSpawns()` agora cede a uma região `sh:` já aberta em vez de duplicá-la — corrige o ruído que a instalação automática em `utes")
 
 </details>
 

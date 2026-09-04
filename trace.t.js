@@ -54,6 +54,24 @@ test('trace', ({ test }) => {
     check(Bun.spawnSync === real, true, 'restaurado')
   })
 
+  test('wrapSpawns() cede a uma região sh: já aberta (não duplica engine.js#sh())', ({ check }) => {
+    install('(t)')
+    const stop = wrapSpawns()
+    region('sh: outer cmd', () => {
+      Bun.spawnSync({ cmd: ['echo', 'hi'], stdout: 'ignore', stderr: 'ignore' })
+    })
+    const out = render({ minPct: 0 })
+    check(/sh: outer cmd/.test(out), true, 'a região externa fica')
+    check(/sh:echo hi/.test(out), false, 'nenhuma sh: aninhada por dentro')
+    stop()
+
+    install('(t2)')
+    const stop2 = wrapSpawns()
+    Bun.spawnSync({ cmd: ['echo', 'hi'], stdout: 'ignore', stderr: 'ignore' })
+    check(/sh:echo hi/.test(render({ minPct: 0 })), true, 'sem região sh: aberta, o comportamento anterior continua')
+    stop2()
+  })
+
   test('mesma região N× soma e conta cada ocorrência', ({ check }) => {
     install('(t)')
     for (let i = 0; i < 4; i++) region('loop', () => sleep(3))
