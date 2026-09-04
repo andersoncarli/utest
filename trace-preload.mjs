@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs'
 // trace-preload.mjs — carregado por `bun --import` que um `.eval.js` splica na sua
 // string de bash quando `UTEST_TRACE_PRELOAD` está no env (posto pelo `sh()` do
 // `apps/eval/engine.js` sob `utest --trace`). Instala `globalThis.__uTrace` para o
@@ -25,9 +26,14 @@ if (OUT) {
     mark: (name) => events.push({ kind: 'mark', name, startMs: now(), endMs: now() }),
   }
 
+  // `writeFileSync` importado NO TOPO, não por `require` dentro do handler: isto é um
+  // módulo ESM, e sob `node` (onde os checks de browser rodam quando há browser
+  // compartilhado) `require` não existe — o `catch {}` engolia o ReferenceError e o
+  // fragmento sumia calado, deixando a folha `sh:` opaca no `--trace`. Sob `bun` havia
+  // `require` e a diferença nunca aparecia.
   process.on('exit', () => {
     try {
-      require('fs').writeFileSync(`${OUT}.${process.pid}`,
+      writeFileSync(`${OUT}.${process.pid}`,
         JSON.stringify({ pid: process.pid, totalMs: now(), events }))
     } catch {}
   })
