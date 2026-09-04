@@ -103,12 +103,13 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟠 **[3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup** → [3.4](plans/3-scan/3.4-ganchos-de-extens-o-registerexecutor-registerentries-registerphasesetup-eval-js-tuit-chromium-1x-.md)
 - 🟠 **[3.5] cobertura — todo arquivo do utest mapeado em TEST.yaml, sem leaks** → [3.5](plans/3-scan/3.5-cobertura-sources-sem-t-js-pareado-uncovered-.md)
 
-### [4] report — Report — compacto por desenho, expressivo quando precisa · implementando · sprint 8  [🟡🟡🟠🟠🟠]
+### [4] report — Report — compacto por desenho, expressivo quando precisa · implementando · sprint 9  [🟡🟡🟠🟠🟠🔵]
 - 🟡 **[4.1] relatório compacto — phaseLine (Σs 🐢N), compactFails, verbosidade 0-3** → [4.1](plans/4-report/4.1-relat-rio-compacto-phaseline-s-n-compactfails-verbosidade-0-3-derivada-do-escopo.md)
 - 🟡 **[4.2] hogs — badge 🐢N = segundos sempre; deltaTag só em hog que re-rodou** → [4.2](plans/4-report/4.2-hogs-badge-n-segundos-sempre-deltatag-s-em-hog-que-re-rodou-hogs-modo-parte.md)
 - 🟠 **[4.3] drill-in — escopo estreito re-executa e sobe de nível; storage é o índice** → [4.3](plans/4-report/4.3-drill-in-escopo-estreito-re-executa-e-sobe-de-n-vel-storage-o-ndice-utest-3-2-sem-scan-.md)
 - 🟠 **[4.4] progressBar + --watch (delta, não varredura) + OSC-8 hyperlink no tip** → [4.4](plans/4-report/4.4-progressbar-watch-delta-n-o-varredura-osc-8-hyperlink-no-tip.md)
 - 🟠 **[4.5] --json — uma linha por arquivo p/ máquina (sprint eval --sweep)** → [4.5](plans/4-report/4.5--json-uma-linha-por-arquivo-p-m-quina-sprint-eval-sweep-.md)
+- 🔵 **[4.6] v2 continuo: rio de passados, bloco cheio so nos falhos** → [4.6](plans/4-report/4.6-v2-continuo-rio-de-passados-bloco-cheio-so-nos-falhos.md)
 
 ### [5] profiling — Profiling — que função custou, que região custou · implementando · sprint 8  [🟡🟡🟡🟡🟠]
 - 🟡 **[5.1] probe — instrumenta chamadas p/ hogs: 2 vistas (flat report / grafo tree)** → [5.1](plans/5-profiling/5.1-probe-instrumenta-chamadas-p-hogs-2-vistas-flat-report-grafo-tree-callers-edges-self-time.md)
@@ -128,5 +129,5 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟡 **[7.2] vazamento cross-arquivo — exceção async tardia no arquivo errado (in-process)** → [7.2](plans/7-isolation/7.2-vazamento-cross-arquivo-exce-o-async-tardia-atribu-da-ao-arquivo-errado-in-process-.md)
 - 🟠 **[7.3] runner.js modular — runTest/run/loadFile/serialize; caminho do subprocesso e da fase eval externa** → [7.3](plans/7-isolation/7.3-runner-js-modular-runtest-run-loadfile-serialize-caminho-do-subprocesso-e-da-fase-eval-externa.md)
 
-🟠 13 implementando · 🟡 18 testada
+🟠 13 implementando · 🟡 18 testada · 🔵 1 confirmada
 <!-- board:end -->

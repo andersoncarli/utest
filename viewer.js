@@ -573,6 +573,13 @@ export function compactFails(main, { width = 80 } = {}) {
     groups.push(hogTokens)
   }
 
+  return wrapTokenGroups(groups, width)
+}
+
+// Empacota cada GRUPO de tokens num rio contínuo, dois espaços entre tokens, quebrando
+// só quando a linha estoura `width` — nunca no meio de um token. Um grupo novo sempre
+// começa linha nova (não emenda no fim do grupo anterior).
+function wrapTokenGroups(groups, width) {
   const lines = []
   for (const group of groups) {
     if (!group.length) continue
@@ -622,20 +629,36 @@ export function fullView(main, op = {}) {
   }
 
   if (verbosity === 2) {
-    // A visão POR ARQUIVO: uma barra de título por arquivo (nome, contagem, tempo) e, sob
-    // cada vermelho, a linha do erro e o endereço no stack. É o degrau entre o resumo por
-    // fase (v1) e a árvore por teste (v3) — quem quer saber "quais arquivos, quanto tempo"
-    // sem ler 1300 nomes de teste. O `log()` do teste fica para o `-v:3`.
+    // O degrau entre o resumo por fase (v1) e a árvore por teste (v3): quem quer saber
+    // "quais arquivos, quanto tempo" sem ler 1300 nomes de teste — mas sem gastar uma
+    // LINHA por arquivo verde, que é só ruído quando a suíte é grande. Os PASSADOS viram
+    // um rio contínuo (`wrapTokenGroups`, o mesmo soft-wrap de `compactFails`) — um
+    // `dotfill` por arquivo aqui não caberia numa tela de verdade. Só os FALHOS quebram
+    // para o relatório cheio: a barra de título (`fileLine`) e, sob ela, o check inteiro
+    // (`failLines` — `received`/`expected`/endereço). O `log()` do teste fica para o `-v:3`.
     const lines = [phaseLine(main, { width, title })]
     const files = terms.length
       ? (main.tests || []).filter(t => hasDeepMatch(t, terms))
       : (main.tests || [])
     // `width - 2`: o chamador indenta 2 tudo que vem sob a linha-título da fase (que é a
     // única a ir à largura CHEIA). Medir contra `width` aqui estourava a régua em 2 colunas.
+    const innerWidth = width - 2
     const msOf = t => t.lastMs || Math.round(t.duration || 0)
-    for (const t of [...files].sort((a, b) => msOf(b) - msOf(a))) {
-      lines.push(fileLine(t, { width: width - 2 }))
-      lines.push(...failLines(t, { width: width - 2 }))
+    const sorted = [...files].sort((a, b) => msOf(b) - msOf(a))
+    const passed = sorted.filter(t => t.state === 'passed')
+    const failed = sorted.filter(t => t.state !== 'passed')
+
+    if (passed.length) {
+      const passTok = t => {
+        const n = t._cached ? (t.checkCount || 0) : summary(t).passed
+        return `${t.name} ${glyphs.passed}${n}`
+      }
+      const river = wrapTokenGroups([passed.map(passTok)], innerWidth)
+      if (river) lines.push(river)
+    }
+    for (const t of failed) {
+      lines.push(fileLine(t, { width: innerWidth }))
+      lines.push(...failLines(t, { width: innerWidth }))
     }
     return lines.join('\n')
   }

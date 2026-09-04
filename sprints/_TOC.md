@@ -135,6 +135,12 @@ _(sem sprints ainda)_
 
 </details>
 
+<details><summary>🔵 [4.6] v2 continuo: rio de passados, bloco cheio so nos falhos — confirmada</summary>
+
+[009](sprints/009-v2-continuo-rio-de-passados-bloco-cheio-so-nos-falhos.report.md "v2 continuo: rio de passados, bloco cheio so nos falhos · `-v:2` (`fullView`, `viewer.js`) trocou uma linha (dotfill + tempo) por ARQUIVO verde por um rio continuo — nome + contagem, dois espacos, sof")
+
+</details>
+
 </details>
 
 <details><summary>🟠 <b>[5] profiling</b> — Profiling — que função custou, que região custou</summary>

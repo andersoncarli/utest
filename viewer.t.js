@@ -285,20 +285,24 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check(failLines(legado, { width: 80 }), [], 'string no lugar do dado não vira render')
   })
 
-  test('fullView v2 — a visão por ARQUIVO: todo arquivo, verde inclusive', ({ check }) => {
-    // O `-v:1` só fala de quem pede atenção (vermelho/hog). O `-v:2` é a visão por arquivo:
-    // TODO arquivo ganha barra de título, do mais caro pro mais barato, com o tempo acima
-    // de 10ms. Sem isto, uma suíte verde imprimia as mesmas 3 linhas em v1, v2 e v3.
+  test('fullView v2 — todo arquivo verde aparece, num rio contínuo sem dotfill', ({ check }) => {
+    // O `-v:1` só fala de quem pede atenção (vermelho/hog). O `-v:2` mostra TODO arquivo,
+    // mas um PASSADO não paga o custo de uma linha própria (dotfill + tempo) — isso é
+    // ruído numa suíte grande. Os verdes viram um rio contínuo, do mais caro pro mais
+    // barato, `nome ✔N` separado por dois espaços, sem quebra de linha entre arquivos e
+    // sem tempo individual (o tempo agregado já está na linha-título da fase).
     const main = { tests: [
       { name: 'rapido.t.js', state: 'passed', _cached: true, checkCount: 5,  lastMs: 3 },
       { name: 'lento.t.js',  state: 'passed', _cached: true, checkCount: 20, lastMs: 240 },
     ] }
     const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'unit' }))
     check(out.includes('lento.t.js'), true, 'o arquivo verde aparece — v2 não é só vermelho')
-    check(out.includes('(240ms)'), true, 'o tempo acima de 10ms aparece')
-    check(out.includes('(3ms)'), false, 'abaixo de 10ms o tempo não vira coluna')
+    check(out.includes('rapido.t.js'), true)
+    check(out.includes('(240ms)'), false, 'passado não carrega tempo individual — dotfill some')
     const lines = out.split('\n').filter(Boolean)
-    check(lines[1].startsWith('lento.t.js'), true, 'o mais caro vem primeiro')
+    check(lines.length, 2, 'linha-título + UMA linha-rio com os dois verdes')
+    check(lines[1].indexOf('lento.t.js') < lines[1].indexOf('rapido.t.js'), true, 'o mais caro vem primeiro')
+    check(lines[1].includes('lento.t.js ✔20'), true, 'nome + contagem, sem dotfill por arquivo')
   })
 
   test('fullView v2 — escopo estreito: compacta + linha do erro + endereço, SEM log()', ({ check }) => {
@@ -319,6 +323,37 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check(out.includes('check(2 + 2, 5)'), true, 'a linha do check aparece')
     check(out.includes('x.eval.js:012'), true, 'o endereço do stack aparece')
     check(out.includes('saída engolida'), false, 'o log() do teste NÃO aparece no v2')
+  })
+
+  test('fullView v2 — passados no rio, falhos no bloco cheio (fileLine + checkView)', ({ check }) => {
+    const main = { tests: [
+      { name: 'ok-a.t.js', state: 'passed', _cached: true, checkCount: 5, lastMs: 3 },
+      { name: 'ok-b.t.js', state: 'passed', _cached: true, checkCount: 9, lastMs: 7 },
+      {
+        name: 'red.eval.js', state: 'failed', address: 'red.eval.js', lastMs: 80,
+        checks: [{ state: 'failed', a: '4', b: '5', lineCode: 'check(2 + 2, 5)', address: 'red.eval.js:012' }],
+        tests: [],
+      },
+    ] }
+    const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'eval' }))
+    const lines = out.split('\n').filter(Boolean)
+    check(lines[1].includes('ok-a.t.js ✔5') && lines[1].includes('ok-b.t.js ✔9'), true,
+      'os dois verdes na MESMA linha-rio, sem o vermelho misturado')
+    check(lines[1].includes('red.eval.js'), false, 'o falho não entra no rio dos passados')
+    check(out.includes('check(2 + 2, 5)'), true, 'o falho mostra a linha do check')
+    check(out.includes('received: 4') && out.includes('expected: 5'), true, 'received/expected inteiros')
+    check(out.includes('red.eval.js:012'), true, 'o endereço (caller line) aparece')
+  })
+
+  test('fullView v2 — só vermelho: sem linha-rio (nenhum arquivo passado para listar)', ({ check }) => {
+    const main = { tests: [{
+      name: 'red.eval.js', state: 'failed', address: 'red.eval.js', lastMs: 10,
+      checks: [{ state: 'failed', lineCode: 'check(a)', address: 'red.eval.js:009' }], tests: [],
+    }] }
+    const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'eval' }))
+    const lines = out.split('\n').filter(Boolean)
+    check(lines.length, 3, 'título + fileLine do falho + a linha do check — sem linha-rio entre elas')
+    check(lines[1].startsWith('red.eval.js'), true, 'logo após o título já vem o bloco do falho')
   })
 
   test('fullView v2 — vermelhos ordenados do mais lento pro menos (igual ao bloco compacto)', ({ check }) => {
