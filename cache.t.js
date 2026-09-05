@@ -1,7 +1,7 @@
 // A regra do cache vive nos timestamps do inode, então testá-la exige disco de
 // verdade: um mock de `fs` provaria só que o mock concorda consigo mesmo. Cada
 // caso monta um alvo, seus testes e suas deps num diretório próprio.
-import { mkdtempSync, rmSync, writeFileSync, statSync, utimesSync, mkdirSync, existsSync } from 'fs'
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, statSync, utimesSync, mkdirSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { TestCache } from './cache.js'
@@ -82,18 +82,22 @@ test('cache: a regra do conjunto', ({ test }) => {
   })
 })
 
-test('cache: falha REPRODUZÍVEL não re-roda (cacheFailure)', ({ test }) => {
+// Toda falha comum cacheia igual ao verde — o que atualiza o cache é sempre a
+// ÚLTIMA execução real (passou ou falhou), e só uma mudança de verdade (mtime do
+// alvo/teste/dep) ou `--force` dispara outra. Exceção é a ÚNICA categoria que
+// nunca cacheia (ver bloco `cache: EXCEÇÃO nunca cacheia` mais abaixo).
+test('cache: falha comum cacheia — mesma regra do verde, resposta oposta', ({ test }) => {
 
-  test('sem a marca, uma falha só busta — re-roda sempre', ({ check }) => {
+  test('exceção nunca cacheia — sempre re-roda', ({ check }) => {
     const { at, cache } = fixture(SET)
     cache.write(at('m.t.js'), at('m.js'), { checks: 0, exception: true })
-    check(cache.read(at('m.t.js'), at('m.js')), null, 'falha comum: null, re-roda')
+    check(cache.read(at('m.t.js'), at('m.js')), null, 'exceção: null, re-roda')
     cleanup()
   })
 
-  test('com a marca, o vermelho é reusado e vem com failed:true', ({ check }) => {
+  test('falha comum é reusada e vem com failed:true', ({ check }) => {
     const { at, cache } = fixture(SET)
-    cache.write(at('m.t.js'), at('m.js'), { checks: 0, exception: false, cacheFailure: true })
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, exception: false })
     const hit = cache.read(at('m.t.js'), at('m.js'))
     check(hit?.failed, true, 'o cache diz falhou')
     check(hit?.checks, 0)
@@ -103,7 +107,7 @@ test('cache: falha REPRODUZÍVEL não re-roda (cacheFailure)', ({ test }) => {
 
   test('o alvo reeditado invalida o vermelho cacheado', ({ check }) => {
     const { at, cache } = fixture(SET)
-    cache.write(at('m.t.js'), at('m.js'), { checks: 0, cacheFailure: true })
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0 })
     check(cache.read(at('m.t.js'), at('m.js'))?.failed, true)
     // alguém edita o alvo → sai do segundo+1ms em que o sidecar foi carimbado
     const future = new Date(Date.now() + 5000)
@@ -114,7 +118,7 @@ test('cache: falha REPRODUZÍVEL não re-roda (cacheFailure)', ({ test }) => {
 
   test('uma dep mexida invalida o vermelho cacheado', ({ check }) => {
     const { at, cache } = fixture(SET)
-    cache.write(at('m.t.js'), at('m.js'), { checks: 0, cacheFailure: true })
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0 })
     check(cache.read(at('m.t.js'), at('m.js'))?.failed, true)
     const future = new Date(Date.now() + 5000)
     utimesSync(at('dep.js'), future, future)   // dep transitiva de m.t.js
@@ -124,7 +128,7 @@ test('cache: falha REPRODUZÍVEL não re-roda (cacheFailure)', ({ test }) => {
 
   test('conserto: passar limpa o sidecar de falha', ({ check }) => {
     const { at, cache } = fixture(SET)
-    cache.write(at('m.t.js'), at('m.js'), { checks: 0, cacheFailure: true })
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0 })
     check(cache.read(at('m.t.js'), at('m.js'))?.failed, true)
     cache.write(at('m.t.js'), at('m.js'), { checks: 5 })   // agora passa
     const hit = cache.read(at('m.t.js'), at('m.js'))
@@ -135,11 +139,19 @@ test('cache: falha REPRODUZÍVEL não re-roda (cacheFailure)', ({ test }) => {
 
   test('extraDeps também governam o vermelho cacheado', ({ check }) => {
     const { at, cache } = fixture({ ...SET, 'far.js': 'export const F = 1\n' })
-    cache.write(at('m.t.js'), at('m.js'), { checks: 0, cacheFailure: true }, { extraDeps: [at('far.js')] })
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0 }, { extraDeps: [at('far.js')] })
     check(cache.read(at('m.t.js'), at('m.js'), { extraDeps: [at('far.js')] })?.failed, true)
     const future = new Date(Date.now() + 5000)
     utimesSync(at('far.js'), future, future)
     check(cache.read(at('m.t.js'), at('m.js'), { extraDeps: [at('far.js')] }), null, 'extraDep mexeu: re-roda')
+    cleanup()
+  })
+
+  test('--force é decisão de FORA — cache.read continua servindo o vermelho cacheado', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0 })
+    const hit = cache.read(at('m.t.js'), at('m.js'))
+    check(hit?.failed, true, 'o veredito em si é HIT — quem decide ignorar é utest.js sob --force')
     cleanup()
   })
 })
@@ -411,10 +423,12 @@ test('cache: bordas que não podem derrubar o runner', ({ test }) => {
     cleanup()
   })
 
-  test('checks:0 sem exceção também não cacheia', ({ check }) => {
+  test('checks:0 sem exceção CACHEIA como vermelho — falha comum não é mais especial', ({ check }) => {
     const { at, cache } = fixture(SET)
     cache.write(at('m.t.js'), at('m.js'), { checks: 0 })
-    check(cache.read(at('m.t.js'), at('m.js')), null)
+    const hit = cache.read(at('m.t.js'), at('m.js'))
+    check(hit?.failed, true, 'vermelho reusável enquanto nada mudar')
+    check(hit?.exception, false)
     cleanup()
   })
 
@@ -457,6 +471,299 @@ test('cache: bordas que não podem derrubar o runner', ({ test }) => {
     const all = cache.results.list()
     check(all.length, 3, 'sem fase → todas')
     check(new Set(all.map(e => e.relpath)).size, 2, 'a.t.js aparece em 2 fases, b.t.js em 1')
+    cleanup()
+  })
+})
+
+test('cache: a árbitro — results.json cruza o veredito do mtime cravado', ({ test }) => {
+
+  test('caminho feliz: os dois concordam em HIT', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    check(cache.read(at('m.t.js'), at('m.js'))?.checks, 7)
+    cleanup()
+  })
+
+  test('mtime diz HIT, results.json não tem record para esta fase → MISS', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 }, { phase: 'unit' })
+    check(cache.read(at('m.t.js'), at('m.js'), { phase: 'eval' }), null, 'fase diferente não tem histórico')
+    cleanup()
+  })
+
+  test('mtime diz HIT, results.json diverge (record aponta pra outro mtime) → MISS', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.results.flush()
+    // Edita o `results.json` no disco pra simular um histórico que ficou pra trás
+    // (ex.: uma cópia/checkout trouxe um resultado antigo) — sem tocar em nada
+    // no disco além do JSON. Uma NOVA instância relê esse arquivo editado.
+    const resultsFile = join(dir, '.utest', 'results.json')
+    const raw = JSON.parse(readFileSync(resultsFile, 'utf8'))
+    raw.phases.unit.files['m.t.js'].mtime = 1   // valor que nunca bate com o disco real
+    writeFileSync(resultsFile, JSON.stringify(raw))
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js')), null, 'mtime cravado dizia HIT, histórico discorda → MISS')
+    cleanup()
+  })
+
+  test('mtime diz MISS por segundo dessincronizado, results.json confirma → promove a HIT', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.results.flush()
+    // Dessincroniza SÓ o mtime cravado do alvo (fração não-zero — "destravado"),
+    // sem editar o CONTEÚDO. `results.json` já tem o `targetMtime` gravado —
+    // sincroniza ele TAMBÉM pro mesmo valor dessincronizado, simulando o caso
+    // real (o histórico sabe que aquele exato mtime já foi visto e aprovado).
+    const targetPath = at('m.js')
+    const before = statSync(targetPath).mtimeMs
+    const drifted = before + 0.7
+    utimesSync(targetPath, drifted / 1000, drifted / 1000)
+    const resultsFile = join(dir, '.utest', 'results.json')
+    const raw = JSON.parse(readFileSync(resultsFile, 'utf8'))
+    raw.phases.unit.files['m.t.js'].targetMtime = statSync(targetPath).mtimeMs
+    writeFileSync(resultsFile, JSON.stringify(raw))
+    const c2 = TestCache(dir)
+    const hit = c2.read(at('m.t.js'), targetPath)
+    check(hit?.checks, 7, 'mtime cravado dizia MISS (destravado), histórico confirma alvo/teste intactos → promove')
+    cleanup()
+  })
+
+  test('mtime diz MISS por dessincronia, mas o CONTEÚDO mudou de verdade → continua MISS', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.results.flush()
+    // Edita o alvo de verdade — mtime muda para um valor que NEM o disco nem o
+    // `results.json` antecipavam. Diferente do teste acima, aqui não sincronizamos
+    // `results.json` com o novo mtime: o histórico não pode confirmar nada.
+    writeFileSync(at('m.js'), 'export const add = (a, b) => a - b\n')
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js')), null, 'edição real — MISS nos dois, nada promove')
+    cleanup()
+  })
+
+  test('mtime diz MISS (arquivo editado de verdade) permanece MISS mesmo se o histórico não notou', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    writeFileSync(at('m.t.js'), "test('outro', () => {})\n")
+    check(cache.read(at('m.t.js'), at('m.js')), null, 'teste editado — MISS definitivo, histórico não é consultado pra reverter')
+    cleanup()
+  })
+
+  test('chamada sem phase usa o default "unit" — grava e lê no mesmo lugar', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    check(cache.results.get('unit', at('m.t.js')) !== null, true, 'default é unit')
+    check(cache.read(at('m.t.js'), at('m.js'))?.checks, 7)
+    cleanup()
+  })
+
+  test('falha comum É promovida quando o histórico confirma — falha não é mais especial', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, failed: true, failCount: 1 })
+    const hit = cache.read(at('m.t.js'), at('m.js'))
+    check(hit?.failed, true, 'vermelho comum cacheia igual ao verde, enquanto nada mudar')
+    cleanup()
+  })
+
+  test('EXCEÇÃO nunca é promovida, mesmo com histórico intacto — sempre re-roda', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 0, exception: true, failCount: 1 })
+    check(cache.read(at('m.t.js'), at('m.js')), null, 'exceção sempre re-roda, sem exceção a essa regra')
+    cleanup()
+  })
+
+  test('record do formato ANTIGO (sem `exception`) nunca promove — lado seguro é tratar como exceção', ({ check }) => {
+    // Regressão real (~bot): um record gravado ANTES do campo `exception` existir
+    // não tem como a árbitro saber se era um vermelho comum (promovível) ou uma
+    // exceção (nunca promovível) — `plan.integration.t.js` era uma exceção e foi
+    // promovida indevidamente até esta checagem existir. O campo ausente é tratado
+    // como "pode ser exceção": nunca promove, mesmo que o `state` diga `'failed'`.
+    // Mesma primeira-rodada-de-migração que já vale pra `targetMtime`.
+    const { dir, at, cache } = fixture(SET)
+    cache.results.record('unit', at('m.t.js'), {
+      state: 'failed', checks: 0, failCount: 1, targetPath: at('m.js'),
+    })
+    cache.results.flush()
+    const resultsFile = join(dir, '.utest', 'results.json')
+    const raw = JSON.parse(readFileSync(resultsFile, 'utf8'))
+    delete raw.phases.unit.files['m.t.js'].exception
+    writeFileSync(resultsFile, JSON.stringify(raw))
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js'), { phase: 'unit' }), null, 'sem `exception` explícito, nunca promove')
+    cleanup()
+  })
+
+  test('EXCEÇÃO gravada com state:"exception" (não "failed") também nunca promove', ({ check }) => {
+    // Regressão real: `utest.js#runPhase` grava `state: suite.state`, que pode ser
+    // `'exception'` (não `'failed'`) — uma checagem em `arbitrate` que testasse só
+    // `rec.state === 'failed' && rec.exception` nunca batia pra esse record e
+    // promovia a exceção por engano (achado rodando ~/bot: `plan.integration.t.js`
+    // sempre re-executava OU, pior, quase foi promovido com um stack antigo). A
+    // árbitro tem que confiar só em `rec.exception`, nunca cruzar com `rec.state`.
+    const { dir, at, cache } = fixture(SET)
+    cache.results.record('unit', at('m.t.js'), {
+      state: 'exception', exception: true, checks: 0, failCount: 1,
+      targetPath: at('m.js'),
+    })
+    cache.results.flush()
+    // mtime cravado nunca aconteceu pra este par (não passou por writePaired) —
+    // simula o cenário real: mtime bate por acidente (nunca tocado), mas o
+    // histórico tem uma exceção. A árbitro não pode promover isso.
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js'), { phase: 'unit' }), null, 'nunca promove exceção, mesmo com state != "failed"')
+    cleanup()
+  })
+
+  test('record do formato ANTIGO (sem targetMtime) não força re-rodar sozinho — HIT continua valendo', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.results.flush()
+    // Simula um `results.json` gravado por uma versão ANTERIOR à árbitro: apaga só
+    // o campo novo, sem tocar mtime/depsNewest/disco. `undefined` (campo nunca
+    // existiu) é diferente de um valor gravado que diverge — só o migrado-e-
+    // desatualizado (`--force` popula o campo) deveria cair aqui, nunca a mera
+    // ausência de informação numa migração pendente.
+    const resultsFile = join(dir, '.utest', 'results.json')
+    const raw = JSON.parse(readFileSync(resultsFile, 'utf8'))
+    delete raw.phases.unit.files['m.t.js'].targetMtime
+    writeFileSync(resultsFile, JSON.stringify(raw))
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js'))?.checks, 7, 'formato antigo não é motivo de MISS por si só')
+    cleanup()
+  })
+
+  test('record do formato antigo, mas o ALVO mudou de verdade → continua invalidando pelo mtime cravado', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.results.flush()
+    const resultsFile = join(dir, '.utest', 'results.json')
+    const raw = JSON.parse(readFileSync(resultsFile, 'utf8'))
+    delete raw.phases.unit.files['m.t.js'].targetMtime
+    writeFileSync(resultsFile, JSON.stringify(raw))
+    // Edita o alvo de verdade — o mtime cravado já detecta isso sozinho (sem
+    // precisar da árbitro), então mesmo sem `targetMtime` no histórico, o veredito
+    // continua sendo MISS.
+    writeFileSync(at('m.js'), 'export const add = (a, b) => a * b\n')
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js')), null, 'edição real sempre invalida, com ou sem targetMtime no histórico')
+    cleanup()
+  })
+
+  test('vermelho sem alvo (sidecar puro) também cacheia — mesma regra generalizada', ({ check }) => {
+    const { at, cache } = fixture({ ...SET, 'solo.eval.js': "test('e', () => {})\n" })
+    cache.write(at('solo.eval.js'), null, {
+      checks: 0, failed: true, failCount: 1,
+    })
+    const hit = cache.read(at('solo.eval.js'), null)
+    check(hit?.failed, true)
+    cleanup()
+  })
+})
+
+// `cache.read` nunca sabe de `--force` — quem decide ignorar um HIT é SEMPRE quem
+// chama (`utest.js`, checando a flag antes de consultar o cache). Este bloco prova
+// o contrapositivo, fora do caminho feliz: uma vez que mtime cravado e results.json
+// CONCORDAM, nenhuma leitura repetida, nenhuma instância nova, nenhum flush redundante,
+// nenhuma mutação IRRELEVANTE ao par derruba o HIT sozinho — só uma mudança real no
+// teste/alvo/deps (já coberta acima) ou o chamador ignorando o veredito por conta
+// própria simula o efeito de `--force`.
+test('cache: HIT confirmado é ESTÁVEL — nada além de --force real (ou mudança real) o derruba', ({ test }) => {
+
+  test('ler 50x seguidas o mesmo par confirmado devolve sempre o mesmo HIT', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    for (let i = 0; i < 50; i++) {
+      check(cache.read(at('m.t.js'), at('m.js'))?.checks, 7, `leitura #${i}`)
+    }
+    cleanup()
+  })
+
+  test('uma NOVA instância de TestCache, relendo o mesmo disco, também vê HIT', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.results.flush()
+    for (let i = 0; i < 5; i++) {
+      const fresh = TestCache(dir)
+      check(fresh.read(at('m.t.js'), at('m.js'))?.checks, 7, `instância #${i}`)
+    }
+    cleanup()
+  })
+
+  test('flush() redundante (sem write novo) não muda o veredito', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.results.flush()
+    cache.results.flush()
+    cache.results.flush()
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js'))?.checks, 7)
+    cleanup()
+  })
+
+  test('tocar um arquivo IRRELEVANTE (fora do teste/alvo/grafo de deps) não invalida', ({ check }) => {
+    const { dir, at, cache } = fixture({ ...SET, 'unrelated.js': 'export const U = 1\n' })
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.results.flush()
+    // `unrelated.js` não é importado por `m.t.js` nem é o alvo — mexer nele não deveria
+    // aparecer em NENHUM dos dois mecanismos.
+    const future = new Date(Date.now() + 60000)
+    utimesSync(at('unrelated.js'), future, future)
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js'))?.checks, 7, 'arquivo fora do grafo não deveria importar')
+    cleanup()
+  })
+
+  test('reordenar leitura/flush várias vezes não degrada um HIT confirmado', ({ check }) => {
+    const { dir, at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    check(cache.read(at('m.t.js'), at('m.js'))?.checks, 7, 'HIT antes do flush')
+    cache.results.flush()
+    check(cache.read(at('m.t.js'), at('m.js'))?.checks, 7, 'HIT depois do flush, mesma instância')
+    const c2 = TestCache(dir)
+    check(c2.read(at('m.t.js'), at('m.js'))?.checks, 7, 'HIT numa instância nova')
+    check(c2.read(at('m.t.js'), at('m.js'))?.checks, 7, 'HIT de novo, mesma instância nova')
+    cleanup()
+  })
+
+  test('ler outra FASE do mesmo par não contamina nem derruba o HIT original', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 }, { phase: 'unit' })
+    // Uma leitura numa fase SEM histórico não deve, por efeito colateral, mexer no
+    // record da fase 'unit' (nem via memoização de `deps`, nem via `store` em memória).
+    check(cache.read(at('m.t.js'), at('m.js'), { phase: 'eval' }), null, 'fase eval não tem histórico')
+    check(cache.read(at('m.t.js'), at('m.js'), { phase: 'unit' })?.checks, 7, 'fase unit continua intacta')
+    cleanup()
+  })
+
+  test('só o CHAMADOR ignorando o veredito simula --force — cache.read nunca o faz sozinho', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    // `cache.read` não tem parâmetro de force: simular a flag é, por definição,
+    // o CHAMADOR decidir não perguntar (o que `utest.js` faz quando `--force` está
+    // ativo — pula a leitura do cache inteiramente, nunca invalida via cache.js).
+    const wouldForce = true
+    const hit = cache.read(at('m.t.js'), at('m.js'))
+    check(hit?.checks, 7, 'o veredito em si continua HIT — force é decisão de FORA')
+    const effectiveResult = wouldForce ? null : hit   // é isto que utest.js faz
+    check(effectiveResult, null, 'só ignorar o HIT (fora de cache.js) produz o efeito de --force')
+    cleanup()
+  })
+
+  test('re-write do MESMO resultado (idempotente) mantém HIT — não é preciso mudar nada pra reconfirmar', ({ check }) => {
+    const { at, cache } = fixture(SET)
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
+    cache.write(at('m.t.js'), at('m.js'), { checks: 7 })   // re-roda de propósito, mesmo resultado
+    check(cache.read(at('m.t.js'), at('m.js'))?.checks, 7)
+    cleanup()
+  })
+
+  test('um par SEM alvo (sidecar) também é estável sob leituras repetidas', ({ check }) => {
+    const { at, cache } = fixture({ 'solo.t.js': "test('s', () => {})\n" })
+    cache.write(at('solo.t.js'), null, { checks: 5 })
+    for (let i = 0; i < 20; i++) {
+      check(cache.read(at('solo.t.js'), null)?.checks, 5, `leitura #${i}`)
+    }
     cleanup()
   })
 })

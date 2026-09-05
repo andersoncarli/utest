@@ -35,6 +35,35 @@ import { join, relative, dirname, resolve, parse as parsePath } from 'path'
  * depois da gravação cairia dentro dele — invisível. Foi essa a falha que
  * deixou um `export` removido em `scl/theme-params.js`, dois saltos além do
  * alvo pareado, ser servido como verde.
+ *
+ * ── A segunda checagem: results.json como árbitro ───────────────────────────
+ *
+ * O cache de tempo acima não tem furo SEGUIDO À RISCA — mas fora do controle
+ * do runner, timestamps colidem: um `git checkout`, uma cópia, uma race entre
+ * dois processos gravando quase junto, podem deixar alvo e teste em SEGUNDOS
+ * diferentes sem que nenhum dos dois tenha sido editado de verdade. O cache de
+ * tempo sozinho não distingue essa dessincronia de uma edição real — os dois
+ * casos parecem idênticos do lado de fora (o segundo comum quebrou).
+ *
+ * `results.json` já grava, a cada rodada real, o mtime do teste e a idade da
+ * dependência mais nova (`depsNewest`) — o mesmo par de fatos que o cache de
+ * tempo usa, só que por outro caminho, e sobrevivendo em disco fora do inode
+ * do arquivo do usuário. `readPaired`/`readSelf` agora CONSULTAM esse registro
+ * antes do veredito final, nos dois sentidos:
+ *
+ *   HIT  do mtime, `results.json` DISCORDA (teste/target/deps mudaram desde o
+ *        último record) → vira MISS. O cache de tempo achou parecido, o
+ *        histórico prova que não é.
+ *   MISS do mtime (segundo dessincronizado, alvo destravado, teste fracionário)
+ *        mas `results.json` CONFIRMA que teste, target e deps são
+ *        BYTE-A-BYTE os mesmos mtimes do último record que passou → promove
+ *        a HIT. A dessincronia era do relógio, não do conteúdo.
+ *
+ * Nenhum dos dois mecanismos é removido nem vira autoridade única — cada um
+ * detecta um tipo de furo que o outro não vê sozinho, e a checagem cruzada é
+ * só uma comparação de números já em memória (sem I/O extra: `results.json`
+ * já está carregado no mesmo `TestCache`). `phase` (default `'unit'`) escolhe
+ * qual fatia do histórico consultar.
  */
 const CHECKS_MAX  = 999
 const FAILED_MARK = 1
@@ -91,6 +120,38 @@ export function TestCache(root) {
   }
   const projectRoot = findProjectRoot(root)
   const resultsFile = join(projectRoot, '.utest', 'results.json')
+
+  // ── utest/depgraph.json — os IMPORTS DIRETOS de cada arquivo, entre processos ──
+  // `deps()` (mais abaixo) monta o fechamento transitivo por BFS em memória — isso
+  // já é rápido (é só travessia de um grafo pequeno). O CARO é descobrir os imports
+  // DIRETOS de cada arquivo: `readFileSync` + `IMPORT_RE.exec` em CADA arquivo do
+  // projeto, toda vez. A memoização de `depsMemo` só vive dentro de UM processo —
+  // cada `utest ~/projeto` novo (a forma normal de chamar) recomeça do zero, e num
+  // projeto de centenas de arquivos isso sozinho já custa ~1s, mesmo com tudo em
+  // cache-hit (achado rodando ~/soml: 920ms só pra reler+parsear 258 arquivos que
+  // não mudaram). Este storage persiste, por arquivo, `{ mtime, imports }` — os
+  // imports DIRETOS resolvidos na última vez que o arquivo foi lido, válidos
+  // enquanto o mtime dele não mudar. Ler um arquivo do disco continua acontecendo
+  // (stat é barato); reabrir e reparsear o CONTEÚDO é o que se evita.
+  const depgraphFile = join(projectRoot, '.utest', 'depgraph.json')
+  let depgraphStore = null
+  let depgraphDirty = false
+  const depgraphLoad = () => {
+    if (depgraphStore) return depgraphStore
+    try {
+      const raw = JSON.parse(readFileSync(depgraphFile, 'utf8'))
+      depgraphStore = raw && raw.version === 1 && raw.files ? raw : { version: 1, files: {} }
+    } catch { depgraphStore = { version: 1, files: {} } }
+    return depgraphStore
+  }
+  const depgraphFlush = () => {
+    if (!depgraphDirty) return
+    try {
+      mkdirSync(dirname(depgraphFile), { recursive: true })
+      writeFileSync(depgraphFile, JSON.stringify(depgraphLoad()))
+      depgraphDirty = false
+    } catch {}
+  }
   let store = null
   const storeLoad = () => {
     if (store) return store
@@ -117,18 +178,28 @@ export function TestCache(root) {
           phase: ph, relpath, abspath: join(projectRoot, relpath),
         })))
     },
-    record: (phase, p, { ms, tests, checks, failCount, state, failLines, extraDeps = [] } = {}) => {
+    record: (phase, p, { ms, tests, checks, failCount, state, exception = false, failLines, extraDeps = [], targetPath = null } = {}) => {
       phaseFiles(phase)[relative(projectRoot, p)] = {
         ms: Math.round(ms || 0),
         tests: tests ?? 0,
         checks: checks ?? 0,
         failCount: failCount ?? 0,
         state: state || 'passed',
+        // Uma EXCEÇÃO nunca é promovível (MISS do tempo → HIT): sem sidecar nem
+        // estrutura fixa pra reconstruir o stack, um vermelho de exceção sempre
+        // precisa rodar de verdade — `arbitrate` confere este campo antes de
+        // promover qualquer `state:'failed'`.
+        exception: !!exception,
         // O bloco de erro JÁ RENDERIZADO da última execução real. Um vermelho reusado do
         // cache não tem `checks`/`error` vivos para reconstruir, e sem isto o `-v:2`
         // degradava para o `-v:1` silenciosamente — a linha compacta e mais nada.
         failLines: failLines?.length ? failLines : undefined,
         mtime: mtimeOf(p),
+        // O mtime do ALVO pareado, gravado à parte de `depsNewest`: o alvo de um
+        // `.eval.js` (o `.md` da feature) não é um `import`, então nunca entraria no
+        // grafo estático — sem isto a árbitro (abaixo) não tinha como confirmar que o
+        // alvo específico não mudou, só as deps.
+        targetMtime: targetPath ? mtimeOf(targetPath) : null,
         depsNewest: newestDep(p, extraDeps),
         at: Date.now(),
       }
@@ -145,24 +216,73 @@ export function TestCache(root) {
         mkdirSync(dirname(resultsFile), { recursive: true })
         writeFileSync(resultsFile, JSON.stringify(s, null, 0))
       } catch {}
+      // Mesmo gatilho que já persiste `results.json` — `utest.js` chama
+      // `results.flush()` incondicionalmente ao fim de cada fase, então não
+      // precisa de mais um ponto de chamada pra não esquecer de persistir o grafo.
+      depgraphFlush()
     },
-    // O histórico ainda bate com a realidade do disco? (mesmo mtime do teste, e
-    // nenhuma dep mais nova que quando gravamos). MESMA pergunta que a regra do
-    // cache de tempo responde por outro caminho — as duas discordarem para o mesmo
-    // arquivo é um furo em uma delas.
-    fresh: (phase, p, extraDeps = []) => {
+    // O histórico ainda bate com a realidade do disco? (mesmo mtime do teste, o
+    // mesmo mtime do alvo pareado se houver um, e nenhuma dep mais nova que quando
+    // gravamos). MESMA pergunta que a regra do cache de tempo responde por outro
+    // caminho — as duas discordarem para o mesmo arquivo é sinal de furo numa delas,
+    // e é exatamente essa discordância que `arbitrate` (abaixo) usa para decidir
+    // quem vence.
+    fresh: (phase, p, extraDeps = [], targetPath = null) => {
       const r = phaseFiles(phase)[relative(projectRoot, p)]
       if (!r) return false
       if (r.mtime !== mtimeOf(p)) return false
+      // `targetMtime` só existe em records gravados por esta versão (a árbitro).
+      // Um record do formato ANTERIOR (sem o campo) não tem como confirmar nem
+      // discordar do alvo — tratar `undefined` como "diverge" forçava toda a
+      // árvore de um projeto pré-existente a re-rodar na primeira leitura pós-
+      // upgrade, mascarado de bug de cache. `undefined` não é sinal de nada: só
+      // um valor GRAVADO que não bate é divergência de verdade. A cura desse
+      // formato antigo é `--force` (decisão de fora, como sempre foi), não um
+      // rebaixamento silencioso daqui.
+      if (targetPath && r.targetMtime !== undefined && r.targetMtime !== mtimeOf(targetPath)) return false
+      // Uma dep SUMIDA do disco não pode passar por "não ficou mais nova que
+      // depsNewest" — `newestDep` trata ausência como `0` (pra não quebrar o
+      // reduce), o que a leitura ingênua confundiria com "nunca mudou". Mesma
+      // regra que `depsFresh` já aplica no cache de tempo.
+      if (deps(p, extraDeps).some(d => mtimeOf(d) === null)) return false
       return newestDep(p, extraDeps) <= (r.depsNewest ?? 0)
     },
+  }
+
+  // Os imports DIRETOS de UM arquivo — persistidos em `depgraph.json` por mtime.
+  // Se o mtime do arquivo bate com o que foi gravado da última vez, reusa a lista
+  // sem tocar o CONTEÚDO; só quando o arquivo mudou de verdade é que `readFileSync`
+  // + `IMPORT_RE` rodam de novo. O disco continua sendo consultado (um `statSync`
+  // é ordens de magnitude mais barato que reabrir e reparsear o arquivo inteiro).
+  const directImportsOf = (file) => {
+    const mt = mtimeOf(file)
+    if (mt === null) return []
+    const store = depgraphLoad()
+    const key = relative(projectRoot, file)
+    const cached = store.files[key]
+    if (cached && cached.mtime === mt) return cached.imports.map(p => join(projectRoot, p))
+
+    let src
+    try { src = readFileSync(file, 'utf8') } catch { return [] }
+    const imports = []
+    IMPORT_RE.lastIndex = 0
+    for (let m; (m = IMPORT_RE.exec(src));) {
+      const dep = resolveImport(m[1] ?? m[2] ?? m[3], dirname(file), root)
+      if (dep) imports.push(dep)
+    }
+    store.files[key] = { mtime: mt, imports: imports.map(p => relative(projectRoot, p)) }
+    depgraphDirty = true
+    return imports
   }
 
   // `extraRoots` são pontos de partida ADICIONAIS do walk, para o teste cujo
   // alvo declara suas dependências fora de um `import` — um `.eval.js` cujo
   // assunto é uma string passada a `render()`, e cujo `.md` de feature lista os
   // arquivos afetados em `files:`. O grafo estático do próprio teste continua
-  // valendo; `extraRoots` só o amplia.
+  // valendo; `extraRoots` só o amplia. O FECHAMENTO transitivo (o BFS abaixo)
+  // continua recalculado a cada chamada — é travessia em memória sobre imports já
+  // resolvidos, barata mesmo em grafos grandes; só a LEITURA de cada arquivo
+  // individual (`directImportsOf`) é que persiste entre processos.
   const deps = (entryPath, extraRoots = []) => {
     const key = extraRoots.length ? entryPath + '\0' + extraRoots.join('\0') : entryPath
     const hit = depsMemo.get(key)
@@ -173,13 +293,8 @@ export function TestCache(root) {
 
     while (stack.length) {
       const file = stack.pop()
-      let src
-      try { src = readFileSync(file, 'utf8') } catch { continue }
-
-      IMPORT_RE.lastIndex = 0
-      for (let m; (m = IMPORT_RE.exec(src));) {
-        const dep = resolveImport(m[1] ?? m[2] ?? m[3], dirname(file), root)
-        if (dep && !seen.has(dep)) { seen.add(dep); stack.push(dep) }
+      for (const dep of directImportsOf(file)) {
+        if (!seen.has(dep)) { seen.add(dep); stack.push(dep) }
       }
     }
 
@@ -200,16 +315,27 @@ export function TestCache(root) {
     })
 
   // ── Conjunto pareado: o alvo é o dono do veredito ────────────────────────
-  const readPaired = (testPath, targetPath, extraDeps = []) => {
+  // O cache de tempo decide sozinho primeiro (`timeVerdict`); `arbitrate` (mais
+  // abaixo) cruza esse veredito com `results.json` nos dois sentidos antes do
+  // retorno final — ver o comment-block do topo ("A segunda checagem").
+  const readPaired = (testPath, targetPath, extraDeps = [], phase = 'unit') => {
+    const timeVerdict = readPairedByTime(testPath, targetPath, extraDeps)
+    return arbitrate(phase, testPath, extraDeps, targetPath, timeVerdict)
+  }
+
+  const readPairedByTime = (testPath, targetPath, extraDeps = []) => {
     const st = (() => { try { return statSync(testPath) } catch { return null } })()
     const targetMs = mtimeOf(targetPath)
     if (!st || targetMs === null) return null
 
-    // Alvo marcado 1ms = o conjunto FALHOU. Para um `.t.js` isso é "re-rode" (um
-    // teste vermelho é barato e o output fresco vale). Para um passo caro que
-    // OPTOU por cachear a falha (`cacheFailure`, só quando é 100% reproduzível —
-    // eval sandbox, nunca `real`), o veredito vermelho é reusável enquanto o
-    // alvo e o grafo não mudarem: mesma pergunta do verde, resposta oposta.
+    // Alvo marcado 1ms = o conjunto FALHOU. O veredito vermelho é reusável enquanto
+    // o alvo e o grafo não mudarem — MESMA pergunta que o verde faz, resposta
+    // oposta: um vermelho que nunca re-roda até algo mudar de verdade é tão barato
+    // quanto um verde cacheado, e reconfirmar um teste caro (`real`/`linear`, que
+    // spawna processo) só para reexibir o mesmo vermelho é o custo que este cache
+    // existe para evitar. Antes só cacheava quando quem chamava marcava
+    // `cacheFailure` explícito (sandbox puro, nunca `real`) — generalizado: TODO
+    // vermelho cacheia, e só `--force` ou uma mudança real de mtime re-roda.
     if (targetMs % 1000 === FAILED_MARK) {
       const side = readSelf(testPath, extraDeps)
       if (side?.failed && side.targetSecond === targetMs) {
@@ -231,7 +357,7 @@ export function TestCache(root) {
     return { checks, tests: 0, exception: false }
   }
 
-  const writePaired = (testPath, targetPath, { checks, failCount, exception, failed, tests, cacheFailure }, extraDeps = []) => {
+  const writePaired = (testPath, targetPath, { checks, failCount, exception, failed, tests }, extraDeps = []) => {
     const targetMs = mtimeOf(targetPath)
     if (targetMs === null) return
     const second = Math.floor(targetMs / 1000) * 1000
@@ -241,16 +367,18 @@ export function TestCache(root) {
     // EXPLÍCITO — uma suíte parcial (`s.passed>0` e `s.failed>0`) ainda tem
     // `checks>0`, e inferir por `!checks` a cacheava como verde.
     if (exception || failed || !checks) {
-      const failed = new Date(second + FAILED_MARK)
-      utimesSync(targetPath, failed, failed)
+      const failedAt = new Date(second + FAILED_MARK)
+      utimesSync(targetPath, failedAt, failedAt)
       bust(testPath)
-      // `cacheFailure`: o resultado vermelho é reproduzível, então grava-o num
-      // sidecar carimbado com o segundo+1ms do alvo. `readPaired` só o reusa
-      // enquanto `targetSecond` bater E as deps não tiverem mexido — um alvo
-      // reeditado sai desse segundo e o sidecar deixa de casar sozinho.
-      if (cacheFailure) {
+      // O vermelho é gravado num sidecar carimbado com o segundo+1ms do alvo —
+      // `readPaired` só o reusa enquanto `targetSecond` bater E as deps não
+      // tiverem mexido; um alvo reeditado sai desse segundo e o sidecar deixa de
+      // casar sozinho. Toda falha grava (não só `cacheFailure` — ver comment-block
+      // do topo). Uma EXCEÇÃO continua sem sidecar: sem estrutura fixa pra
+      // reconstruir o stack, um vermelho de exceção sempre re-roda por completo.
+      if (!exception) {
         writeSelf(testPath, {
-          failed: true, exception: !!exception,
+          failed: true, exception: false,
           checks: checks ?? 0, failCount: failCount ?? 1, tests: tests ?? 0,
           targetSecond: second + FAILED_MARK,
         }, extraDeps)
@@ -282,6 +410,9 @@ export function TestCache(root) {
   const selfFile = testPath =>
     join(root, '.utest', relative(root, testPath).replace(/[/\\]/g, '__') + '.json')
 
+  // Puro mtime/sidecar, sem árbitro — usado internamente por `readPairedByTime`
+  // (o caso de falha reproduzível) para não recursar na arbitragem duas vezes.
+  // Quem chama de fora (`read`, sem alvo) passa por `readSelfArbitrated` abaixo.
   const readSelf = (testPath, extraDeps = []) => {
     try {
       const data = JSON.parse(readFileSync(selfFile(testPath), 'utf8'))
@@ -292,6 +423,67 @@ export function TestCache(root) {
       if (!depsFresh(testPath, data.seen ?? 0, extraDeps)) return null
       return data
     } catch { return null }
+  }
+
+  const readSelfArbitrated = (testPath, extraDeps = [], phase = 'unit') => {
+    const timeVerdict = readSelf(testPath, extraDeps)
+    return arbitrate(phase, testPath, extraDeps, null, timeVerdict)
+  }
+
+  // ── A árbitro: cruza o veredito do cache de tempo com `results.json` ────────
+  // Ver "A segunda checagem" no comment-block do topo. Os dois mecanismos leem
+  // dados já em memória (nenhum I/O extra) — `results` já é carregado no mesmo
+  // `TestCache`. `timeVerdict` é o que `readPairedByTime`/`readSelf` decidiram
+  // sozinhos; `null` ali significa MISS do cache de tempo, não "sem opinião".
+  const diag = msg => {
+    if ((globalThis.utestVerbosity ?? 0) >= 2) process.stderr.write(`\x1b[33m[cache] ${msg}\x1b[39m\n`)
+  }
+
+  const arbitrate = (phase, testPath, extraDeps, targetPath, timeVerdict) => {
+    const historyFresh = results.fresh(phase, testPath, extraDeps, targetPath)
+    const rel = () => relative(root, testPath)
+
+    if (timeVerdict) {
+      // HIT do tempo, histórico discorda (teste/alvo/deps mudaram desde o
+      // último record) → rebaixa a MISS. O cache de tempo achou parecido; o
+      // histórico prova que não é.
+      if (!historyFresh) {
+        diag(`${rel()}: cache de tempo dizia HIT, results.json discorda (mtime/alvo/deps mudaram desde o último record) → re-rodando`)
+        return null
+      }
+      return timeVerdict
+    }
+
+    // MISS do tempo — só promove a HIT se o histórico CONFIRMA, byte-a-byte
+    // nos mtimes, que teste/alvo/deps são os mesmos de um record que passou
+    // (ou de um vermelho reproduzível). Sem isso, uma edição real continua MISS.
+    if (!historyFresh) return null
+    const rec = results.get(phase, testPath)
+    if (!rec) return null
+    // Promover exige CONFIRMAR o alvo especificamente — um record do formato
+    // ANTERIOR (sem `targetMtime`) não tem essa informação, e sem ela não dá pra
+    // distinguir "o alvo não mudou" de "o alvo mudou e o histórico é cego pra
+    // isso". Rebaixar tolera o campo ausente (não é sinal de nada); promover
+    // exige o campo presente E batendo — a assimetria é proposital: o lado
+    // arriscado é sempre o menos permissivo. Sem confirmação, a primeira leitura
+    // fica MISS, roda de verdade, e grava `targetMtime` — dali em diante já
+    // promove normalmente, sem precisar de `--force`.
+    if (targetPath && rec.targetMtime === undefined) return null
+    // Exceção nunca promove — sem sidecar, o stack fresco sempre vale mais que o
+    // segundo economizado. Um record do formato ANTERIOR (sem o campo `exception`
+    // explícito) é tratado como se FOSSE exceção — o lado seguro quando falta
+    // informação: `rec.state === 'exception'` cobre quem já usava esse valor;
+    // `rec.exception === undefined` cobre qualquer record antigo cujo `state` só
+    // dizia `'failed'`/`'passed'` sem dizer se era exceção. Checar só
+    // `rec.exception` (truthy) deixava passar ambos os casos SEM o campo,
+    // promovendo uma exceção antiga por engano — achado rodando ~/bot.
+    if (rec.state === 'exception' || rec.exception !== false) return null
+    diag(`${rel()}: cache de tempo dizia MISS (segundo dessincronizado?), results.json confirma teste/alvo/deps intactos → aproveitando`)
+    return {
+      checks: rec.checks ?? 0, tests: rec.tests ?? 0,
+      failCount: rec.failCount ?? 0, exception: false,
+      failed: rec.state === 'failed',
+    }
   }
 
   const rmSelf = testPath => {
@@ -329,25 +521,53 @@ export function TestCache(root) {
   // O alvo decide qual protocolo vale; quem chama não precisa saber de nenhum.
   // `extraDeps` (opcional): raízes de dep além do grafo estático do teste — a
   // fase `eval` passa aqui o `files:` do `.md` de feature (ver `utest.js#runPhase`).
+  // `phase` (opcional, default `'unit'`): qual fatia de `results.json` a árbitro
+  // consulta — sem isto, cai na fase mais comum, mesmo default que `scanner.js` usa
+  // pro `include` de um `TEST.yaml` sem seção própria.
   return {
     deps,
     bust,
     results,
-    read: (testPath, targetPath, { extraDeps = [] } = {}) =>
-      targetPath ? readPaired(testPath, targetPath, extraDeps) : readSelf(testPath, extraDeps),
-    write: (testPath, targetPath, result, { extraDeps = [] } = {}) => {
+    read: (testPath, targetPath, { extraDeps = [], phase = 'unit' } = {}) =>
+      targetPath ? readPaired(testPath, targetPath, extraDeps, phase) : readSelfArbitrated(testPath, extraDeps, phase),
+    write: (testPath, targetPath, result, { extraDeps = [], phase = 'unit' } = {}) => {
       try {
         if (targetPath) writePaired(testPath, targetPath, result, extraDeps)
-        else if (result.exception || result.failed || !result.checks) {
+        else if (result.exception) {
+          // Exceção não tem estrutura fixa pra reconstruir (stack fresco vale mais
+          // que o segundo economizado) — sempre re-roda, sem sidecar.
           bust(testPath)
-          if (result.cacheFailure) {
-            writeSelf(testPath, {
-              failed: true, exception: !!result.exception,
-              checks: result.checks ?? 0, failCount: result.failCount ?? 1, tests: result.tests ?? 0,
-            }, extraDeps)
-          }
+        } else if (result.failed || !result.checks) {
+          // Vermelho comum agora CACHEIA igual ao verde: o sidecar guarda o
+          // resultado e o mtime ATUAL do teste (sem alvo, não há segundo comum pra
+          // recravar) — a próxima leitura só re-roda se o teste ou uma dep mudar de
+          // verdade, ou sob `--force`. O que atualiza o cache é sempre a ÚLTIMA
+          // execução real, passe ou falhe: um vermelho que virou verde limpa o
+          // sidecar (branch `else` abaixo, via `writeSelf` do resultado passado).
+          writeSelf(testPath, {
+            failed: true, exception: false,
+            checks: result.checks ?? 0, failCount: result.failCount ?? 1, tests: result.tests ?? 0,
+          }, extraDeps)
         }
         else writeSelf(testPath, result, extraDeps)
+      } catch {}
+      // `results.record` roda SEMPRE, verde ou vermelho, e DEPOIS do bloco acima —
+      // `writePaired` recrava o mtime do alvo (o segundo comum), e `targetMtime`
+      // precisa capturar esse valor já atualizado, ou a árbitro acusaria stale na
+      // rodada seguinte mesmo sem nada ter mudado. Ponto único de escrita: quem usa
+      // `cache.write` (testes inclusive) nunca precisa lembrar de gravar os dois
+      // lados. Uma EXCEÇÃO ainda vira `state:'failed'` aqui — mas sem sidecar (o
+      // branch acima não gravou um), e sem sidecar `readPairedByTime`/`readSelf`
+      // nunca confirmam o veredito de tempo sozinhos, então a árbitro nunca chega a
+      // promover uma exceção mesmo com o record de histórico presente.
+      try {
+        results.record(phase, testPath, {
+          ms: result.ms, tests: result.tests, checks: result.checks,
+          failCount: result.failCount, failLines: result.failLines,
+          state: (result.exception || result.failed || !result.checks) ? 'failed' : 'passed',
+          exception: !!result.exception,
+          extraDeps, targetPath,
+        })
       } catch {}
     },
   }

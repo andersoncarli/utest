@@ -128,7 +128,7 @@ export function scan(root, configPath, phase = 'unit') {
   const cache = TestCache(root)
   const entries = testFiles.map(path => {
     const target = findTarget(path)
-    return { path, target, cache: cache.read(path, target) }
+    return { path, target, cache: cache.read(path, target, { phase }) }
   })
 
   const covered   = new Set(entries.map(e => e.target).filter(Boolean))

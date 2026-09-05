@@ -249,18 +249,27 @@ const traceOut = _traceArg?.includes('=') ? _traceArg.slice('--trace='.length) :
 const timeoutArg = args.find(a => a.startsWith('--timeout=') || a.startsWith('-to='))
 const timeout = timeoutArg ? parseInt(timeoutArg.split('=')[1]) : 1000
 const positional = args.filter(a => !a.startsWith('-') && !/^(-v)?:?([0123])$/.test(a))
+// Acha o target ANTES do YAML de fases: só depende de existir no disco, e o YAML certo
+// a consultar é o do TARGET, não o do cwd — `utest.js eval ~/outro-projeto` rodado de
+// fora precisa do TEST.yaml de `~/outro-projeto`, ou `eval` nunca bate em `_declaredPhases`
+// e cai em filtro de nome (fura o cache inteiro, escaneia todas as fases: o próprio bug
+// que este mecanismo existe para evitar, só que ativado pelo cwd errado).
+let rawTarget = positional.find(a => fs.existsSync(a))
 // Um positional que casa um NOME DE FASE declarada no TEST.yaml seleciona aquela fase e sai
 // da lista de filtros — `utest.js eval` roda só a fase `eval`, cacheada, em vez de tratar
 // `eval` como termo de nome (que furava o cache e ainda escaneava as outras fases). Os
 // positionals restantes seguem como filtro de nome / path. A leitura é rasa (só as chaves
-// de topo do YAML de `cwd`); a resolução completa de fase vem depois, com `cfgRaw`.
-const _yamlNearCwd = path.resolve(process.cwd(), 'TEST.yaml')
+// de topo do YAML do TARGET, ou do cwd sem target); a resolução completa de fase vem
+// depois, com `cfgRaw`.
+const _yamlSearchDir = rawTarget
+  ? (fs.statSync(rawTarget).isFile() ? path.dirname(rawTarget) : rawTarget)
+  : process.cwd()
+const _yamlNearCwd = path.resolve(_yamlSearchDir, 'TEST.yaml')
 const _declaredPhases = new Set(fs.existsSync(_yamlNearCwd)
   ? Object.keys(parseYaml(fs.readFileSync(_yamlNearCwd, 'utf8')) || {}).filter(k => k !== 'boot' && k !== 'exclude')
   : [])
 const phaseArg = positional.find(a => _declaredPhases.has(a) && !fs.existsSync(a))
 let filterTerms = positional.filter(a => a !== phaseArg && !fs.existsSync(a))
-let rawTarget = positional.find(a => fs.existsSync(a))
 
 // **O storage é o índice.** Um termo que NÃO é path (`utest 3.2`, `utest button`) é
 // resolvido contra as chaves de `.utest/results.json` ANTES de qualquer scan: se casa
@@ -341,6 +350,16 @@ if (doTrace && !hogs && !asJson) {
 // Opt-in via TEST.yaml `boot: <path>` (resolved relative to the config file).
 // A target project may need its own globals registered (e.g. soml's `bootstrap()`)
 // before any test file imports — this runs once, ahead of the scan.
+//
+// `chdir` para `root` ANTES do boot: um `TEST.boot.js` de projeto-alvo pode assumir
+// `process.cwd() === raiz do projeto` (o caso comum — `soml/apps/eval/cli.js` faz
+// `ROOT = process.cwd()`) e nunca é escrito esperando rodar de fora. `utest.js ~/outro`
+// chamado de outro diretório deixava esse ROOT apontar para o cwd ERRADO — a fase
+// registrava sem erro, mas achava ZERO entries (procurava `plans/**` no lugar errado)
+// e sumia do relatório em silêncio, parecendo uma fase que nunca existiu. Todo uso de
+// `process.cwd()` NESTE arquivo já aconteceu acima desta linha (resolução de
+// `root`/`configPath`/`rawTarget`); nada depois depende do cwd original.
+if (root !== process.cwd()) { try { process.chdir(root) } catch {} }
 if (fs.existsSync(configPath)) {
   const cfg = parseYaml(fs.readFileSync(configPath, 'utf8')) || {}
   if (cfg.boot) await import(path.resolve(path.dirname(configPath), cfg.boot))
@@ -400,7 +419,7 @@ async function runPhase(phase) {
       }
       entries = provided.map(e => ({
         ...e, target: e.target ?? null, extraDeps: e.extraDeps ?? [],
-        cache: cache.read(e.path, e.target ?? null, { extraDeps: e.extraDeps ?? [] }),
+        cache: cache.read(e.path, e.target ?? null, { extraDeps: e.extraDeps ?? [], phase }),
       }))
     } else if (_isFile) {
       // UM arquivo, fase SEM provider: nenhum walk. `findTarget` (puro) acha o alvo pareado;
@@ -416,7 +435,7 @@ async function runPhase(phase) {
       if (belongs) {
         const target = findTarget(absFile)
         cache = TestCache(path.dirname(configPath))
-        entries = [{ path: absFile, target, cache: cache.read(absFile, target) }]
+        entries = [{ path: absFile, target, cache: cache.read(absFile, target, { phase }) }]
       }
     } else {
       ; ({ entries, uncovered, cache } = scan(root, configPath, phase))
@@ -447,10 +466,6 @@ async function runPhase(phase) {
   let _done = 0
   for (const entry of entries) {
   busReset()
-  // Barra viva: `EVAL [████░░░░] plans/5-apps/5.26.eval.js ....  12/77` — reescrita a cada
-  // arquivo com `\r`, apagada no fim da fase (`\r\x1b[K`). Só num TTY, fora do `-v:3`/json/
-  // hogs (que têm o próprio streaming ou não querem ruído).
-  if (streamPhase) process.stdout.write('\r' + progressBar(phase, _done, entries.length, path.relative(root, entry.path), { width }) + '\x1b[K')
   _done++
 
   // ── Cached: inject placeholder, skip execution ───────────────────────────
@@ -459,13 +474,12 @@ async function runPhase(phase) {
   const matchesFilter = filterTerms.length === 0 ||
     filterTerms.every(t => entryName.toLowerCase().includes(t.toLowerCase()))
   const wantsLiveRun = filterTerms.length > 0 && matchesFilter
-  // Um cache pode dizer VERDE (o caso comum) ou VERMELHO REPRODUZÍVEL
-  // (`failed`, só gravado por quem passou `cacheFailure` — hoje a fase `eval`
-  // quando a feature é 100% sandbox). Vermelho cacheado é pulado igual: o
+  // Um cache pode dizer VERDE (o caso comum) ou VERMELHO — qualquer falha comum
+  // agora cacheia igual ao verde, não só a antes reservada a `cacheFailure`. O
   // resultado não muda enquanto o alvo e o grafo não mudarem, e re-rodar um
-  // passo de 10s só para reconfirmar o vermelho é o que este cache existe para
-  // evitar (`.sprint/TEST-EVAL.md`). Uma EXCEÇÃO não-`failed` no cache continua
-  // re-rodando: o stack fresco vale mais que o segundo economizado.
+  // passo de 10s só para reconfirmar o mesmo vermelho é o que este cache existe
+  // para evitar. Uma EXCEÇÃO nunca cacheia: o stack fresco vale mais que o
+  // segundo economizado, e sem estrutura fixa pra reconstruir não há o que servir.
   const cacheHit = entry.cache && (entry.cache.failed || !entry.cache.exception)
   if (!force && !wantsLiveRun && cacheHit) {
     const c = entry.cache
@@ -486,17 +500,15 @@ async function runPhase(phase) {
       duration: 0, checks: [], tests: [], output: [],
       _failLines: rec?.failLines,
     })
-    // Verificação de 2º nível: o cache de tempo disse HIT; o histórico concorda que nada
-    // mudou? Discordar é sinal de furo na regra do cache — reporta, não corrige (o cache
-    // de tempo continua sendo a autoridade sobre re-rodar). É diagnóstico de MANUTENÇÃO
-    // do cache, não do teste — some no `-v:1` default (uma rodada larga cospe uma linha
-    // por vermelho cacheado, e o dono não pode agir sobre nenhuma); aparece a partir de
-    // `-v:2`, para quem está de fato investigando o cache.
-    if (verbosity >= 2 && rec && cache?.results && !cache.results.fresh(phase, entry.path, entry.extraDeps ?? [])) {
-      process.stderr.write(`\x1b[33m[cache] ${path.relative(root, entry.path)}: cache diz HIT mas o histórico está stale (mtime/deps mudaram desde o último run gravado)\x1b[39m\n`)
-    }
     continue
   }
+
+  // Barra viva: `EVAL [████░░░░] plans/5-apps/5.26.eval.js ....  12/77` — reescrita a cada
+  // arquivo com `\r`, apagada no fim da fase (`\r\x1b[K`). Só num TTY, fora do `-v:3`/json/
+  // hogs (que têm o próprio streaming ou não querem ruído), e só quando este entry VAI
+  // rodar de verdade (depois do `continue` de cache-hit acima) — antes disso ela piscava
+  // por TODO arquivo, cache-hit incluído, sugerindo trabalho que não estava acontecendo.
+  if (streamPhase) process.stdout.write('\r' + progressBar(phase, _done, entries.length, path.relative(root, entry.path), { width }) + '\x1b[K')
 
   // O `ms` do run anterior deste arquivo (histórico), lido ANTES de rodar — para o
   // relatório destacar a variação (`+50%` / `-40%`) quando um arquivo re-executa.
@@ -630,33 +642,21 @@ async function runPhase(phase) {
   }
 
   // ── Update cache ─────────────────────────────────────────────────────────
-    // `entry.cacheFailure` (um executor a marca — `apps/eval/utest-phase.js`
-    // quando a feature não tem passo `real`) diz que o resultado VERMELHO é
-    // reproduzível e pode ser gravado, para não re-rodar um sweep caro só para
-    // reconfirmar. Sem a marca, uma falha só busta, como sempre.
-    const cacheData = {
+    // `cache.write` decide sozinho entre gravar o par/sidecar (verde OU vermelho
+    // comum — ambos cacheiam agora) ou só `bust` (só uma EXCEÇÃO nunca fica
+    // marcada como reusável) — e grava sempre o record em `results.json` por
+    // baixo, com o mtime do alvo JÁ recravado (a ordem interna importa: ver
+    // comment-block de `cache.js#write`). É essa dupla escrita que alimenta a
+    // árbitro na próxima leitura, e é a FONTE do render — quente e frio
+    // convergem no mesmo registro (`utest/results.json`).
+    cache.write(entry.path, entry.target, {
       tests: s.tests, checks: s.passed,
       failCount: (s.failed || 0) + (s.exception || 0),
       exception: suite.state === 'exception',
       failed: suite.state !== 'passed',
-      cacheFailure: !!entry.cacheFailure,
-    }
-    if (suite.state === 'passed' || entry.cacheFailure) {
-      cache.write(entry.path, entry.target, cacheData, { extraDeps: entry.extraDeps ?? [] })
-    } else {
-      cache.bust(entry.path)
-    }
-    // O histórico de TODO arquivo que rodou de verdade — verde ou vermelho. Gravado DEPOIS
-    // de `cache.write`: o `writePaired` de um par verde reescreve o mtime do ALVO para o
-    // segundo cravado, então `depsNewest` tem que ser lido já com esse mtime, ou o
-    // cross-check acusaria stale toda rodada. É a FONTE do render — quente e frio
-    // convergem no mesmo registro (`utest/results.json`).
-    cache?.results?.record(phase, entry.path, {
-      tests: s.tests, checks: s.passed,
-      failCount: (s.failed || 0) + (s.exception || 0),
-      ms: suite.duration, state: suite.state, extraDeps: entry.extraDeps ?? [],
+      ms: suite.duration,
       failLines: suite.state === 'passed' ? null : failData(suite),
-    })
+    }, { extraDeps: entry.extraDeps ?? [], phase })
   }
 
   cache?.results?.flush()   // um write por fase, não por arquivo
