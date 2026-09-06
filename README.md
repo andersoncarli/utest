@@ -2,6 +2,14 @@
 
 Runner de testes Universal
 
+## Peer siblings
+
+O `utest` espera `../utils` ao lado. Com o ledger (`ledger.js`), passa a esperar também
+`../iodb` — os três (`utils`, `utest`, `iodb`) lado a lado, importados por CAMINHO
+RELATIVO (`../iodb/io-engine.js`), sem `node_modules`, sem submodule. Sem `../iodb`
+presente o `utest .` roda exatamente como hoje: `openLedger` degrada para no-op — um
+runner de testes não pode ficar refém do seu próprio log.
+
 ## Uso
 
 ```bash
@@ -331,6 +339,8 @@ para rodar `.eval.js` em ms em vez de minutos — esta documentado em
 | `worker.js` | Base para execucao isolada por arquivo |
 | `scanner.js` | Descoberta de arquivos de teste (e dona do cache) |
 | `cache.js` | `TestCache(root)` — a regra do cache de tempo, o grafo de deps, e `results` (o histórico hierárquico `.utest/results.json` + o cross-check `fresh()`) |
+| `ledger.js` | `openLedger(root, opts)` — a memória permanente: cadeia append-only encadeada (`.utest/ledger/`) sobre `../iodb`, ancorada em sha256 do file set. Responde "o que já aconteceu?" — não substitui o cache, que responde "isto está fresco?". Degrada para no-op sem `../iodb` |
+| `state.js` | `openState(root, opts)` — histórico de rodadas de scan (`.utest/STATE.jsonl` + projeção `.utest/STATE.yaml`) sobre `../iodb`. Detecta mudança em `TEST.yaml` (`configChanged`) e avisa que `--force` é recomendado — não força sozinho. Cada arquivo NOVO ganha um registro individual cuja chave encadeada vira seu `id` (`fileId(path)`). Degrada para no-op sem `../iodb` |
 | `probe.js` | `probe(fn\|obj\|Map)` — instrumenta chamadas para achar hogs: conta, mede self-time (chamada aninhada nao conta duas vezes). DUAS vistas: `probe.report()` é a FLAT (uma linha por função, todos os callers somados — "quem custa"); `probe.tree()` / `probe.callers(name)` / `probe.edges()` é a de GRAFO (mantém a identidade do caller — "de ONDE, e quanto pesa cada contexto"). Complementa `spyOn` (que e para ASSERTAR sobre chamada, nao medir) |
 | `trace.js` | `install`/`mark`/`end`/`region` — cronômetro de REGIÕES de tempo aninhadas (o análogo de wall-time do `probe`: "que região custou", não "que função"). `wrapSpawns()` envolve `Bun.spawn*`; `region(name, fn, { fragPrefix })` enxerta os fragmentos que um subprocesso escreveu. O motor do `--trace` do `utest.js` |
 | `trace-preload.mjs` | carregado por `bun --import` que um `.eval.js` splica quando `UTEST_TRACE_PRELOAD` está no env; instala `globalThis.__uTrace` (region/mark) e despeja `<UTEST_TRACE_OUT>.<pid>` JSON no `exit`. Inerte sem o env |

@@ -18,8 +18,10 @@ import { parse as parseYaml } from 'bun:yaml'
 
 import test from './test.js'
 import { check, checkFail, checkException } from './check.js'
-import { scan, findTarget } from './scanner.js'
+import { scan, findTarget, excludeFilter } from './scanner.js'
 import { TestCache } from './cache.js'
+import { openLedger } from './ledger.js'
+import { openState } from './state.js'
 import { view, fullView, failLines, failData, summary, glyphs, checkView, hogReport, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, displayLen, HOG_MS } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
          beforeEach, afterEach, withTempDir} from './shims.js'
@@ -347,22 +349,35 @@ if (doTrace && !hogs && !asJson) {
 }
 
 // ─── Project boot ─────────────────────────────────────────────────────────────
-// Opt-in via TEST.yaml `boot: <path>` (resolved relative to the config file).
-// A target project may need its own globals registered (e.g. soml's `bootstrap()`)
-// before any test file imports — this runs once, ahead of the scan.
+// Opt-in via TEST.yaml `boot:` — um path OU uma LISTA de paths (resolvidos relativos ao
+// config). Cada módulo é importado uma vez, na ordem, antes do scan. Um projeto-alvo pode
+// precisar registrar globais próprios (soml: `bootstrap()`) ou fases próprias (uma fase com
+// provider, tipo `eval`, cujo `registerEvalPhase` mora num módulo do projeto) sem precisar
+// de um `TEST.boot.js` que só faz `import` + chamada — a lista faz isso declarativamente.
+// Um módulo de boot pode: rodar efeito de import puro; exportar `default` como função (é
+// chamada, com `await`); ou exportar `register`/`registerEvalPhase`/`setup` (a primeira que
+// existir é chamada). Assim `boot: [./plugins/eval/utest-phase.js]` basta — o módulo exporta
+// `registerEvalPhase` e o utest a invoca.
 //
-// `chdir` para `root` ANTES do boot: um `TEST.boot.js` de projeto-alvo pode assumir
-// `process.cwd() === raiz do projeto` (o caso comum — `soml/apps/eval/cli.js` faz
-// `ROOT = process.cwd()`) e nunca é escrito esperando rodar de fora. `utest.js ~/outro`
-// chamado de outro diretório deixava esse ROOT apontar para o cwd ERRADO — a fase
-// registrava sem erro, mas achava ZERO entries (procurava `plans/**` no lugar errado)
-// e sumia do relatório em silêncio, parecendo uma fase que nunca existiu. Todo uso de
-// `process.cwd()` NESTE arquivo já aconteceu acima desta linha (resolução de
-// `root`/`configPath`/`rawTarget`); nada depois depende do cwd original.
+// `chdir` para `root` ANTES do boot: um módulo de boot de projeto-alvo pode assumir
+// `process.cwd() === raiz do projeto` (o caso comum) e nunca é escrito esperando rodar de
+// fora. `utest.js ~/outro` chamado de outro diretório deixava esse ROOT apontar para o cwd
+// ERRADO — a fase registrava sem erro, mas achava ZERO entries e sumia do relatório em
+// silêncio. Todo uso de `process.cwd()` NESTE arquivo já aconteceu acima desta linha; nada
+// depois depende do cwd original.
 if (root !== process.cwd()) { try { process.chdir(root) } catch {} }
 if (fs.existsSync(configPath)) {
   const cfg = parseYaml(fs.readFileSync(configPath, 'utf8')) || {}
-  if (cfg.boot) await import(path.resolve(path.dirname(configPath), cfg.boot))
+  const bootList = cfg.boot == null ? [] : (Array.isArray(cfg.boot) ? cfg.boot : [cfg.boot])
+  for (const spec of bootList) {
+    const mod = await import(path.resolve(path.dirname(configPath), spec))
+    const fn = typeof mod.default === 'function' ? mod.default
+      : typeof mod.register === 'function' ? mod.register
+      : typeof mod.registerEvalPhase === 'function' ? mod.registerEvalPhase
+      : typeof mod.setup === 'function' ? mod.setup
+      : null
+    if (fn) await fn()
+  }
 }
 if (T) T.end()   // fecha `boot`
 
@@ -462,6 +477,16 @@ async function runPhase(phase) {
 
   const main = { name: phase, tests: [], checks: [], state: 'pending', duration: 0 }
   const phaseStart = process.hrtime.bigint()
+
+  const ledger = await openLedger(root, { phase, target: rawTarget })
+  ledger.start(entries.map(e => e.path))
+
+  const state = await openState(root, { configPath })
+  state.recordScan({
+    phase,
+    included: entries.map(e => path.relative(root, e.path)),
+    excluded: uncovered.map(f => path.relative(root, f)),
+  })
 
   let _done = 0
   for (const entry of entries) {
@@ -657,6 +682,12 @@ async function runPhase(phase) {
       ms: suite.duration,
       failLines: suite.state === 'passed' ? null : failData(suite),
     }, { extraDeps: entry.extraDeps ?? [], phase })
+
+    ledger.test(entry.path, {
+      name: suite.name, status: suite.state,
+      error: suite.state === 'exception' ? failData(suite) : null,
+      elapsed: suite.duration, cached: false,
+    })
   }
 
   cache?.results?.flush()   // um write por fase, não por arquivo
@@ -670,7 +701,8 @@ async function runPhase(phase) {
   main.duration = Number(process.hrtime.bigint() - phaseStart) / 1e6
   const s = summary(main)
   main.state = s.exception > 0 ? 'exception' : s.failed > 0 ? 'failed' : 'passed'
-  return { main, uncovered, summary: s }
+  ledger.end({ phase, ...s, duration: main.duration, state: main.state })
+  return { main, uncovered, summary: s, configChanged: state.configChanged }
 }
 
 // ─── Roda cada fase; a barra viva é reescrita dentro de `runPhase` ────────────────────────
@@ -683,6 +715,13 @@ for (const phase of phaseNames) {
 // ─── Render ───────────────────────────────────────────────────────────────────
 process.stdout.write = guardedStdoutWrite
 const stripAnsi = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '')
+
+// `TEST.yaml` mudou desde o último scan registrado em `.utest/STATE` — o domínio de
+// include/exclude não é mais o que o cache assumia. Só AVISA (não força sozinho): quem
+// decide revalidar com `--force` é o usuário, mesma regra do `sprint reopen`.
+if (!asJson && !hogs && !force && phaseResults.some(r => r.configChanged)) {
+  process.stdout.write('\x1b[33m[utest] TEST.yaml mudou desde o último scan — considere rodar com --force para revalidar do zero\x1b[39m\n')
+}
 
 // Uma fase sem NENHUM arquivo (ex.: `tui` num projeto sem `.tuit`) não emite linha — uma
 // fase vazia não é uma fase vermelha, é uma fase que não se aplica aqui.
@@ -1017,16 +1056,41 @@ if (watch) {
     })
   }
 
-  fs.watch(root, { recursive: true }, (_, filename) => {
-    if (!filename) return
-    // Skip for 1.5 s after a run ends — cache writes (utimesSync) trigger this too
-    if (Date.now() - lastChildExit < 1500) return
-    if (!/\.(js|ts|yaml|json|md)$/.test(filename)) return
-    if (/node_modules|\.utest[/\\]/.test(filename)) return
-    changed.add(filename)
-    clearTimeout(debounce)
-    debounce = setTimeout(rerun, 80)
-  })
+  // O domínio a observar é o do `TEST.yaml`: um `fs.watch` recursivo na raiz
+  // manda o SO percorrer e vigiar `node_modules/**`, `archive/**` etc. mesmo que
+  // o callback os descarte depois — em projeto grande isso estoura os handles do
+  // inotify. Em vez disso: um walk único (podado pelo mesmo `exclude` do scanner)
+  // e um `fs.watch` não-recursivo por diretório que sobrou. `.utest/` (o cache)
+  // continua fora, sempre.
+  const excl = fs.existsSync(configPath)
+    ? excludeFilter(configPath, phaseArg || 'unit')
+    : { excluded: () => false }
+  const isPruned = rel =>
+    rel === '.utest' || rel.startsWith('.utest' + path.sep) || excl.excluded(rel)
+
+  const watchers = []
+  const watchDir = dir => {
+    const rel = path.relative(root, dir)
+    if (rel && isPruned(rel)) return
+    try {
+      watchers.push(fs.watch(dir, (_, filename) => {
+        if (!filename) return
+        // Skip for 1.5 s after a run ends — cache writes (utimesSync) trigger this too
+        if (Date.now() - lastChildExit < 1500) return
+        if (!/\.(js|ts|yaml|json|md)$/.test(filename)) return
+        const abs = path.join(dir, filename)
+        const relFile = path.relative(root, abs)
+        if (isPruned(relFile)) return
+        changed.add(relFile)
+        clearTimeout(debounce)
+        debounce = setTimeout(rerun, 80)
+      }))
+    } catch { return }
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    for (const e of entries) if (e.isDirectory()) watchDir(path.join(dir, e.name))
+  }
+  watchDir(root)
 
   watchLine()
   await new Promise(() => { })
