@@ -4,7 +4,7 @@
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, relative } from 'path'
-import { scan, findTarget } from './scanner.js'
+import { scan, findTarget, excludeFilter } from './scanner.js'
 
 const dirs = []
 const fixture = (files = {}) => {
@@ -182,6 +182,38 @@ test('scan: o que entra na suíte', ({ test }) => {
   test('sem a chave da fase, cai no include padrão', ({ check }) => {
     const d = fixture({ 'a.t.js': '' })
     check(run(d, 'exclude: []\n').names, ['a.t.js'])
+    cleanup()
+  })
+})
+
+test('excludeFilter: o domínio do TEST.yaml sem varrer a árvore', ({ test }) => {
+  // O watch mode usa isto para PODAR diretórios — não registrar `fs.watch`
+  // recursivo na raiz e filtrar o callback depois. Só o `exclude` importa;
+  // `include` é vazio de propósito.
+  const write = (dir, yaml) => { writeFileSync(join(dir, 'TEST.yaml'), yaml); return join(dir, 'TEST.yaml') }
+
+  test('exclui pelo glob global do TEST.yaml', ({ check }) => {
+    const d = fixture({})
+    const f = excludeFilter(write(d, 'exclude:\n  - node_modules/**\n  - archive/**\n'))
+    check(f.excluded('node_modules'), true)
+    check(f.excluded('node_modules/foo/bar.js'), true)
+    check(f.excluded('archive'), true)
+    check(f.excluded('src/scanner.js'), false)
+    cleanup()
+  })
+
+  test('soma o exclude da fase ao global', ({ check }) => {
+    const d = fixture({})
+    const f = excludeFilter(write(d, 'exclude:\n  - node_modules/**\nunit:\n  exclude:\n    - dist/**\n'), 'unit')
+    check(f.excluded('node_modules/x.js'), true)
+    check(f.excluded('dist/x.js'), true)
+    cleanup()
+  })
+
+  test('TEST.yaml sem exclude não exclui nada', ({ check }) => {
+    const d = fixture({})
+    const f = excludeFilter(write(d, 'unit:\n  include:\n    - "**/*.t.js"\n'))
+    check(f.excluded('node_modules/x.js'), false)
     cleanup()
   })
 })

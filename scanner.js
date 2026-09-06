@@ -50,7 +50,7 @@ function compileGlob(pattern) {
   return rel => m.match(rel)
 }
 
-function makeFilter(include, exclude) {
+export function makeFilter(include, exclude) {
   const inclFns = include.map(compileGlob)
   const exclFns = exclude.map(compileGlob)
   const isIncluded = rel => inclFns.some(fn => fn(rel))
@@ -109,6 +109,17 @@ export function findTarget(testPath) {
     } catch {}
   }
   return null
+}
+
+// O domínio do `TEST.yaml`, sem varrer a árvore: o watch mode usa isto para
+// podar diretórios (`node_modules/**`, `archive/**`, …) em vez de registrar um
+// `fs.watch` recursivo na raiz inteira e filtrar o callback depois.
+export function excludeFilter(configPath, phase = 'unit') {
+  const cfg           = parse(readFileSync(configPath, 'utf8')) || {}
+  const globalExclude = cfg.exclude || []
+  const pcfg          = cfg[phase] || {}
+  const exclude       = [...globalExclude, ...(pcfg.exclude || [])]
+  return makeFilter([], exclude)
 }
 
 // ─── Pipeline ─────────────────────────────────────────────────
