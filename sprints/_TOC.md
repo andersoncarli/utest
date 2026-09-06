@@ -67,13 +67,19 @@ Legenda: ⚫ planejada · 🟠 implementando · 🟡 testada · 🟢 avaliada ·
 
 </details>
 
+<details><summary>⚫ [2.6] results.json arbitra o cache — segunda checagem sobre o mtime cravado — planejada</summary>
+
+[011](sprints/011-results-json-arbitra-o-cache-segunda-checagem-sobre-o-mtime-cravado.report.md "results.json arbitra o cache — segunda checagem sobre o mtime cravado · Intro: o mtime cravado continua decidindo sozinho, mas agora `results.json` confere o veredito nos dois sentidos — rebaixa um HI")
+
+</details>
+
 </details>
 
 <details><summary>🟠 <b>[3] scan</b> — Scan — descoberta, pareamento, vocabulário</summary>
 
-<details><summary>🟡 [3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão) — testada</summary>
+<details><summary>🟢 [3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão) — avaliada</summary>
 
-[001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [005](sprints/005-argumento-de-fase.report.md "report · Sprint retroativo. utest <phase> seleciona uma fase só; scan() finalmente recebe o 3º argumento e as fases do TEST.yaml passam a ser varridas.")
+[001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [005](sprints/005-argumento-de-fase.report.md "report · Sprint retroativo. utest <phase> seleciona uma fase só; scan() finalmente recebe o 3º argumento e as fases do TEST.yaml passam a ser varridas.") [012](sprints/012-watch-respeita-o-exclude-do-test-yaml.report.md "watch respeita o exclude do TEST.yaml · Intro: `utest . -w` deixou de vigiar a árvore inteira — agora o watcher só observa o domínio do `TEST.yaml`, podando `node_modules/`, `archive/` e o que o `excl")
 
 </details>
 
@@ -222,6 +228,22 @@ _(sem sprints ainda)_
 <details><summary>🟠 [7.3] runner.js modular — runTest/run/loadFile/serialize; caminho do subprocesso e da fase eval externa — implementando</summary>
 
 _(sem sprints ainda)_
+
+</details>
+
+</details>
+
+<details><summary>🔵 <b>[8] ledger</b> — memoria permanente — o ledger criptografico sobre iodb · confirmada</summary>
+
+<details><summary>🔵 [8.1] o ledger append-only encadeado sobre iodb — memoria permanente do utest — confirmada</summary>
+
+[013](sprints/013-o-ledger-append-only-encadeado-sobre-iodb.report.md "o ledger append-only encadeado sobre iodb · `ledger.js` — memória permanente do `utest` sobre o `iodb`: um log append-only, criptograficamente encadeado, com `run:start`/`test:result`/`run:end`, verif")
+
+</details>
+
+<details><summary>🔵 [8.2] .utest/STATE — histórico de scans + deteção de mudança de config — confirmada</summary>
+
+[014](sprints/014-test-yaml-vira-proje-o-utest-test-yaml-hist-rico-utest-test-jsonl.report.md "TEST.yaml vira projeção .utest/TEST.yaml + histórico .utest/TEST.jsonl · `state.js` — `.utest/STATE`: histórico append-only de rodadas de scan sobre o `iodb`, com deteção de mudança de `TEST.yaml` (`c")
 
 </details>
 
