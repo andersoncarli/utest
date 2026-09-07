@@ -123,7 +123,9 @@ export function excludeFilter(configPath, phase = 'unit') {
 }
 
 // ─── Pipeline ─────────────────────────────────────────────────
-export function scan(root, configPath, phase = 'unit') {
+// `opts.ledger` (opcional): o arbitro por sha256 (`cacheLedger.js`), repassado ao
+// `TestCache`. Sem ele, o cache arbitra pelo `results.json` como sempre.
+export function scan(root, configPath, phase = 'unit', { ledger = null } = {}) {
   const cfg           = parse(readFileSync(configPath, 'utf8')) || {}
   const globalExclude = cfg.exclude || []
   const pcfg          = cfg[phase] || {}
@@ -136,7 +138,7 @@ export function scan(root, configPath, phase = 'unit') {
   const testFiles   = walked.tests.filter(isTest)
   const sourceFiles = walked.sources.filter(f => !isTest(f))
 
-  const cache = TestCache(root)
+  const cache = TestCache(root, { ledger })
   const entries = testFiles.map(path => {
     const target = findTarget(path)
     return { path, target, cache: cache.read(path, target, { phase }) }

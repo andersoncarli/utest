@@ -61,8 +61,50 @@ ledger de testes — escrita concorrente por workers, verificacao de cadeia, pro
 que convergir — e o teste mais duro que se pode dar a ele, e num terreno onde a falha e
 barata de descobrir.
 
+## O que ele virou — memoria do PROJETO, nao do runner
+
+Esta frente comecou como "o utest com memoria". O que foi construido e maior que isso, e vale
+nomear porque muda quem pode usar.
+
+Olhe as propriedades do `ledger.js` sem olhar o nome: log **append-only**; cadeia
+criptografica (`sha64(payload) XOR sha64(prevKey)`, sem back-pointers); `verify()` que nao so
+detecta adulteracao mas **localiza** (`failedAt`); ancoragem no **conteudo** (`sha256` por
+arquivo, a cada rodada); **projecao que converge** — o estado presente e derivado do
+historico, nunca mantido em paralelo a ele; e escrita **aberta a qualquer processo** (lock
+atomico por `renameSync`, com notificacao emitida depois de soltar o lock, para que um
+handler possa escrever sem deadlock).
+
+Nenhuma dessas propriedades menciona teste. Sao propriedades de **memoria de projeto**. O
+ledger grava `test:result` porque foi ali que a necessidade apareceu — nao porque seja o
+limite do que ele guarda.
+
+**Como chegou aqui, e a ordem importa.** Nao foi abstracao procurando aplicacao. Foi o
+oposto: a feature 4.1 do `~/tui` precisou auditar **clique humano** — evento de mouse,
+assincrono, sem lugar onde ficar registrado. Foi essa necessidade concreta que trouxe de
+volta as ideias do `~/bot/cmds/testio`, stalled por falta de contexto. Um problema pequeno
+puxou de volta a solucao que ja esperava.
+
+**Por que isso e a saida do beco.** O ZSS proibe derivar estado de `git log`, `ls`, `grep` —
+sao formatos de APRESENTACAO, e ler estado deles envelhece calado e erra. A sessao de
+2026-09-06 pagou esse preco duas vezes: um output ANSI-escapado gerou um diagnostico errado
+(um bug inexistente descrito, uma correcao proposta para codigo sao), e um motor de eval
+legado discordou de si mesmo entre duas invocacoes. O antidoto e sempre o mesmo — evidencia
+estruturada, na fonte, no instante em que acontece. O ledger e isso, generalizado.
+
+O efeito pratico na garantia: "validada 12 vezes" vira "12 vezes, das quais 9 sobre
+exatamente este codigo". A diferenca entre contagem e evidencia.
+
 ## Quem consome
 
 O `~/tui` (feature 3.2, "o ato E a memoria pertencem ao TESTE") e o primeiro consumidor: o
 overlay do `eval` apenda o `ok` humano aqui, e o `sprint` deixa de lembrar por conta propria
 — vira leitor. O ledger e o pre-requisito daquela feature.
+
+Depois dele, e ja fora de teste: o `~/tui` 4.2 (o terminal vivo) apenda os eventos da sessao
+humana — `cmd:exit`, `error`, `input` — na MESMA stream que guarda o `.t.js` que rodou antes.
+E o `sprint` (`~/sprint-cli` 10.80) passa a derivar a garantia daqui em vez do proprio
+`.sprint/eval-log.jsonl`.
+
+Tres produtores, uma stream: teste sincrono, eval headless, humano assincrono. E dai que vem
+o conhecimento auto-reflexivo do projeto — quando ele para de reconstruir o proprio passado
+por inferencia e passa a **le-lo**.

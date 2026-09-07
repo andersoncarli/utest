@@ -67,9 +67,15 @@ Legenda: ⚫ planejada · 🟠 implementando · 🟡 testada · 🟢 avaliada ·
 
 </details>
 
-<details><summary>⚫ [2.6] results.json arbitra o cache — segunda checagem sobre o mtime cravado — planejada</summary>
+<details><summary>🔵 [2.6] results.json arbitra o cache — segunda checagem sobre o mtime cravado — confirmada</summary>
 
-[011](sprints/011-results-json-arbitra-o-cache-segunda-checagem-sobre-o-mtime-cravado.report.md "results.json arbitra o cache — segunda checagem sobre o mtime cravado · Intro: o mtime cravado continua decidindo sozinho, mas agora `results.json` confere o veredito nos dois sentidos — rebaixa um HI")
+[011](sprints/011-results-json-arbitra-o-cache-segunda-checagem-sobre-o-mtime-cravado.report.md "results.json arbitra o cache — segunda checagem sobre o mtime cravado · Intro: o mtime cravado continua decidindo sozinho, mas agora `results.json` confere o veredito nos dois sentidos — rebaixa um HI") [016](sprints/016-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.report.md "cache sobre o ledger — o ledger arbitra o frescor, results.json em paralelo · `cacheLedger.js` — o segundo árbitro do cache, ancorado no **conteúdo** (`sha256`) em vez do inode (`mtime`), derivado da ")
+
+</details>
+
+<details><summary>🔵 [2.7] cache sobre o ledger — o ledger arbitra o frescor por sha256, results.json em paralelo — confirmada</summary>
+
+[016](sprints/016-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.report.md "cache sobre o ledger — o ledger arbitra o frescor, results.json em paralelo · `cacheLedger.js` — o segundo árbitro do cache, ancorado no **conteúdo** (`sha256`) em vez do inode (`mtime`), derivado da ")
 
 </details>
 
@@ -113,7 +119,7 @@ _(sem sprints ainda)_
 
 <details><summary>🟡 [4.1] relatório compacto — phaseLine (Σs 🐢N), compactFails, verbosidade 0-3 — testada</summary>
 
-[001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [002](sprints/002-desacople-do-bot-e-a-evidencia-do-vazamento.report.md "report · Sprint retroativo. Desacople de bot/lib para utils/src, primeiros self-tests, e a evidência documentada do vazamento assíncrono cross-arquivo.") [006](sprints/006-report-compacto-probe-grafo-results-json.report.md "report · Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe grafo (tree/callers/edges), results.json (índice + quente==frio), verbosidade derivada do escopo.") [008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa")
+[001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [002](sprints/002-desacople-do-bot-e-a-evidencia-do-vazamento.report.md "report · Sprint retroativo. Desacople de bot/lib para utils/src, primeiros self-tests, e a evidência documentada do vazamento assíncrono cross-arquivo.") [006](sprints/006-report-compacto-probe-grafo-results-json.report.md "report · Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe grafo (tree/callers/edges), results.json (índice + quente==frio), verbosidade derivada do escopo.") [008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa") [015](sprints/015-validar-saidas-de-utest-v0-v3-json-console-capturado-hogs-so-com-flag-ou-erro-v1-single-line-checkview-esperado-recebido.report.md "validar saidas de utest: v0-v3, --json, console capturado, hogs so com flag ou erro, v1 single-line, checkView esperado/recebido · As quatro verbosidades de `utest` viram teste: v0-v3, `--json` e cons")
 
 </details>
 
