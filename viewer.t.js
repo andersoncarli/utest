@@ -1,6 +1,6 @@
 // viewer.t.js — o relatório compacto (sprint 084c): barra por fase, vermelhos numa
 // linha, e o par `received: false / expected: true` que some.
-import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, deltaTag, fullView, fileLine, displayLen, failLines } from './viewer.js'
+import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, deltaTag, fullView, fileLine, displayLen, failLines, failData } from './viewer.js'
 import cl from '../utils/src/cl.js'
 
 const strip = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[K/g, '')
@@ -37,17 +37,19 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check(out.includes('✔'), false, 'nenhum ✔ no log compacto')
   })
 
-  test('compactFails — arquivo verde mas HOG entra como `nome 🐢N` (badge = segundos)', ({ check }) => {
-    // o detalhe da fase é o mesmo para todo kind: um `unit` todo verde com hogs mostra os
-    // hogs igual a como a `eval` mostra os vermelhos. O tempo é BADGE (segundos inteiros),
-    // não `(Nms)` — a precisão de ms num cacheado não diz nada e custa tokens.
+  test('compactFails — hog verde: SÓ com `hogs:true` (o `--hogs`); sem o flag, silêncio', ({ check }) => {
+    // O TOTAL de hogs sempre aparece no `(Ns 🐢M)` da linha-título (`phaseLine`). O detalhe
+    // POR ARQUIVO é uma leitura à parte: só sob `--hogs`. Sem o flag, um `unit` todo verde
+    // (mesmo lento) não puxa NENHUMA linha de detalhe — o `compactFails` volta vazio.
     const main = { tests: [
       { name: 'fast.t.js', state: 'passed', _cached: true, checkCount: 9, lastMs: 40 },
       { name: 'shell.t.js', state: 'passed', _cached: true, checkCount: 97, lastMs: 8637 },
     ] }
-    const out = strip(compactFails(main, { width: 200 }))
-    check(out.includes('fast.t.js'), false, 'o verde rápido não aparece — sem tempo, sem linha')
-    check(out.includes('shell.t.js 🐢9'), true, 'badge = 🐢 + segundos (8637ms → 🐢9), sem sufixo')
+    check(compactFails(main, { width: 200 }), '', 'sem `hogs:true` → nada (o total mora no phaseLine)')
+
+    const out = strip(compactFails(main, { width: 200, hogs: true }))
+    check(out.includes('fast.t.js'), false, 'o verde rápido não aparece nem com o flag')
+    check(out.includes('shell.t.js 🐢9'), true, 'com `--hogs`: badge = 🐢 + segundos (8637ms → 🐢9)')
     check(out.includes('ms)'), false, 'nenhum `(Nms)` — só o badge')
     check(out.includes('✘'), false, 'nenhum ✘ — não há vermelho')
   })
@@ -64,7 +66,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
     const hogs = Array.from({ length: 9 }, (_, i) => ({
       name: `h${i}.eval.js`, state: 'passed', _cached: true, checkCount: 1, lastMs: 2000 + i * 100,
     }))
-    const out = strip(compactFails({ tests: [...reds, ...hogs] }, { width: 200 }))
+    const out = strip(compactFails({ tests: [...reds, ...hogs] }, { width: 200, hogs: true }))
     for (let i = 0; i < 6; i++) check(out.includes(`r${i}.eval.js ✘1`), true, `red ${i} listado (todos)`)
     const hogShown = out.match(/h\d\.eval\.js 🐢\d/g) || []
     check(hogShown.length, 5, 'só os 5 hogs mais lentos, cada um com badge 🐢N (segundos)')
@@ -73,13 +75,16 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check(/\+4 more 🐢/.test(out), true, '9 hogs − 5 = +4 more 🐢')
   })
 
-  test('compactFails — reds e hogs em grupos, hog começa em linha nova', ({ check }) => {
+  test('compactFails — reds e hogs em grupos, hog começa em linha nova (com `--hogs`)', ({ check }) => {
     const main = { tests: [
       { name: 'r.eval.js', state: 'failed', _cached: true, failCount: 1, lastMs: 50 },
       { name: 'h.eval.js', state: 'passed', _cached: true, checkCount: 1, lastMs: 3000 },
     ] }
-    const rows = strip(compactFails(main, { width: 200 })).split('\n')
-    check(rows.length, 2, 'duas linhas — uma por grupo')
+    // Sem o flag: só o grupo de vermelhos. O hog verde some (o total já está no phaseLine).
+    check(strip(compactFails(main, { width: 200 })), 'r.eval.js ✘1', 'sem `--hogs`: só o vermelho')
+
+    const rows = strip(compactFails(main, { width: 200, hogs: true })).split('\n')
+    check(rows.length, 2, 'com `--hogs`: duas linhas — uma por grupo')
     check(rows[0].includes('r.eval.js ✘1') && !rows[0].includes('h.eval.js'), true, 'linha 1 = só reds')
     check(rows[1].includes('h.eval.js 🐢3'), true, 'linha 2 = hogs, com badge')
   })
@@ -217,16 +222,22 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check(asUnit.includes('received'), false, 'nenhum log/checkView num relatório amplo')
   })
 
-  test('fullView — fase toda verde COM hog tem bloco de detalhe, igual à fase com vermelho', ({ check }) => {
-    // era ESTA a assimetria: `unit` todo verde com hogs colapsava na linha-título, `eval`
-    // (com vermelho) tinha um bloco — pareciam kinds diferentes.
+  test('fullView v1 — fase toda verde (mesmo com hog): UMA linha, só o phaseLine', ({ check }) => {
+    // Contrato: sem vermelho e sem `--hogs`, o v1 é uma linha por fase. O total de hogs já
+    // está no `(Ns 🐢M)` do phaseLine; o detalhe por arquivo é leitura à parte (`--hogs`).
     const greenWithHog = { tests: [
       { name: 'fast.t.js', state: 'passed', _cached: true, checkCount: 9, lastMs: 30 },
       { name: 'shell.t.js', state: 'passed', _cached: true, checkCount: 97, lastMs: 8600 },
     ] }
     const out = strip(fullView(greenWithHog, { verbosity: 1, width: 80, title: 'unit' }))
-    check(out.split('\n').length >= 2, true, 'linha-título + pelo menos uma linha de detalhe')
-    check(out.includes('shell.t.js 🐢9'), true, 'o hog aparece no bloco com badge (8600ms → 9s)')
+    check(out.split('\n').filter(Boolean).length, 1, 'uma linha só — sem bloco de detalhe')
+    check(out.includes('🐢9'), true, 'o TOTAL de hogs aparece na linha-título (8600ms → 🐢9)')
+    check(out.includes('shell.t.js'), false, 'nenhum nome de arquivo — o detalhe é do `--hogs`')
+
+    // Com `hogs:true`, o detalhe por arquivo volta.
+    const withFlag = strip(fullView(greenWithHog, { verbosity: 1, width: 80, title: 'unit', hogs: true }))
+    check(withFlag.split('\n').filter(Boolean).length >= 2, true, 'com o flag: título + detalhe')
+    check(withFlag.includes('shell.t.js 🐢9'), true, 'o hog aparece no bloco com badge')
   })
 
   test('a régua é em COLUNAS de terminal, não em unidades UTF-16', ({ check }) => {
@@ -366,5 +377,122 @@ test('viewer — relatório compacto', ({ test, check }) => {
     const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'eval' }))
     check(out.indexOf('slow.eval.js:009') < out.indexOf('fast.eval.js:009'), true,
       'slow (5s) detalha antes de fast (50ms)')
+  })
+
+  // ─── contrato de saída por verbosidade — a matriz que o usuário lê ─────────
+  // Uma fixture única (verde, vermelho de 2-args, exceção, hog verde, hog+vermelho,
+  // `output` no verde e no vermelho) rodada nos 4 níveis, para travar o que aparece e o
+  // que some em CADA um. Sem isto, uma regressão de report só é pega pelo olho.
+  const fixture = () => ({ tests: [
+    { name: 'green.t.js', state: 'passed', _cached: true, checkCount: 12, lastMs: 20,
+      output: [['log', ['ruído do verde']]] },
+    { name: 'red.eval.js', state: 'failed', address: 'red.eval.js', lastMs: 60,
+      output: [['log', ['contexto do vermelho']]],
+      checks: [{ state: 'failed', a: '4', b: '5', lineCode: 'check(2 + 2, 5)', address: 'red.eval.js:012' }],
+      tests: [{ name: 'passo', state: 'failed',
+        output: [['log', ['contexto do vermelho']]],
+        checks: [{ state: 'failed', a: '4', b: '5', lineCode: 'check(2 + 2, 5)', address: 'red.eval.js:012' }],
+        tests: [] }] },
+    { name: 'boom.t.js', state: 'exception', address: 'boom.t.js', lastMs: 15,
+      error: { message: 'algo explodiu', stack: 'Error: algo explodiu\n    at fn (boom.t.js:7:3)' },
+      checks: [], tests: [] },
+    { name: 'slowgreen.t.js', state: 'passed', _cached: true, checkCount: 3, lastMs: 4200 },
+    { name: 'slowred.eval.js', state: 'failed', address: 'slowred.eval.js', lastMs: 9100,
+      checks: [{ state: 'failed', a: '1', b: '2', lineCode: 'check(x, 2)', address: 'slowred.eval.js:030' }],
+      tests: [] },
+  ] })
+
+  test('v0 — suíte com vermelho: NÃO fica em branco (só cala se 100% verde)', ({ check }) => {
+    const dirty = strip(fullView(fixture(), { verbosity: 0, width: 100, title: 'unit' }))
+    check(dirty.length > 0, true, 'há vermelho → v0 rende (cai para o formato do v1)')
+    check(dirty.includes('UNIT'), true, 'a linha-título aparece')
+
+    const clean = fullView({ tests: [{ name: 'a.t.js', state: 'passed', _cached: true, checkCount: 2, lastMs: 5 }] },
+      { verbosity: 0, width: 100, title: 'unit' })
+    check(clean, '', 'v0 + tudo verde = string vazia (o silêncio do v0)')
+  })
+
+  test('v1 — título + compactFails(só vermelho/exceção); hog verde NÃO puxa linha', ({ check }) => {
+    const out = strip(fullView(fixture(), { verbosity: 1, width: 100, title: 'unit' }))
+    check(out.includes('UNIT'), true, 'linha-título')
+    check(/red\.eval\.js ✘1/.test(out), true, 'o vermelho, com contagem')
+    check(/slowred\.eval\.js ✘1 🐢9/.test(out), true, 'vermelho que é hog: mantém o badge 🐢N')
+    check(out.includes('boom.t.js'), true, 'a exceção também é listada')
+    check(out.includes('slowgreen.t.js'), false, 'o hog VERDE não aparece (só no --hogs)')
+    check(out.includes('received:'), false, 'nenhum checkView num relatório amplo v1')
+    check(out.includes('ruído do verde'), false, 'nenhum log() do teste em v1')
+    check(out.includes('🐢'), true, 'o total de hogs está na linha-título')
+  })
+
+  test('v1 --hogs — o detalhe por arquivo do hog verde volta', ({ check }) => {
+    const out = strip(fullView(fixture(), { verbosity: 1, width: 100, title: 'unit', hogs: true }))
+    check(out.includes('slowgreen.t.js 🐢4'), true, 'o hog verde ganha a linha (4200ms → 🐢4)')
+    check(/slowred\.eval\.js ✘1 🐢9/.test(out), true, 'o hog vermelho segue com ✘ e badge')
+  })
+
+  test('v2 — verdes num rio, cada vermelho vira fileLine + checkView (received/expected), sem log()', ({ check }) => {
+    const out = strip(fullView(fixture(), { verbosity: 2, width: 100, title: 'unit' }))
+    check(out.includes('green.t.js ✔12'), true, 'o verde no rio, com contagem')
+    check(out.includes('slowgreen.t.js ✔3'), true, 'o hog verde também entra no rio dos passados')
+    check(out.includes('check(2 + 2, 5)'), true, 'a linha do check do vermelho')
+    check(out.includes('received: 4') && out.includes('expected: 5'), true, 'o par inteiro em v2')
+    check(out.includes('red.eval.js:012'), true, 'o endereço (caller line)')
+    check(out.includes('algo explodiu'), true, 'a mensagem da exceção')
+    check(out.includes('contexto do vermelho'), false, 'o log() do teste é do v3, não do v2')
+  })
+
+  test('v3 — a árvore por teste + o log() capturado sob o vermelho', ({ check }) => {
+    const out = strip(fullView(fixture(), { verbosity: 3, width: 100, title: 'unit' }))
+    check(out.includes('passo'), true, 'o nó filho do vermelho aparece (árvore por teste)')
+    check(out.includes('[log] contexto do vermelho'), true, 'o console capturado sob o vermelho')
+    check(out.includes('received: 4') && out.includes('expected: 5'), true, 'o par segue em v3')
+    // v3 é o nível "mostre tudo": o `log()` de um teste que PASSOU também aparece (só v1/v2
+    // é que engolem o output do verde).
+    check(out.includes('[log] ruído do verde'), true, 'em v3 até o log() do verde aparece')
+  })
+
+  test('--json — failData persiste o par + lineCode + address para o re-render frio', ({ check }) => {
+    const red = fixture().tests[1]
+    const [d] = failData(red)
+    check(d.state, 'failed')
+    check(d.a, '4', 'received cru')
+    check(d.b, '5', 'expected cru')
+    check(d.lineCode, 'check(2 + 2, 5)', 'a linha-fonte')
+    check(d.address, 'red.eval.js:012', 'o endereço')
+
+    // failData de uma exceção guarda message + stack (para o errorView redesenhar)
+    const [ex] = failData(fixture().tests[2])
+    check(ex.state, 'exception')
+    check(ex.error.message, 'algo explodiu')
+    check(ex.error.stack.includes('boom.t.js:7:3'), true, 'o stack sobrevive')
+  })
+
+  test('--json — failInfo devolve { line, code } de um check, trim no code', ({ check }) => {
+    const c = { state: 'failed', address: 'x.js:009', lineCode: '  check(a, b)  ' }
+    check(failInfo(c).line, 'x.js:009')
+    check(failInfo(c).code, 'check(a, b)')
+  })
+
+  test('checkView — re-render FRIO (só o dado de failData, sem `error` vivo) mantém o par e o endereço', ({ check }) => {
+    // O caminho do `--watch` / cache: `_failLines` traz objetos de `failData`, sem o
+    // `error`. `checkView` tem que rieprodzir a mesma linha a partir deles.
+    const cached = { name: 'x.eval.js', state: 'failed', _cached: true, failCount: 1,
+      _failLines: [{ state: 'failed', a: '4', b: '5', lineCode: 'check(2 + 2, 5)', address: 'x.eval.js:012' }] }
+    const [block] = failLines(cached, { width: 100 })
+    const out = strip(block)
+    check(out.includes('check(2 + 2, 5)'), true, 'a linha-fonte no frio')
+    check(out.includes('received: 4'), true, 'received no frio')
+    check(out.includes('expected: 5'), true, 'expected no frio')
+    check(out.includes('x.eval.js:012'), true, 'o endereço no frio')
+  })
+
+  test('checkView — sem `error`, sem `lineCode` e sem `address`: degrada em `check()` mas NÃO some', ({ check }) => {
+    // A rede: mesmo no pior caso (o `callstack` devolveu pilha vazia, nada foi persistido),
+    // o vermelho ainda rende — o par que `check.js` gravou não pode sumir.
+    const bare = { state: 'failed', a: 'true', b: 'false' }
+    const out = strip(checkView(bare, { width: 80 }))
+    check(out.includes('check()'), true, 'cai no literal `check()`')
+    check(out.includes('received: true'), true, 'received continua')
+    check(out.includes('expected: false'), true, 'expected continua')
   })
 })

@@ -92,7 +92,16 @@ function resolveImport(spec, fromDir, root) {
  * escopo do closure. `deps()` é chamado por arquivo a cada leitura e a cada
  * gravação; sem a memória, a mesma árvore seria caminhada N vezes por rodada.
  */
-export function TestCache(root) {
+/**
+ * `TestCache(root, opts)` — `opts.ledger` (opcional): um `openCacheLedger` já aberto. Quando
+ * presente e `enabled`, é ELE quem arbitra o frescor (por sha256, o conteúdo); sem ele, o
+ * `results.json` arbitra (por mtime, o inode) — o comportamento de sempre. `TestCache(root)`
+ * sem opts continua idêntico, byte por byte, a antes desta feature.
+ *
+ * As duas persistências rodam em PARALELO: qualquer que seja o árbitro, `results.record`
+ * grava sempre (ver `write` no fim deste arquivo). Trocar o árbitro não troca quem escreve.
+ */
+export function TestCache(root, { ledger = null } = {}) {
   const depsMemo = new Map()
 
   // ── utest/results.json — o HISTÓRICO consolidado, hierárquico por FASE ───────
@@ -439,8 +448,15 @@ export function TestCache(root) {
     if ((globalThis.utestVerbosity ?? 0) >= 2) process.stderr.write(`\x1b[33m[cache] ${msg}\x1b[39m\n`)
   }
 
+  // Quem responde "este teste está fresco?". O ledger quando há um (âncora no CONTEÚDO,
+  // via sha256); senão o `results.json` (âncora no INODE, via mtime). Um ponto único: o
+  // `arbitrate` abaixo não sabe qual dos dois está respondendo, e não precisa saber —
+  // ambos expõem a mesma forma (`fresh`/`get`).
+  const judge = ledger?.enabled ? ledger : results
+  const judgeName = ledger?.enabled ? 'ledger' : 'results.json'
+
   const arbitrate = (phase, testPath, extraDeps, targetPath, timeVerdict) => {
-    const historyFresh = results.fresh(phase, testPath, extraDeps, targetPath)
+    const historyFresh = judge.fresh(phase, testPath, extraDeps, targetPath)
     const rel = () => relative(root, testPath)
 
     if (timeVerdict) {
@@ -448,7 +464,7 @@ export function TestCache(root) {
       // último record) → rebaixa a MISS. O cache de tempo achou parecido; o
       // histórico prova que não é.
       if (!historyFresh) {
-        diag(`${rel()}: cache de tempo dizia HIT, results.json discorda (mtime/alvo/deps mudaram desde o último record) → re-rodando`)
+        diag(`${rel()}: cache de tempo dizia HIT, ${judgeName} discorda (teste/alvo/deps mudaram desde o último record) → re-rodando`)
         return null
       }
       return timeVerdict
@@ -458,7 +474,7 @@ export function TestCache(root) {
     // nos mtimes, que teste/alvo/deps são os mesmos de um record que passou
     // (ou de um vermelho reproduzível). Sem isso, uma edição real continua MISS.
     if (!historyFresh) return null
-    const rec = results.get(phase, testPath)
+    const rec = judge.get(phase, testPath)
     if (!rec) return null
     // Promover exige CONFIRMAR o alvo especificamente — um record do formato
     // ANTERIOR (sem `targetMtime`) não tem essa informação, e sem ela não dá pra
@@ -478,7 +494,7 @@ export function TestCache(root) {
     // `rec.exception` (truthy) deixava passar ambos os casos SEM o campo,
     // promovendo uma exceção antiga por engano — achado rodando ~/bot.
     if (rec.state === 'exception' || rec.exception !== false) return null
-    diag(`${rel()}: cache de tempo dizia MISS (segundo dessincronizado?), results.json confirma teste/alvo/deps intactos → aproveitando`)
+    diag(`${rel()}: cache de tempo dizia MISS (segundo dessincronizado?), ${judgeName} confirma teste/alvo/deps intactos → aproveitando`)
     return {
       checks: rec.checks ?? 0, tests: rec.tests ?? 0,
       failCount: rec.failCount ?? 0, exception: false,
@@ -528,6 +544,10 @@ export function TestCache(root) {
     deps,
     bust,
     results,
+    // Qual dos dois arbitrou esta instancia — `'ledger'` (sha256) ou `'results.json'`
+    // (mtime). Exposto porque a feature 2.7 roda as duas persistencias em paralelo, e sem
+    // isto nao ha como um teste (nem o `-v:2`) dizer qual veredito esta sendo lido.
+    judge: judgeName,
     read: (testPath, targetPath, { extraDeps = [], phase = 'unit' } = {}) =>
       targetPath ? readPaired(testPath, targetPath, extraDeps, phase) : readSelfArbitrated(testPath, extraDeps, phase),
     write: (testPath, targetPath, result, { extraDeps = [], phase = 'unit' } = {}) => {
@@ -561,13 +581,21 @@ export function TestCache(root) {
       // nunca confirmam o veredito de tempo sozinhos, então a árbitro nunca chega a
       // promover uma exceção mesmo com o record de histórico presente.
       try {
-        results.record(phase, testPath, {
+        const rec = {
           ms: result.ms, tests: result.tests, checks: result.checks,
           failCount: result.failCount, failLines: result.failLines,
           state: (result.exception || result.failed || !result.checks) ? 'failed' : 'passed',
           exception: !!result.exception,
           extraDeps, targetPath,
-        })
+        }
+        // Em PARALELO, sempre — mesmo com o ledger arbitrando. O `results.json` continua
+        // sendo o índice que `utest <N.F>` resolve sem escanear e o dono do `failLines`
+        // que o `-v:2` renderiza; parar de escrevê-lo é a convergência, sprint futuro.
+        results.record(phase, testPath, rec)
+        // E a projeção do ledger, para que um teste que rodou AGORA não seja lido como
+        // stale por outra consulta na mesma rodada. O registro durável já foi ao disco
+        // pelo `ledger.test` do `utest.js` — isto só mantém a projeção em memória coerente.
+        if (ledger?.enabled) ledger.record(phase, testPath, rec)
       } catch {}
     },
   }

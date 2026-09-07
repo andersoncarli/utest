@@ -1,3 +1,4 @@
+import fs from 'fs'
 import callstack from '../utils/src/callstack.js'
 import cl from '../utils/src/cl.js'
 
@@ -128,6 +129,31 @@ function checkView(c, { width = 80 } = {}) {
   return out
 }
 
+// Fallback: parse `err.stack` sem `callstack`. Ele CAPTURA internamente e devolve
+// `stack: []` quando algo falha (ex.: `globalThis.G` ausente num subprocesso ou no filho
+// do `--watch` — o `G.config` bare na lib estoura e a pilha some), então o `try/catch`
+// daqui nunca dispara. Sem esta rede, um vermelho re-renderizado nesse contexto perde o
+// endereço E o `lineCode`, saindo só `check()`. Formatos aceitos: `at fn (path:li:co)` e
+// `at path:li:co` (Bun, frame de módulo / arrow).
+const STACK_LINE = /^\s*at\s+(?:.+?\s+\()?(.+?):(\d+):(\d+)\)?$/
+function parseStack(stack) {
+  const out = []
+  for (const raw of String(stack || '').split('\n')) {
+    const m = raw.match(STACK_LINE)
+    if (!m) continue
+    const p = m[1]
+    if (p === 'native' || p === 'unknown' || /^(node|bun):/.test(p)) continue
+    out.push({ file: p.split('/').pop(), path: p, line: +m[2] })
+  }
+  return out
+}
+function callerLineOf(f) {
+  try {
+    const src = fs.readFileSync(f.path.replace(/^file:(\/\/)?/, ''), 'utf8').split('\n')
+    return (src[f.line - 1] || '').split('//')[0].trim()
+  } catch { return '' }
+}
+
 function extractLineCode(errLike) {
   if (!errLike?.stack) return ''
   try {
@@ -138,6 +164,9 @@ function extractLineCode(errLike) {
       if (!INTERNAL.test(f.file)) return cs.callerLine(i) || ''
     }
   } catch {}
+  for (const f of parseStack(errLike.stack)) {
+    if (!INTERNAL.test(f.file)) return callerLineOf(f)
+  }
   return ''
 }
 
@@ -150,6 +179,9 @@ function extractAddr(errLike) {
       if (!INTERNAL.test(f.file)) return `${f.file}:${String(f.line).padStart(3, '0')}`
     }
   } catch {}
+  for (const f of parseStack(errLike.stack)) {
+    if (!INTERNAL.test(f.file)) return `${f.file}:${String(f.line).padStart(3, '0')}`
+  }
   return ''
 }
 
@@ -536,15 +568,21 @@ export function deltaTag(now, prev) {
 // `+N more 🐢`. Soft-wrap.
 const HOG_CAP = 5
 const hogBadge = ms => `${glyphs.hog}${Math.round(ms / 1000)}`
-export function compactFails(main, { width = 80 } = {}) {
+// `hogs:true` (o flag `--hogs`) traz de volta o grupo de hogs PUROS (verde e lento) numa
+// linha própria. Sem ele, o detalhe por arquivo de um hog verde não aparece — só o total
+// no `(Ns 🐢M)` da linha-título. Um hog que TAMBÉM é vermelho mantém o badge `🐢N` ao lado
+// do `✘M` sempre: o erro já puxa o arquivo para o bloco, e o tempo é contexto do erro.
+export function compactFails(main, { width = 80, hogs: showHogs = false } = {}) {
   const msOf = t => t.lastMs || Math.round(t.duration || 0)
   const isRed = t => t.state !== 'passed'
   const isHog = t => msOf(t) > HOG_MS
-  const flagged = (main.tests || []).filter(t => isRed(t) || isHog(t))
+  const flagged = (main.tests || []).filter(t => isRed(t) || (showHogs && isHog(t)))
   if (!flagged.length) return ''
 
   const reds = flagged.filter(isRed).sort((a, b) => msOf(b) - msOf(a))
-  const allHogs = flagged.filter(t => isHog(t) && !isRed(t)).sort((a, b) => msOf(b) - msOf(a))
+  const allHogs = showHogs
+    ? flagged.filter(t => isHog(t) && !isRed(t)).sort((a, b) => msOf(b) - msOf(a))
+    : []
   const hogs = allHogs.slice(0, HOG_CAP)
   const hidden = allHogs.length - hogs.length
 
@@ -620,10 +658,11 @@ export function fullView(main, op = {}) {
 
   if (verbosity <= 1) {
     // A linha-título vai à largura CHEIA (dotfill até a borda); o que vem abaixo dela é
-    // indentado 2 pelo chamador, então soft-wrap com `width - 2`. `compactFails` já cobre
-    // vermelho E hog — um caminho só, sem ramo por `allPassed`.
+    // indentado 2 pelo chamador, então soft-wrap com `width - 2`. Sem vermelho e sem o flag
+    // `--hogs`, `compactFails` volta vazio → o v1 é UMA linha por fase (só o `phaseLine`,
+    // que já carrega o total `(Ns 🐢M)`). O detalhe por arquivo do hog só com `--hogs`.
     const lines = [phaseLine(main, { width, title })]
-    const cf = compactFails(main, { width: width - 2 })
+    const cf = compactFails(main, { width: width - 2, hogs: op.hogs ?? false })
     if (cf) lines.push(cf)
     return lines.join('\n')
   }

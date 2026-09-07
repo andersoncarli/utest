@@ -21,6 +21,7 @@ import { check, checkFail, checkException } from './check.js'
 import { scan, findTarget, excludeFilter } from './scanner.js'
 import { TestCache } from './cache.js'
 import { openLedger } from './ledger.js'
+import { openCacheLedger } from './cacheLedger.js'
 import { openState } from './state.js'
 import { view, fullView, failLines, failData, summary, glyphs, checkView, hogReport, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, displayLen, HOG_MS } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
@@ -408,6 +409,16 @@ const streamPhase = process.stdout.isTTY && verbosity < 3 && !asJson && !hogs &&
 async function runPhase(phase) {
   let entries = [], uncovered = [], cache = null
   const provider = entriesFor(phase)
+
+  // O ledger abre ANTES das entries, nao depois: quem arbitra o frescor precisa estar
+  // aberto quando o primeiro `cache.read` acontece. `ledger.start(...)` continua la
+  // embaixo, depois que o conjunto existe — so a ABERTURA sobe.
+  const ledger = await openLedger(root, { phase, target: rawTarget })
+  // O arbitro por CONTEUDO, derivado da mesma stream. Degrada para `enabled: false` sem
+  // `../iodb`, e ai o `TestCache` fica no `results.json` — a arbitragem por mtime de
+  // sempre. As duas persistencias rodam em paralelo: o `results.json` continua sendo
+  // escrito nos dois casos.
+  const cacheLedger = await openCacheLedger(root, { phase, ledger })
   try {
     if (provider) {
       // Sem alvo pareado (`.eval.js` não tem `.js` irmão): `TestCache` cai em `readSelf`
@@ -416,7 +427,7 @@ async function runPhase(phase) {
       // de arquivo estreita pro diretório dele) — as entries de uma fase com provider não
       // são scoped por `root`, então o cache não pode ser, ou um `_isFile` numa árvore vira
       // sidecar espalhado pelo repo inteiro.
-      cache = TestCache(path.dirname(configPath))
+      cache = TestCache(path.dirname(configPath), { ledger: cacheLedger })
       const _pn = T?.mark('provider')
       let provided = await provider()
       if (_pn) T.end(_pn)
@@ -449,11 +460,11 @@ async function runPhase(phase) {
       })
       if (belongs) {
         const target = findTarget(absFile)
-        cache = TestCache(path.dirname(configPath))
+        cache = TestCache(path.dirname(configPath), { ledger: cacheLedger })
         entries = [{ path: absFile, target, cache: cache.read(absFile, target, { phase }) }]
       }
     } else {
-      ; ({ entries, uncovered, cache } = scan(root, configPath, phase))
+      ; ({ entries, uncovered, cache } = scan(root, configPath, phase, { ledger: cacheLedger }))
     }
   } catch (e) {
     if (e.code !== 'ENOENT') { console.error('[utest] scan error:', e.message); realProcessExit(1) }
@@ -478,8 +489,12 @@ async function runPhase(phase) {
   const main = { name: phase, tests: [], checks: [], state: 'pending', duration: 0 }
   const phaseStart = process.hrtime.bigint()
 
-  const ledger = await openLedger(root, { phase, target: rawTarget })
-  ledger.start(entries.map(e => e.path))
+  // O conjunto assinado e o que foi EXERCITADO, nao so os arquivos de teste: o alvo pareado
+  // e as deps extras entram junto, porque e o sha256 deles que o arbitro por conteudo
+  // (`cacheLedger.js`) cruza para responder frescor na proxima rodada. Um `Set` porque N
+  // testes dividem um alvo (`pixel.js` serve tres `.t.js`) e o hash e o mesmo.
+  ledger.start([...new Set(entries.flatMap(e =>
+    [e.path, e.target, ...(e.extraDeps ?? [])].filter(Boolean)))])
 
   const state = await openState(root, { configPath })
   state.recordScan({
@@ -687,6 +702,14 @@ async function runPhase(phase) {
       name: suite.name, status: suite.state,
       error: suite.state === 'exception' ? failData(suite) : null,
       elapsed: suite.duration, cached: false,
+    }, {
+      // O que o arbitro por conteudo (`cacheLedger.js`) le na proxima rodada: o alvo e as
+      // deps extras deste teste, hasheados no registro.
+      phase, target: entry.target ?? null, deps: entry.extraDeps ?? [],
+      tests: s.tests, checks: s.passed,
+      failCount: (s.failed || 0) + (s.exception || 0),
+      exception: suite.state === 'exception',
+      failLines: suite.state === 'passed' ? undefined : failData(suite),
     })
   }
 
@@ -783,14 +806,12 @@ for (const { phase, main, uncovered } of phaseResults) {
 }
 const covLine = srcTotal ? `coverage: ${Math.round((srcCovered / srcTotal) * 100)}%` : 'coverage: —'
 
-// O bloco tight (sem moldura) é para uma rodada REALMENTE limpa — verde E rápida. Um hog
-// é digno de atenção do mesmo jeito que um vermelho: ganha a moldura e o bloco de detalhe
-// (`fullView` → `compactFails`, que lista vermelho E hog). Assim `unit` com hogs e `eval`
-// com vermelhos têm a MESMA forma — era essa a assimetria.
-const anyHog = rendered.some(r =>
-  (r.main.tests || []).some(t => (t.lastMs || Math.round(t.duration || 0)) > HOG_MS))
+// O bloco tight (sem moldura) é para uma rodada verde. Só um VERMELHO pede moldura e bloco
+// de detalhe. Um HOG, por si só, NÃO: o total já vai no `(Ns 🐢M)` da linha-resumo, e o
+// detalhe por arquivo é uma leitura à parte — `--hogs`, que tem o próprio formato
+// (`hogReport`) e nem passa por aqui.
 const anyRed = rendered.some(r => r.main.state !== 'passed')
-const framed = anyRed || anyHog
+const framed = anyRed
 
 // `--hogs` — modo de tempo, formato próprio, cego a falha.
 if (hogs) {
@@ -816,7 +837,8 @@ if (hogs) {
     const left = [`${phase}:`, `${glyphs.passed} ${s.total}`,
       s.failed ? `${glyphs.failed} ${s.failed}` : '',
       s.exception ? `${glyphs.exception} ${s.exception}` : ''].filter(Boolean).join('  ')
-    const right = `\x1b[90m(${Math.round(phaseMs(main) / 1000)}s)\x1b[39m`
+    const hogSecs = phaseHogSecs(main)
+    const right = `\x1b[90m(${Math.round(phaseMs(main) / 1000)}s${hogSecs ? ` ${glyphs.hog}${hogSecs}` : ''})\x1b[39m`
     const gap = Math.max(1, width - displayLen(left) - displayLen(right))
     process.stdout.write(`${left}${' '.repeat(gap)}${right}\n`)
   }
@@ -832,9 +854,12 @@ if (hogs) {
   process.stdout.write('\x1b[1mutest results\x1b[22m\n')
   const rows = rendered.map(({ phase, main }) => {
     const s = summary(main)
+    // O TOTAL de hogs sempre aparece quando há hog — `🐢M` = segundos gastos em arquivos
+    // acima de `HOG_MS`. O detalhe por arquivo é que fica para o `--hogs`.
+    const hogSecs = phaseHogSecs(main)
     return {
       name: phase.toUpperCase(),
-      paren: `(${Math.round(phaseMs(main) / 1000)}s)`,
+      paren: `(${Math.round(phaseMs(main) / 1000)}s${hogSecs ? ` ${glyphs.hog}${hogSecs}` : ''})`,
       counts: `📄${(main.tests || []).length} 🧪${s.tests} ${glyphs.passed}${s.passed}`,
     }
   })
