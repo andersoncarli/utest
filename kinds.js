@@ -24,7 +24,8 @@
  * executor está registrado para o `kindOf(entry.path)`. Um projeto registra via `boot:`
  * (`TEST.boot.js`), antes do scan — `utest/` em si não importa nada de projeto nenhum.
  */
-const KINDS = new Set(['t', 'test', 'tuit', 'it'])
+const INITIAL_KINDS = ['t', 'test', 'tuit', 'it']
+const KINDS = new Set(INITIAL_KINDS)
 
 // `.tuit` não tem extensão de linguagem depois do tipo; os outros têm.
 const pattern = () => {
@@ -80,8 +81,23 @@ const PHASE_SETUPS = new Map()
 export const registerPhaseSetup = (phase, fn) => { PHASE_SETUPS.set(phase, fn); return fn }
 export const phaseSetupFor = phase => PHASE_SETUPS.get(phase) ?? null
 
+// Devolve o registry ao estado do import: `KINDS` volta ao vocabulário inicial, os três
+// mapas de gancho ficam vazios. O `boot:` (`TEST.boot.js`) é a ÚNICA fonte legítima de
+// `register*` — mas a fase `unit` importa `*.t.js` arbitrários, e um teste do adapter da
+// fase `eval` (`registerEvalPhase({ entries })`) deixa `entriesFor('eval')` apontando pra
+// um provider-fixture. Sem reset, `runPhase('eval')` nas fases seguintes do MESMO processo
+// pega o fixture (0 entries) e a fase EVAL some do relatório de `utest .`. `utest.js`
+// chama isto + re-roda o `boot:` entre fases.
+export const resetRegistry = () => {
+  KINDS.clear()
+  for (const k of INITIAL_KINDS) KINDS.add(k)
+  EXECUTORS.clear()
+  ENTRY_PROVIDERS.clear()
+  PHASE_SETUPS.clear()
+}
+
 export default {
   register, kinds, testRe, loaderFilter, stripKind, kindOf,
   registerExecutor, executorFor, registerEntries, entriesFor,
-  registerPhaseSetup, phaseSetupFor,
+  registerPhaseSetup, phaseSetupFor, resetRegistry,
 }

@@ -4,7 +4,7 @@
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, relative } from 'path'
-import { scan, findTarget, excludeFilter } from './scanner.js'
+import { scan, findTarget, excludeFilter, makeFilter } from './scanner.js'
 
 const dirs = []
 const fixture = (files = {}) => {
@@ -215,5 +215,33 @@ test('excludeFilter: o domínio do TEST.yaml sem varrer a árvore', ({ test }) =
     const f = excludeFilter(write(d, 'unit:\n  include:\n    - "**/*.t.js"\n'))
     check(f.excluded('node_modules/x.js'), false)
     cleanup()
+  })
+})
+
+test('makeFilter: o glob-match que decide se UM arquivo pertence à fase', ({ test }) => {
+  // `utest.js` (ramo `_isFile` de `runPhase`) usa isto para decidir se um `.t.js` dado
+  // por caminho pertence à fase pedida. Um regex bespoke fazia esse papel e quebrava em
+  // caminho com ≥ 2 níveis de pasta — `plugins/eval/pty.t.js` não pertencia a fase
+  // nenhuma, e o relatório do arquivo sumia (só `coverage: —`, exit 0).
+
+  test('**/*.t.js casa em qualquer profundidade de pasta', ({ check }) => {
+    const f = makeFilter(['**/*.t.js'], [])
+    check(f.included('pty.t.js'), true, 'raiz')
+    check(f.included('a/pty.t.js'), true, 'um nível')
+    check(f.included('plugins/eval/pty.t.js'), true, 'dois níveis — o caso que quebrava')
+    check(f.included('a/b/c/d/pty.t.js'), true, 'fundo')
+  })
+
+  test('um sufixo fora do include não casa', ({ check }) => {
+    const f = makeFilter(['**/*.t.js', '**/*.test.js'], [])
+    check(f.included('plans/1-x/1.2.eval.js'), false, 'um `.eval.js` não é da fase `unit`')
+    check(f.included('src/pixel.js'), false, 'fonte comum tampouco')
+  })
+
+  test('exclude vence o include, em qualquer profundidade', ({ check }) => {
+    const f = makeFilter(['**/*.t.js'], ['node_modules/**', 'plans/**'])
+    check(f.included('node_modules/foo/bar.t.js'), false)
+    check(f.included('plans/1-x/deep/y.t.js'), false)
+    check(f.included('src/y.t.js'), true, 'fora dos excludes, entra')
   })
 })

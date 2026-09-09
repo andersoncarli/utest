@@ -18,7 +18,7 @@ import { parse as parseYaml } from 'bun:yaml'
 
 import test from './test.js'
 import { check, checkFail, checkException } from './check.js'
-import { scan, findTarget, excludeFilter } from './scanner.js'
+import { scan, findTarget, excludeFilter, makeFilter } from './scanner.js'
 import { TestCache } from './cache.js'
 import { openLedger } from './ledger.js'
 import { openCacheLedger } from './cacheLedger.js'
@@ -37,7 +37,7 @@ import cl from '../utils/src/cl.js'
 import forEach from '../utils/src/forEach.js'
 import dotfill from '../utils/src/dotfill.js'
 import hash53 from '../utils/src/hash53.js'
-import { loaderFilter, kindOf, executorFor, entriesFor, phaseSetupFor } from './kinds.js'
+import { loaderFilter, kindOf, executorFor, entriesFor, phaseSetupFor, resetRegistry } from './kinds.js'
 import { captureConsole } from './console-capture.js'
 
 const realProcessExit = process.exit.bind(process)
@@ -297,6 +297,11 @@ if (!rawTarget && filterTerms.length === 1) {
   } catch {}
 }
 
+// Absolutiza AGORA, antes do `process.chdir(root)` lá embaixo: um alvo relativo
+// (`plugins/eval/pty.t.js`) resolvido DEPOIS do chdir para `root` (= a pasta do próprio
+// alvo, quando `_isFile`) duplicava o caminho — `path.resolve` no ramo `_isFile` de
+// `runPhase` produzia `.../plugins/eval/plugins/eval/pty.t.js`.
+if (rawTarget) rawTarget = path.resolve(rawTarget)
 const _isFile = rawTarget && fs.statSync(rawTarget).isFile()
 const targetDir = _isFile ? path.dirname(rawTarget) : rawTarget
 const root = path.resolve(targetDir || '.')
@@ -367,10 +372,19 @@ if (doTrace && !hogs && !asJson) {
 // silêncio. Todo uso de `process.cwd()` NESTE arquivo já aconteceu acima desta linha; nada
 // depois depende do cwd original.
 if (root !== process.cwd()) { try { process.chdir(root) } catch {} }
-if (fs.existsSync(configPath)) {
-  const cfg = parseYaml(fs.readFileSync(configPath, 'utf8')) || {}
-  const bootList = cfg.boot == null ? [] : (Array.isArray(cfg.boot) ? cfg.boot : [cfg.boot])
-  for (const spec of bootList) {
+// Roda a lista `boot:` do TEST.yaml: cada módulo é `import()`ado (o ESM cacheia — a 2ª
+// chamada não re-avalia o módulo) e sua fn de registro (`default`/`register`/
+// `registerEvalPhase`/`setup`) é invocada. Idempotente por design: `register*` só faz
+// `Map.set`/`Set.add`. É reexecutável entre fases — `runPhase` chama `resetRegistry()` +
+// `runBoot()` para desfazer o que os `*.t.js` da fase `unit` registraram por conta própria.
+const _bootList = fs.existsSync(configPath)
+  ? (() => {
+      const c = parseYaml(fs.readFileSync(configPath, 'utf8')) || {}
+      return c.boot == null ? [] : (Array.isArray(c.boot) ? c.boot : [c.boot])
+    })()
+  : []
+async function runBoot() {
+  for (const spec of _bootList) {
     const mod = await import(path.resolve(path.dirname(configPath), spec))
     const fn = typeof mod.default === 'function' ? mod.default
       : typeof mod.register === 'function' ? mod.register
@@ -380,6 +394,7 @@ if (fs.existsSync(configPath)) {
     if (fn) await fn()
   }
 }
+await runBoot()
 if (T) T.end()   // fecha `boot`
 
 // ─── Phases ───────────────────────────────────────────────────────────────────
@@ -454,10 +469,15 @@ async function runPhase(phase) {
       const absFile = path.resolve(rawTarget)
       const cfg = cfgRaw[phase] || {}
       const inc = cfg.include || ['**/*.t.js', '**/*.test.js']
-      const belongs = inc.some(g => {
-        const re = new RegExp('^' + g.replace(/[.]/g, '\\.').replace(/\*\*\//g, '(.*/)?').replace(/\*/g, '[^/]*') + '$')
-        return re.test(path.relative(path.dirname(configPath), absFile))
-      })
+      // O MESMO glob-match do walk (`scanner.js#makeFilter` → `compileGlob` com fast-path +
+      // minimatch), não um regex reimplementado à mão: o bespoke antigo montava a expressão
+      // trocando `**/`→`(.*/)?` e DEPOIS `*`→`[^/]*` sobre a string toda, corrompendo o `.`
+      // interno de `(.*/)?` para `(.[^/]*/)?` — que casa exatamente UM nível de pasta. Um
+      // `.t.js` a dois subdirs de fundura (`plugins/eval/pty.t.js`) não pertencia a fase
+      // nenhuma → `entries: []` → o relatório sumia (só `coverage: —`, exit 0).
+      const exc = [...(cfgRaw.exclude || []), ...(cfg.exclude || [])]
+      const rel = path.relative(path.dirname(configPath), absFile)
+      const belongs = makeFilter(inc, exc).included(rel)
       if (belongs) {
         const target = findTarget(absFile)
         cache = TestCache(path.dirname(configPath), { ledger: cacheLedger })
@@ -730,7 +750,13 @@ async function runPhase(phase) {
 
 // ─── Roda cada fase; a barra viva é reescrita dentro de `runPhase` ────────────────────────
 const phaseResults = []
-for (const phase of phaseNames) {
+for (let _pi = 0; _pi < phaseNames.length; _pi++) {
+  const phase = phaseNames[_pi]
+  // A fase `unit` importa todos os `*.t.js` da suíte — e um deles pode ter chamado
+  // `register*` por conta própria (o `.t.js` que prova o adapter da fase `eval`
+  // faz `registerEvalPhase({ entries })`). Antes de CADA fase seguinte, devolve o
+  // registry ao que só o `boot:` do TEST.yaml monta.
+  if (_pi > 0) { resetRegistry(); await runBoot() }
   phaseResults.push({ phase, ...(await runPhase(phase)) })
   if (streamPhase) process.stdout.write('\r\x1b[K')   // apaga a barra viva da fase
 }

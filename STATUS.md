@@ -98,11 +98,11 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🔵 **[2.6] results.json arbitra o cache — segunda checagem sobre o mtime cravado** → [2.6](plans/2-cache/2.6-results-json-arbitra-o-cache-segunda-checagem-sobre-o-mtime-cravado.md)
 - 🔵 **[2.7] cache sobre o ledger — o ledger arbitra o frescor por sha256, results.json em paralelo** → [2.7](plans/2-cache/2.7-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.md)
 
-### [3] scan — Scan — descoberta, pareamento, vocabulário · implementando · sprint 12  [🟢🟡🟡🟠🟠]
+### [3] scan — Scan — descoberta, pareamento, vocabulário · implementando · sprint 17  [🟢🟡🟡🟡🟠]
 - 🟢 **[3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão)** → [3.1](plans/3-scan/3.1-walk-por-glob-test-yaml-exclude-global-fase-include-padr-o-.md)
 - 🟡 **[3.2] findTarget — pareamento teste↔alvo, descasque progressivo, .eval.js↔.md de feature** → [3.2](plans/3-scan/3.2-findtarget-pareamento-teste-alvo-descasque-progressivo-eval-js-md-de-feature.md)
 - 🟡 **[3.3] kinds — vocabulário de sufixos num lugar; register() abre tipo nas 2 pontas** → [3.3](plans/3-scan/3.3-kinds-vocabul-rio-de-sufixos-num-lugar-register-abre-tipo-nas-2-pontas.md)
-- 🟠 **[3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup** → [3.4](plans/3-scan/3.4-ganchos-de-extens-o-registerexecutor-registerentries-registerphasesetup-eval-js-tuit-chromium-1x-.md)
+- 🟡 **[3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup** → [3.4](plans/3-scan/3.4-ganchos-de-extens-o-registerexecutor-registerentries-registerphasesetup-eval-js-tuit-chromium-1x-.md)
 - 🟠 **[3.5] cobertura — todo arquivo do utest mapeado em TEST.yaml, sem leaks** → [3.5](plans/3-scan/3.5-cobertura-sources-sem-t-js-pareado-uncovered-.md)
 
 ### [4] report — Report — compacto por desenho, expressivo quando precisa · implementando · sprint 15  [🟡🟡🟠🟠🟠🔵]
@@ -131,5 +131,5 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟡 **[7.2] vazamento cross-arquivo — exceção async tardia no arquivo errado (in-process)** → [7.2](plans/7-isolation/7.2-vazamento-cross-arquivo-exce-o-async-tardia-atribu-da-ao-arquivo-errado-in-process-.md)
 - 🟠 **[7.3] runner.js modular — runTest/run/loadFile/serialize; caminho do subprocesso e da fase eval externa** → [7.3](plans/7-isolation/7.3-runner-js-modular-runtest-run-loadfile-serialize-caminho-do-subprocesso-e-da-fase-eval-externa.md)
 
-🟠 13 implementando · 🟡 17 testada · 🟢 1 avaliada · 🔵 3 confirmada
+🟠 12 implementando · 🟡 18 testada · 🟢 1 avaliada · 🔵 3 confirmada
 <!-- board:end -->
