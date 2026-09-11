@@ -56,6 +56,37 @@ test('cacheLedger: o árbitro por conteúdo', ({ test }) => {
     cleanup()
   })
 
+  test('REGRESSÃO (sprint 018): state() do iodb embrulha cada registro na chave-hash — project tem que desembrulhar', async ({ check }) => {
+    const { dir, at } = fixture(SET)
+    const { createHash } = await import('crypto')
+    const { readFileSync } = await import('fs')
+    const sha = f => createHash('sha256').update(readFileSync(f)).digest('hex')
+
+    // O `iodb` reduz com `append` (`io-engine.js:490`): cada evento vai ao array
+    // EMBRULHADO — `{ "<hash>": { event, ... } }` — não plano. `openLedger().state()`
+    // devolve essa forma. Antes do sprint 018, `project` lia `entry.event` direto,
+    // pegava `undefined` em TODOS, e a projeção ficava vazia: `fresh()` nunca
+    // confirmava, `enabled` seguia `true`, e o `arbitrate` do `cache.js` rebaixava
+    // todo HIT de tempo — o `utest .` refazia a suíte inteira a cada rodada.
+    const wrap = (ev, i) => ({ [`#${i}`]: ev })
+    const l = await openCacheLedger(dir, {
+      ledger: fakeLedger([
+        // o par genesis multi-chave que o iodb sempre grava primeiro — sem `.event`,
+        // tem que ser ignorado sem quebrar o laço
+        { '0': { note: 'genesis' }, '1': { note: 'genesis' } },
+        wrap(startEvent([{ file: 'm.t.js', sha256: sha(at('m.t.js')) }, { file: 'm.js', sha256: sha(at('m.js')) }]), 2),
+        // o lote agregado que `ledger.js#end` realmente grava (não `test:result` solto)
+        wrap({ event: 'run:tests', results: [
+          { file: 'm.t.js', phase: 'unit', status: 'passed', checks: 7, tests: 2, failCount: 0, exception: false },
+        ] }, 3),
+      ]),
+    })
+    check(l.enabled, true, 'a stream embrulhada ainda arbitra')
+    check(l.get('unit', at('m.t.js'))?.checks, 7, 'o veredito veio do run:tests desembrulhado')
+    check(l.fresh('unit', at('m.t.js'), [], at('m.js')), true, 'conteúdo intacto → fresh (o cache-hit que o bug matava)')
+    cleanup()
+  })
+
   test('projeta a stream num índice: run:start dá o sha, test:result dá o veredito', async ({ check }) => {
     const { dir, at } = fixture(SET)
     const { createHash } = await import('crypto')

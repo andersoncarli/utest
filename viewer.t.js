@@ -1,20 +1,37 @@
 // viewer.t.js — o relatório compacto (sprint 084c): barra por fase, vermelhos numa
 // linha, e o par `received: false / expected: true` que some.
-import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, deltaTag, fullView, fileLine, displayLen, failLines, failData } from './viewer.js'
+import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, fileReportSpan, fullView, fileLine, displayLen, failLines, failData, hogMs, HOG_MS } from './viewer.js'
 import cl from '../utils/src/cl.js'
 
 const strip = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[K/g, '')
 
 test('viewer — relatório compacto', ({ test, check }) => {
 
-  test('checkView omite o par trivial `check(expr, true)`', ({ check }) => {
-    // `check.js` guarda `a`/`b` já como string (`repr`), então o falho de um `check(x, true)`
-    // chega aqui como a:'false' b:'true'.
-    const trivial = { state: 'failed', a: 'false', b: 'true', lineCode: "check(x.includes('┌'), true)", address: 'f.js:012' }
-    const out = strip(checkView(trivial, { width: 80 }))
-    check(out.includes('received'), false, 'sem `received:` no par trivial')
-    check(out.includes('expected'), false, 'sem `expected:` no par trivial')
-    check(out.includes("check(x.includes('┌'), true)"), true, 'a linha-fonte fica')
+  // `hogMs()` lê `globalThis.utestHogMs`. Se a SUÍTE foi rodada sob `bun utest.js . --hogs N`,
+  // esse global vaza pro processo dos testes e as asserções que esperam o fence default (1000)
+  // quebram. Cada teste que depende do default começa limpo; os que testam o override usam
+  // try/finally. Aqui só garantimos o ponto de partida.
+  delete globalThis.utestHogMs
+
+  test('checkView omite `received: false` — 1 arg e `check(expr, true)`', ({ check }) => {
+    // `check.js` guarda `a`/`b` já como string (`repr`). Um `check(x, true)` falho chega
+    // como a:'false' b:'true'; um `check(x)` falho como a:'false' b:undefined. Nos dois, a
+    // expressão já está no lineCode e `received: false` não acrescenta nada.
+    const comExpected = { state: 'failed', a: 'false', b: 'true', lineCode: "check(x.includes('┌'), true)", address: 'f.js:012' }
+    const o1 = strip(checkView(comExpected, { width: 80 }))
+    check(o1.includes('received'), false, 'sem `received:` no `check(x, true)`')
+    check(o1.includes('expected'), false, 'sem `expected:` no `check(x, true)`')
+    check(o1.includes("check(x.includes('┌'), true)"), true, 'a linha-fonte fica')
+
+    const umArg = { state: 'failed', a: 'false', lineCode: 'check(a === b)', address: 'f.js:007' }
+    const o2 = strip(checkView(umArg, { width: 80 }))
+    check(o2.includes('received'), false, 'sem `received: false` no check de 1 arg')
+    check(o2.includes('check(a === b)'), true, 'a linha-fonte fica')
+
+    // mas `received: 0` / `null` / string carregam informação — continuam
+    const falsyReal = { state: 'failed', a: '0', lineCode: 'check(count)', address: 'f.js:009' }
+    check(strip(checkView(falsyReal, { width: 80 })).includes('received: 0'), true,
+      '`received: 0` não é trivial — aparece')
   })
 
   test('checkView mantém o par quando o valor é informação', ({ check }) => {
@@ -22,6 +39,19 @@ test('viewer — relatório compacto', ({ test, check }) => {
     const out = strip(checkView(real, { width: 80 }))
     check(out.includes('received: 4'), true)
     check(out.includes('expected: 5'), true)
+  })
+
+  test('checkView combina received/expected numa linha quando cabem; separa quando estoura', ({ check }) => {
+    const curto = { state: 'failed', a: '1', b: '2', lineCode: 'check(1, 2)', address: 'f.js:003' }
+    const o1 = strip(checkView(curto, { width: 80 }))
+    check(/received: 1 {2}expected: 2/.test(o1), true, 'valores curtos → uma linha, 2 espaços')
+    check(o1.split('\n').filter(l => l.includes('received') || l.includes('expected')).length, 1,
+      'uma linha só para o par')
+
+    const longo = { state: 'failed', a: 'x'.repeat(40), b: 'y'.repeat(40), lineCode: 'check(a, b)', address: 'f.js:003' }
+    const o2 = strip(checkView(longo, { width: 60 }))
+    check(o2.split('\n').filter(l => l.includes('received') || l.includes('expected')).length, 2,
+      'não cabe em 60 → volta às duas linhas')
   })
 
   test('compactFails — só os vermelhos, só o número de falhas', ({ check }) => {
@@ -49,7 +79,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
 
     const out = strip(compactFails(main, { width: 200, hogs: true }))
     check(out.includes('fast.t.js'), false, 'o verde rápido não aparece nem com o flag')
-    check(out.includes('shell.t.js 🐢9'), true, 'com `--hogs`: badge = 🐢 + segundos (8637ms → 🐢9)')
+    check(out.includes('shell.t.js 🐢8'), true, 'com `--hogs`: badge = 🐢 + múltiplo do limiar (8637ms / 1000 → 🐢8)')
     check(out.includes('ms)'), false, 'nenhum `(Nms)` — só o badge')
     check(out.includes('✘'), false, 'nenhum ✘ — não há vermelho')
   })
@@ -68,8 +98,8 @@ test('viewer — relatório compacto', ({ test, check }) => {
     }))
     const out = strip(compactFails({ tests: [...reds, ...hogs] }, { width: 200, hogs: true }))
     for (let i = 0; i < 6; i++) check(out.includes(`r${i}.eval.js ✘1`), true, `red ${i} listado (todos)`)
-    const hogShown = out.match(/h\d\.eval\.js 🐢\d/g) || []
-    check(hogShown.length, 5, 'só os 5 hogs mais lentos, cada um com badge 🐢N (segundos)')
+    const hogShown = out.match(/h\d\.eval\.js 🐢\d+/g) || []
+    check(hogShown.length, 5, 'só os 5 hogs mais lentos, cada um com badge 🐢N (múltiplo do limiar)')
     check(out.includes('h8.eval.js 🐢'), true, 'o mais lento (h8, 2800ms) está entre os 5')
     check(out.includes('h0.eval.js 🐢'), false, 'o menos lento (h0) foi para o `+N more`')
     check(/\+4 more 🐢/.test(out), true, '9 hogs − 5 = +4 more 🐢')
@@ -86,33 +116,33 @@ test('viewer — relatório compacto', ({ test, check }) => {
     const rows = strip(compactFails(main, { width: 200, hogs: true })).split('\n')
     check(rows.length, 2, 'com `--hogs`: duas linhas — uma por grupo')
     check(rows[0].includes('r.eval.js ✘1') && !rows[0].includes('h.eval.js'), true, 'linha 1 = só reds')
-    check(rows[1].includes('h.eval.js 🐢3'), true, 'linha 2 = hogs, com badge')
+    check(rows[1].includes('h.eval.js 🐢3'), true, 'linha 2 = hogs, badge 🐢N (3000ms / 1000 → 🐢3)')
   })
 
-  test('compactFails — um vermelho que TAMBÉM é hog: `nome ✘M 🐢N`', ({ check }) => {
+  test('compactFails — um vermelho que TAMBÉM é hog: `nome 🐢N ✘M`', ({ check }) => {
     const main = { tests: [
       { name: 'quick.eval.js', state: 'failed', _cached: true, failCount: 1, lastMs: 80 },
       { name: 'slow.eval.js',  state: 'failed', _cached: true, failCount: 2, lastMs: 10064 },
     ] }
     const out = strip(compactFails(main, { width: 200 }))
-    check(out.includes('quick.eval.js ✘1'), true, 'abaixo de HOG_MS: só ✘1, sem tempo')
+    check(out.includes('quick.eval.js ✘1'), true, 'abaixo de hogMs(): só ✘1, sem tempo')
     check(out.includes('quick.eval.js ✘1 '), false, 'nada depois do ✘1')
-    check(out.includes('slow.eval.js ✘2 🐢10'), true, 'hog vermelho ganha o badge 🐢N')
+    check(out.includes('slow.eval.js 🐢10 ✘2'), true, 'hog vermelho ganha o badge 🐢N (10064ms / 1000 → 🐢10)')
   })
 
-  test('compactFails — deltaTag SÓ para um HOG que re-rodou (recompensa ganho real)', ({ check }) => {
-    // um teste rápido que re-rodou NÃO ganha `%` — 20% de 200ms é ruído de GC. Só um hog
-    // (>HOG_MS) que re-rodou mostra a variação.
-    const fastReran = { tests: [{ name: 'a.eval.js', state: 'failed', failCount: 1, lastMs: 200, prevMs: 100 }] }
-    check(strip(compactFails(fastReran, { width: 200 })), 'a.eval.js ✘1', 'teste rápido re-rodou: sem tempo, sem %')
+  test('fileReportSpan — ordem canônica dos badges: 🐢 💥 ✘ ✔', ({ check }) => {
+    // Um arquivo cacheado com hog + exceção + falha + passados. `checks:false` → sem ✔.
+    const t = { name: 'x.t.js', state: 'failed', _cached: true, lastMs: 3200, excCount: 1, failCount: 2, checkCount: 9 }
+    check(strip(fileReportSpan(t)), 'x.t.js 🐢3 💥1 ✘2', 'sem checks: 🐢 (3200/1000) 💥 ✘, nessa ordem')
+    check(strip(fileReportSpan(t, { checks: true })), 'x.t.js 🐢3 💥1 ✘2 ✔9', 'com checks: ✔ por último')
 
-    const hogReran = { tests: [{ name: 'h.eval.js', state: 'failed', failCount: 1, lastMs: 6000, prevMs: 10000 }] }
-    const out = strip(compactFails(hogReran, { width: 200 }))
-    check(out.includes('h.eval.js ✘1 🐢6'), true, 'hog: badge 🐢6 = 6 segundos')
-    check(out.includes('-40%'), true, 'hog re-rodou 40% mais rápido → -40% (ganho real, recompensado)')
+    // sem delta `%` em lugar nenhum — `prevMs` é ignorado
+    const reran = { tests: [{ name: 'h.eval.js', state: 'failed', failCount: 1, lastMs: 6000, prevMs: 10000 }] }
+    check(strip(compactFails(reran, { width: 200 })).includes('%'), false, 'nunca mais `%` de variação')
+    check(strip(compactFails(reran, { width: 200 })), 'h.eval.js 🐢6 ✘1', 'hog vermelho: 🐢 antes de ✘')
 
-    const hogCached = { tests: [{ name: 'h.eval.js', state: 'passed', _cached: true, checkCount: 1, lastMs: 6000 }] }
-    check(strip(compactFails(hogCached, { width: 200 })).includes('%'), false, 'hog cacheado (sem prevMs): badge sem %')
+    // arquivo verde e rápido, sem checks → só o nome
+    check(strip(fileReportSpan({ name: 'q.t.js', state: 'passed', _cached: true, checkCount: 3, lastMs: 20 })), 'q.t.js', 'verde rápido, checks off → só o nome')
   })
 
   test('compactFails — vazio quando tudo passou E nada é hog', ({ check }) => {
@@ -127,6 +157,49 @@ test('viewer — relatório compacto', ({ test, check }) => {
     const out = strip(compactFails({ tests }, { width: 60 }))
     for (const r of out.split('\n')) check(r.length <= 60 || !r.includes('  '), true, `linha cabe em 60: "${r}"`)
     check(out.split('\n').every(r => r.startsWith('feature-')), true, 'só tokens de arquivo, sem linha de dica (essa mora no utest.js)')
+  })
+
+  test('hogMs — o limiar de hog é `globalThis.utestHogMs`, senão o `HOG_MS` default', ({ check }) => {
+    check(hogMs(), HOG_MS, 'sem override → HOG_MS (1000)')
+    try {
+      globalThis.utestHogMs = 100
+      check(hogMs(), 100, '`--hogs 100` (via globalThis) → 100')
+    } finally {
+      delete globalThis.utestHogMs
+    }
+    check(hogMs(), HOG_MS, 'limpo → volta ao default')
+  })
+
+  test('compactFails — o limiar move: `--hogs 100` pega arquivos que 1000 não pegava, badge = múltiplo de 100', ({ check }) => {
+    const main = { tests: [
+      { name: 'quick.t.js',  state: 'passed', _cached: true, checkCount: 5, lastMs: 60 },
+      { name: 'mid.t.js',    state: 'passed', _cached: true, checkCount: 9, lastMs: 450 },
+      { name: 'slow.t.js',   state: 'passed', _cached: true, checkCount: 3, lastMs: 2300 },
+    ] }
+    // Limiar default (1000): só `slow.t.js` é hog.
+    const d = strip(compactFails(main, { width: 200, hogs: true }))
+    check(d.includes('slow.t.js 🐢2'), true, 'default: slow (2300ms / 1000 → 🐢2)')
+    check(d.includes('mid.t.js'), false, 'default: mid (450ms) não é hog')
+
+    try {
+      globalThis.utestHogMs = 100
+      const o = strip(compactFails(main, { width: 200, hogs: true }))
+      check(o.includes('mid.t.js 🐢4'), true, '`--hogs 100`: mid entra, 450 / 100 → 🐢4')
+      check(o.includes('slow.t.js 🐢23'), true, '`--hogs 100`: slow vira 2300 / 100 → 🐢23')
+      check(o.includes('quick.t.js'), false, '60ms < 100 → ainda não é hog')
+    } finally {
+      delete globalThis.utestHogMs
+    }
+  })
+
+  test('hogBadge — mínimo 1: um arquivo mal acima do limiar não mostra 🐢0', ({ check }) => {
+    try {
+      globalThis.utestHogMs = 1000
+      const main = { tests: [{ name: 'edge.t.js', state: 'failed', _cached: true, failCount: 1, lastMs: 1001 }] }
+      check(strip(compactFails(main, { width: 200 })).includes('edge.t.js 🐢1 ✘1'), true, '1001ms → 🐢1, nunca 🐢0')
+    } finally {
+      delete globalThis.utestHogMs
+    }
   })
 
   test('phaseLine — CAIXA ALTA, dotfill, ordem (Σs 🐢N) ✘N 📄🧪✔, borda à direita', ({ check }) => {
@@ -192,14 +265,6 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check((out.match(/[█░]/g) || []).length, 20, 'a barra tem exatamente 20 células')
   })
 
-  test('deltaTag — só destaca variação ≥20%, verde mais rápido / vermelho mais lento', ({ check }) => {
-    check(deltaTag(100, 100), '', 'sem variação, sem tag')
-    check(strip(deltaTag(110, 100)), '', '10% é ruído, sem tag')
-    check(strip(deltaTag(150, 100)), ' +50%', 'mais lento')
-    check(strip(deltaTag(60, 100)), ' -40%', 'mais rápido')
-    check(deltaTag(100, 0), '', 'sem `prev`, sem tag')
-  })
-
   test('failInfo — { line, code } de um check falho', ({ check }) => {
     const c = { state: 'failed', address: 'f.js:012', lineCode: '  check(a, b)  ' }
     check(failInfo(c).line, 'f.js:012')
@@ -218,7 +283,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
     const asEval = strip(fullView(mk(), { verbosity: 1, width: 80, title: 'eval' }))
     check(asUnit.replace(/UNIT/g, 'X'), asEval.replace(/EVAL/g, 'X'),
       'trocado o rótulo, o resto é byte-a-byte igual')
-    check(asUnit.includes('b ✘2 🐢1'), true, 'o vermelho-hog (1200ms) ganha o badge 🐢1 em qualquer kind')
+    check(asUnit.includes('b 🐢1 ✘2'), true, 'o vermelho-hog (1200ms) ganha o badge 🐢1 em qualquer kind')
     check(asUnit.includes('received'), false, 'nenhum log/checkView num relatório amplo')
   })
 
@@ -231,13 +296,13 @@ test('viewer — relatório compacto', ({ test, check }) => {
     ] }
     const out = strip(fullView(greenWithHog, { verbosity: 1, width: 80, title: 'unit' }))
     check(out.split('\n').filter(Boolean).length, 1, 'uma linha só — sem bloco de detalhe')
-    check(out.includes('🐢9'), true, 'o TOTAL de hogs aparece na linha-título (8600ms → 🐢9)')
+    check(out.includes('🐢8'), true, 'o TOTAL de hogs na linha-título = Σ dos multiplicadores 🐢 dos arquivos (8600ms → 🐢8)')
     check(out.includes('shell.t.js'), false, 'nenhum nome de arquivo — o detalhe é do `--hogs`')
 
     // Com `hogs:true`, o detalhe por arquivo volta.
     const withFlag = strip(fullView(greenWithHog, { verbosity: 1, width: 80, title: 'unit', hogs: true }))
     check(withFlag.split('\n').filter(Boolean).length >= 2, true, 'com o flag: título + detalhe')
-    check(withFlag.includes('shell.t.js 🐢9'), true, 'o hog aparece no bloco com badge')
+    check(withFlag.includes('shell.t.js 🐢8'), true, 'o hog aparece no bloco com badge 🐢N (8600ms / 1000 → 🐢8)')
   })
 
   test('a régua é em COLUNAS de terminal, não em unidades UTF-16', ({ check }) => {
@@ -415,8 +480,8 @@ test('viewer — relatório compacto', ({ test, check }) => {
   test('v1 — título + compactFails(só vermelho/exceção); hog verde NÃO puxa linha', ({ check }) => {
     const out = strip(fullView(fixture(), { verbosity: 1, width: 100, title: 'unit' }))
     check(out.includes('UNIT'), true, 'linha-título')
-    check(/red\.eval\.js ✘1/.test(out), true, 'o vermelho, com contagem')
-    check(/slowred\.eval\.js ✘1 🐢9/.test(out), true, 'vermelho que é hog: mantém o badge 🐢N')
+    check(/red\.eval\.js ✘2/.test(out), true, 'o vermelho, com contagem (1 check + 1 aninhado idêntico)')
+    check(/slowred\.eval\.js 🐢9 ✘1/.test(out), true, 'vermelho que é hog: badge 🐢N (9100ms / 1000 → 🐢9)')
     check(out.includes('boom.t.js'), true, 'a exceção também é listada')
     check(out.includes('slowgreen.t.js'), false, 'o hog VERDE não aparece (só no --hogs)')
     check(out.includes('received:'), false, 'nenhum checkView num relatório amplo v1')
@@ -426,14 +491,14 @@ test('viewer — relatório compacto', ({ test, check }) => {
 
   test('v1 --hogs — o detalhe por arquivo do hog verde volta', ({ check }) => {
     const out = strip(fullView(fixture(), { verbosity: 1, width: 100, title: 'unit', hogs: true }))
-    check(out.includes('slowgreen.t.js 🐢4'), true, 'o hog verde ganha a linha (4200ms → 🐢4)')
-    check(/slowred\.eval\.js ✘1 🐢9/.test(out), true, 'o hog vermelho segue com ✘ e badge')
+    check(out.includes('slowgreen.t.js 🐢4'), true, 'o hog verde ganha a linha (4200ms / 1000 → 🐢4)')
+    check(/slowred\.eval\.js 🐢9 ✘1/.test(out), true, 'o hog vermelho segue com ✘ e badge 🐢N')
   })
 
   test('v2 — verdes num rio, cada vermelho vira fileLine + checkView (received/expected), sem log()', ({ check }) => {
     const out = strip(fullView(fixture(), { verbosity: 2, width: 100, title: 'unit' }))
     check(out.includes('green.t.js ✔12'), true, 'o verde no rio, com contagem')
-    check(out.includes('slowgreen.t.js ✔3'), true, 'o hog verde também entra no rio dos passados')
+    check(out.includes('slowgreen.t.js 🐢4 ✔3'), true, 'o hog verde entra no rio dos passados, com o 🐢 sticky antes do ✔')
     check(out.includes('check(2 + 2, 5)'), true, 'a linha do check do vermelho')
     check(out.includes('received: 4') && out.includes('expected: 5'), true, 'o par inteiro em v2')
     check(out.includes('red.eval.js:012'), true, 'o endereço (caller line)')
@@ -494,5 +559,100 @@ test('viewer — relatório compacto', ({ test, check }) => {
     check(out.includes('check()'), true, 'cai no literal `check()`')
     check(out.includes('received: true'), true, 'received continua')
     check(out.includes('expected: false'), true, 'expected continua')
+  })
+
+  // ── Escopo de UM arquivo: a saída seca (sprint 019) ──────────────────────────
+  // O render de arquivo-único mora no bloco de dispatch de `utest.js`, não numa fn de
+  // `viewer.js` — então estes casos spawnam o runner de verdade contra um `.t.js` scratch.
+  test('escopo de arquivo VERDE → uma linha seca `✔N (Wms)`, sem phaseLine nem nome', ({ check }) => {
+    const { mkdtempSync, writeFileSync, rmSync } = require('fs')
+    const { join } = require('path')
+    const { tmpdir } = require('os')
+    const dir = mkdtempSync(join(tmpdir(), 'uview-file-'))
+    writeFileSync(join(dir, 'TEST.yaml'), 'exclude: []\nunit:\n  include:\n    - "**/*.t.js"\n')
+    writeFileSync(join(dir, 'ok.js'), 'export const n = 2\n')
+    writeFileSync(join(dir, 'ok.t.js'),
+      "import { n } from './ok.js'\ntest('soma', ({ check }) => { check(n + n, 4); check(n, 2) })\n")
+    const r = Bun.spawnSync({
+      cmd: ['bun', join(import.meta.dir, 'utest.js'), 'ok.t.js'],
+      cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
+    })
+    const out = strip(r.stdout.toString()).trim()
+    rmSync(dir, { recursive: true, force: true })
+    check(/^✔2 \(\d+ms\)$/.test(out), true, `uma linha só, ✔2 e tempo: ${JSON.stringify(out)}`)
+    check(out.includes('unit:'), false, 'sem a phaseLine da fase')
+    check(out.includes('ok.t.js'), false, 'sem o nome do arquivo')
+    check(out.includes('---'), false, 'sem o dotfill da entryLine')
+  })
+
+  test('escopo de arquivo com FALHA → direto no arquivo: fileLine + checkView, sem frame/tip/coverage', ({ check }) => {
+    const { mkdtempSync, writeFileSync, rmSync } = require('fs')
+    const { join } = require('path')
+    const { tmpdir } = require('os')
+    const dir = mkdtempSync(join(tmpdir(), 'uview-file-'))
+    writeFileSync(join(dir, 'TEST.yaml'), 'exclude: []\nunit:\n  include:\n    - "**/*.t.js"\n')
+    writeFileSync(join(dir, 'bad.t.js'),
+      "test('erros', ({ check }) => {\n" +
+      "  check(2 + 2, 5)\n" +
+      "  check(1 === 2, true)\n" +
+      "  check(() => { throw new Error('Boom!') })\n" +
+      "})\n")
+    const r = Bun.spawnSync({
+      cmd: ['bun', join(import.meta.dir, 'utest.js'), 'bad.t.js'],
+      cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
+    })
+    const out = strip(r.stdout.toString())
+    rmSync(dir, { recursive: true, force: true })
+    // fileLine + os erros, nada de cabeçalho/rodapé
+    check(/^bad\.t\.js .*✘/.test(out.trim()), true, `começa direto na barra do arquivo: ${JSON.stringify(out.split('\n')[0])}`)
+    check(out.includes('utest results'), false, 'sem o cabeçalho `utest results`')
+    check(out.includes('tip:'), false, 'sem a linha `tip:`')
+    check(out.includes('coverage:'), false, 'sem a linha `coverage:`')
+    check(out.includes('unit:'), false, 'sem a phaseLine `unit:`')
+    check(out.includes('═'), false, 'sem o frame de réguas')
+    // checkView: callerLine + par combinado
+    check(out.includes('check(2 + 2, 5)'), true, 'o callerLine do check falho')
+    check(/bad\.t\.js:0*2/.test(out), true, 'o endereço linha 2')
+    check(/received: 4 {2}expected: 5/.test(out), true, 'received/expected combinados numa linha')
+    // `check(1 === 2, true)` — o par trivial some
+    check(out.includes('check(1 === 2, true)'), true, 'a linha-fonte do check(x, true) falho')
+    check(/check\(1 === 2, true\)[\s\S]*?received: false/.test(out), false,
+      'sem `received: false` quando o esperado era `true`')
+    // a exceção: header + o endereço (o throw foi na própria linha do check → sem frame extra)
+    check(out.includes('💥 Boom!'), true, 'o header da exceção')
+    check(/bad\.t\.js:0*4/.test(out), true, 'o endereço da exceção')
+  })
+
+  test('`--hogs N` = modo laser — ZERO moldura, só os arquivos-hog + tip para --trace', ({ check }) => {
+    const { mkdtempSync, writeFileSync, rmSync } = require('fs')
+    const { join } = require('path')
+    const { tmpdir } = require('os')
+    const dir = mkdtempSync(join(tmpdir(), 'uview-hogs-'))
+    writeFileSync(join(dir, 'TEST.yaml'), 'exclude: []\nunit:\n  include:\n    - "**/*.t.js"\n')
+    // um teste lento de propósito (>50ms) e um instantâneo
+    writeFileSync(join(dir, 'slow.t.js'),
+      "test('lento', ({ check }) => { const t = Date.now(); while (Date.now() - t < 90) {} check(1, 1) })\n")
+    writeFileSync(join(dir, 'quick.t.js'), "test('rápido', ({ check }) => check(2, 2))\n")
+    const run = (extra = []) => strip(Bun.spawnSync({
+      cmd: ['bun', join(import.meta.dir, 'utest.js'), '.', '--hogs', '50', ...extra],
+      cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
+    }).stdout.toString())
+
+    const v1 = run()
+    // ZERO moldura estrutural — nada de `─────`, `utest results`, phaseLine, `coverage:`
+    check(v1.includes('utest results'), false, 'sem `utest results`')
+    check(v1.includes('coverage:'), false, 'sem a linha `coverage:`')
+    check(/─────/.test(v1), false, 'sem régua')
+    check(/^UNIT /m.test(v1), false, 'sem phaseLine')
+    // só o hog, com o badge sticky (busy-wait ~90ms / 50 → 🐢1 ou 🐢2)
+    check(/slow\.t\.js 🐢\d+/.test(v1), true, `o hog com 🐢N sticky: ${JSON.stringify(v1.match(/slow\.t\.js[^\n]*/)?.[0])}`)
+    check(v1.includes('quick.t.js'), false, 'o rápido (<50ms) não aparece')
+    check(v1.includes('✔'), false, '`-v1`: só `nome 🐢N`, sem contagem de checks')
+    // o tip guia para o --trace do mais lento
+    check(/tip: run .*utest slow\.t\.js --trace/.test(v1), true, `tip aponta o --trace do mais lento: ${JSON.stringify(v1.match(/tip:[^\n]*/)?.[0])}`)
+
+    // `-v2 --hogs` = os mesmos hogs + a contagem de checks
+    const v2 = run(['-v2'])
+    check(/slow\.t\.js 🐢\d+ ✔1/.test(v2), true, `-v2: \`nome 🐢N ✔P\`: ${JSON.stringify(v2.match(/slow\.t\.js[^\n]*/)?.[0])}`)
   })
 })

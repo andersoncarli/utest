@@ -1,6 +1,7 @@
 
 test('check', ({ check, checkFail, checkException }) => {
   check(2, () => 2)
+  check(undefined, 'undefined')
   check('', '')
   check(0, 0)
 
@@ -25,10 +26,6 @@ test('check', ({ check, checkFail, checkException }) => {
     throw new Error()
   })
 
-  // // Forced failures for demo purposes (comment out for passing tests)
-  // check(1, 2) // force a failure
-  // check(() => { throw new Error('Bang!') }) // force an exception
-
   // Test nested exception stack trace
   function level1() {
     function level2() {
@@ -37,4 +34,9 @@ test('check', ({ check, checkFail, checkException }) => {
     level2()
   }
   checkException(() => level1())
+
+  // // Forced failures for demo purposes (comment out for passing tests)
+  // check(false) // booleans
+  // check(1, 2) // integers
+  // check(() => { throw new Error('Bang!') }) // force an exception
 })

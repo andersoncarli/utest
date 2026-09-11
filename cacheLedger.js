@@ -106,10 +106,16 @@ export async function openCacheLedger(root, options = {}) {
   }
 
   try {
-    // O `iodb` reduz com `append`, então o estado projetado É o array de registros na
-    // ordem em que entraram. Ler uma vez, na abertura.
+    // O `iodb` reduz com `append` (`io-engine.js`), que empurra cada registro
+    // EMBRULHADO na chave-hash progressiva: `{ "<hash>": { event, ... } }`. O
+    // estado projetado é o array desses embrulhos na ordem em que entraram —
+    // desembrulha antes de `project`, ou `entry.event` é sempre `undefined` e a
+    // projeção fica vazia (o cache inteiro morre: `fresh()` nunca confirma e o
+    // `arbitrate` rebaixa todo HIT de tempo). O par genesis `{'0':…,'1':…}` é
+    // multi-chave e desembrulha para algo sem `.event` — o guard de `project` o ignora.
     const history = typeof ledger.state === 'function' ? ledger.state() : []
-    for (const entry of history || []) project(entry)
+    const unwrap = e => (e && e.event) ? e : Object.values(e ?? {})[0]
+    for (const entry of history || []) project(unwrap(entry))
   } catch { /* histórico ilegível não pode derrubar a rodada — cai no mtime */ }
 
   const rel = (p) => relative(projectRoot, p)

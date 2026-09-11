@@ -89,20 +89,21 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟡 **[1.3] sealed — check tardio reabre o veredito de quem o soltou** → [1.3](plans/1-core/1.3-sealed-check-tardio-reabre-o-veredito-de-quem-o-soltou.md)
 - 🟠 **[1.4] console-capture — console.* não vaza de teste verde** → [1.4](plans/1-core/1.4-console-capture-console-n-o-vaza-de-teste-verde.md)
 
-### [2] cache — Cache — a regra sem furo · implementando · sprint 16  [🟡🟡🟡🟡🟡🔵🔵]
+### [2] cache — Cache — a regra sem furo · implementando · sprint 16  [🟡🟡🟡🟡🟡🔵🟡]
 - 🟡 **[2.1] regra do mtime — segundo cravado + ms = contagem de checks; conjunto pareado** → [2.1](plans/2-cache/2.1-regra-do-mtime-segundo-cravado-ms-contagem-de-checks-conjunto-pareado.md)
 - 🟡 **[2.2] grafo de deps — IMPORT_RE (inclui efeito colateral), extraRoots, ciclo, atime** → [2.2](plans/2-cache/2.2-grafo-de-deps-import-re-inclui-efeito-colateral-extraroots-ciclo-atime.md)
 - 🟡 **[2.3] cacheFailure — vermelho reproduzível de eval não re-roda (sidecar)** → [2.3](plans/2-cache/2.3-cachefailure-vermelho-reproduz-vel-de-eval-n-o-re-roda-sidecar-.md)
 - 🟡 **[2.4] results.json — histórico por fase; índice (utest 3.2 sem scan) + cross-check fresh()** → [2.4](plans/2-cache/2.4-results-json-hist-rico-hier-rquico-por-fase-ndice-utest-3-2-sem-scan-cross-check-fresh-.md)
 - 🟡 **[2.5] output idêntico quente/frio — render lê sempre do storage** → [2.5](plans/2-cache/2.5-output-id-ntico-quente-frio-render-l-sempre-do-storage.md)
 - 🔵 **[2.6] results.json arbitra o cache — segunda checagem sobre o mtime cravado** → [2.6](plans/2-cache/2.6-results-json-arbitra-o-cache-segunda-checagem-sobre-o-mtime-cravado.md)
-- 🔵 **[2.7] cache sobre o ledger — o ledger arbitra o frescor por sha256, results.json em paralelo** → [2.7](plans/2-cache/2.7-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.md)
+- 🟡 **[2.7] cache sobre o ledger — o ledger arbitra o frescor por sha256, results.json em paralelo** → [2.7](plans/2-cache/2.7-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.md)
+  - próxima: Feature entregue no sprint 016 e 🟡 testada. A proxima acao e o `sprint eval 2.7` passo a
 
-### [3] scan — Scan — descoberta, pareamento, vocabulário · implementando · sprint 17  [🟢🟡🟡🟡🟠]
-- 🟢 **[3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão)** → [3.1](plans/3-scan/3.1-walk-por-glob-test-yaml-exclude-global-fase-include-padr-o-.md)
-- 🟡 **[3.2] findTarget — pareamento teste↔alvo, descasque progressivo, .eval.js↔.md de feature** → [3.2](plans/3-scan/3.2-findtarget-pareamento-teste-alvo-descasque-progressivo-eval-js-md-de-feature.md)
+### [3] scan — Scan — descoberta, pareamento, vocabulário · implementando · sprint 17  [🔵🔵🟡🔵🟠]
+- 🔵 **[3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão)** → [3.1](plans/3-scan/3.1-walk-por-glob-test-yaml-exclude-global-fase-include-padr-o-.md)
+- 🔵 **[3.2] findTarget — pareamento teste↔alvo, descasque progressivo, .eval.js↔.md de feature** → [3.2](plans/3-scan/3.2-findtarget-pareamento-teste-alvo-descasque-progressivo-eval-js-md-de-feature.md)
 - 🟡 **[3.3] kinds — vocabulário de sufixos num lugar; register() abre tipo nas 2 pontas** → [3.3](plans/3-scan/3.3-kinds-vocabul-rio-de-sufixos-num-lugar-register-abre-tipo-nas-2-pontas.md)
-- 🟡 **[3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup** → [3.4](plans/3-scan/3.4-ganchos-de-extens-o-registerexecutor-registerentries-registerphasesetup-eval-js-tuit-chromium-1x-.md)
+- 🔵 **[3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup** → [3.4](plans/3-scan/3.4-ganchos-de-extens-o-registerexecutor-registerentries-registerphasesetup-eval-js-tuit-chromium-1x-.md)
 - 🟠 **[3.5] cobertura — todo arquivo do utest mapeado em TEST.yaml, sem leaks** → [3.5](plans/3-scan/3.5-cobertura-sources-sem-t-js-pareado-uncovered-.md)
 
 ### [4] report — Report — compacto por desenho, expressivo quando precisa · implementando · sprint 15  [🟡🟡🟠🟠🟠🔵]
@@ -131,5 +132,5 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟡 **[7.2] vazamento cross-arquivo — exceção async tardia no arquivo errado (in-process)** → [7.2](plans/7-isolation/7.2-vazamento-cross-arquivo-exce-o-async-tardia-atribu-da-ao-arquivo-errado-in-process-.md)
 - 🟠 **[7.3] runner.js modular — runTest/run/loadFile/serialize; caminho do subprocesso e da fase eval externa** → [7.3](plans/7-isolation/7.3-runner-js-modular-runtest-run-loadfile-serialize-caminho-do-subprocesso-e-da-fase-eval-externa.md)
 
-🟠 12 implementando · 🟡 18 testada · 🟢 1 avaliada · 🔵 3 confirmada
+🟠 12 implementando · 🟡 17 testada · 🔵 5 confirmada
 <!-- board:end -->

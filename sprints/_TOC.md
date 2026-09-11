@@ -73,7 +73,7 @@ Legenda: ⚫ planejada · 🟠 implementando · 🟡 testada · 🟢 avaliada ·
 
 </details>
 
-<details><summary>🔵 [2.7] cache sobre o ledger — o ledger arbitra o frescor por sha256, results.json em paralelo — confirmada</summary>
+<details><summary>🟡 [2.7] cache sobre o ledger — o ledger arbitra o frescor por sha256, results.json em paralelo — testada</summary>
 
 [016](sprints/016-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.report.md "cache sobre o ledger — o ledger arbitra o frescor, results.json em paralelo · `cacheLedger.js` — o segundo árbitro do cache, ancorado no **conteúdo** (`sha256`) em vez do inode (`mtime`), derivado da ")
 
@@ -83,15 +83,15 @@ Legenda: ⚫ planejada · 🟠 implementando · 🟡 testada · 🟢 avaliada ·
 
 <details><summary>🟠 <b>[3] scan</b> — Scan — descoberta, pareamento, vocabulário</summary>
 
-<details><summary>🟢 [3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão) — avaliada</summary>
+<details><summary>🔵 [3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão) — confirmada</summary>
 
 [001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [005](sprints/005-argumento-de-fase.report.md "report · Sprint retroativo. utest <phase> seleciona uma fase só; scan() finalmente recebe o 3º argumento e as fases do TEST.yaml passam a ser varridas.") [012](sprints/012-watch-respeita-o-exclude-do-test-yaml.report.md "watch respeita o exclude do TEST.yaml · Intro: `utest . -w` deixou de vigiar a árvore inteira — agora o watcher só observa o domínio do `TEST.yaml`, podando `node_modules/`, `archive/` e o que o `excl")
 
 </details>
 
-<details><summary>🟡 [3.2] findTarget — pareamento teste↔alvo, descasque progressivo, .eval.js↔.md de feature — testada</summary>
+<details><summary>🔵 [3.2] findTarget — pareamento teste↔alvo, descasque progressivo, .eval.js↔.md de feature — confirmada</summary>
 
-_(sem sprints ainda)_
+[017](sprints/017-reusar-makefilter-no-isfile-resetregistry-entre-fases-testes-nao-poluem-entriesfor.report.md "reusar makeFilter no _isFile; resetRegistry entre fases — testes nao poluem entriesFor · Dois bugs de severidade alta levantados em `issues/260907-tui.md` (sprint 007 do `~/tui`): rodar um `.t.js` por")
 
 </details>
 
@@ -101,9 +101,9 @@ _(sem sprints ainda)_
 
 </details>
 
-<details><summary>🟠 [3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup — implementando</summary>
+<details><summary>🔵 [3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup — confirmada</summary>
 
-[004](sprints/004-preparacao-do-eval-executor-entries-phasesetup.report.md "report · Sprint retroativo. Os três ganchos de extensão (executor/entries/phaseSetup), tuit.js, console-capture, cacheFailure e probe — a preparação do .eval.js.")
+[004](sprints/004-preparacao-do-eval-executor-entries-phasesetup.report.md "report · Sprint retroativo. Os três ganchos de extensão (executor/entries/phaseSetup), tuit.js, console-capture, cacheFailure e probe — a preparação do .eval.js.") [017](sprints/017-reusar-makefilter-no-isfile-resetregistry-entre-fases-testes-nao-poluem-entriesfor.report.md "reusar makeFilter no _isFile; resetRegistry entre fases — testes nao poluem entriesFor · Dois bugs de severidade alta levantados em `issues/260907-tui.md` (sprint 007 do `~/tui`): rodar um `.t.js` por")
 
 </details>
 

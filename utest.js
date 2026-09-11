@@ -23,7 +23,7 @@ import { TestCache } from './cache.js'
 import { openLedger } from './ledger.js'
 import { openCacheLedger } from './cacheLedger.js'
 import { openState } from './state.js'
-import { view, fullView, failLines, failData, summary, glyphs, checkView, hogReport, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, displayLen, HOG_MS } from './viewer.js'
+import { view, fullView, failLines, failData, fileLine, fileReportSpan, summary, glyphs, checkView, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, displayLen, hogMs } from './viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
          beforeEach, afterEach, withTempDir} from './shims.js'
 
@@ -217,17 +217,27 @@ async function runTest(t, ctx, timeout = 1000) {
 // ─── Args ────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2)
 const hogs = args.includes('--hogs') || args.includes('-h')
+// `--hogs <N>` / `-h <N>` — o limiar de hog EM MS para esta execução inteira. O positional
+// logo depois da flag, se for numérico. Sem ele (ou sem `--hogs`), fica o `HOG_MS` de
+// sempre (1000). Grava em `globalThis` (mais abaixo, junto do `utestVerbosity`) porque
+// `viewer.js` já foi importado — `hogMs()` relê de lá a cada chamada.
+const _hogFlagIdx = args.findIndex(a => a === '--hogs' || a === '-h')
+const _hogLimit = _hogFlagIdx >= 0 && /^\d+$/.test(args[_hogFlagIdx + 1] || '')
+  ? parseInt(args[_hogFlagIdx + 1], 10)
+  : null
 let verbosity = 1
 const _vArg = args.find(a => /^(-v)?:?([0123])$/.test(a))
 const _vExplicit = !!_vArg
 if (_vArg) verbosity = parseInt(_vArg.match(/([0123])$/)[1])
-// `--hogs` é um MODO à parte, independente de `-v:N` — só tempo, cego a erro (nem os fails
-// rápidos contam como hog). Sem isto, `-v:3` ainda estufaria a saída ANTES da lista final:
-// o streaming por-teste roda durante a fase (`runPhase`), não no render — forçar `verbosity`
-// aqui, antes do global, é o único jeito de calar aquilo sem duplicar a checagem em dois
-// lugares.
-if (hogs) verbosity = 1
+// `--hogs [N]` — o limite de hog EM MS para a execução inteira (`globalThis.utestHogMs`,
+// lido por `hogMs()` em `viewer.js`): o divisor do badge `🐢N` (`floor(ms/N)`) e o fence de
+// seleção. Sem `--hogs` → `HOG_MS` (1000), `🐢N` = segundos inteiros. Com `--hogs 100`, um
+// arquivo de 7200ms → `🐢72`. NÃO força `-v:2`: `--hogs` sozinho (v0/v1) é o modo LASER —
+// moldura tight, corpo podado a hogs + vermelhos (dispatch mais abaixo). `-v2 --hogs` mostra
+// o corpo completo, os hogs com o badge a mais. O badge é sticky: onde o nome do arquivo-hog
+// aparece, `🐢N` vem colado.
 globalThis.utestVerbosity = verbosity
+if (_hogLimit !== null) globalThis.utestHogMs = _hogLimit
 
 let force = args.includes('--force') || args.includes('-f')
 const watch = args.includes('--watch') || args.includes('-w')
@@ -251,7 +261,12 @@ const trace = !!_traceArg
 const traceOut = _traceArg?.includes('=') ? _traceArg.slice('--trace='.length) : null
 const timeoutArg = args.find(a => a.startsWith('--timeout=') || a.startsWith('-to='))
 const timeout = timeoutArg ? parseInt(timeoutArg.split('=')[1]) : 1000
-const positional = args.filter(a => !a.startsWith('-') && !/^(-v)?:?([0123])$/.test(a))
+// O `<N>` de `--hogs <N>` é um positional numérico consumido pela flag — tirado daqui para
+// não virar filtro de nome (`filterTerms`) nem ser testado como path.
+const _hogLimitTok = _hogLimit !== null ? String(_hogLimit) : null
+const positional = args.filter((a, i) =>
+  !a.startsWith('-') && !/^(-v)?:?([0123])$/.test(a) &&
+  !(a === _hogLimitTok && i === _hogFlagIdx + 1))
 // Acha o target ANTES do YAML de fases: só depende de existir no disco, e o YAML certo
 // a consultar é o do TARGET, não o do cwd — `utest.js eval ~/outro-projeto` rodado de
 // fora precisa do TEST.yaml de `~/outro-projeto`, ou `eval` nunca bate em `_declaredPhases`
@@ -664,9 +679,14 @@ async function runPhase(phase) {
     checks: [], output: [], state: 'pending', duration: 0,
   }
 
+  // Escopo de UM arquivo tem uma saída própria no render final (verde: `✔N (Wms)`; vermelho:
+  // `fileLine` + `failLines` direto, sem cabeçalho/rodapé). O stream por-teste do `-v:3`
+  // durante a fase duplicaria isso. Então, com `_isFile`, o stream é suprimido — o render
+  // final fala sozinho nos dois casos.
+  const _suppressStream = _isFile
   for (const t of suite.tests) {
     await runTest(t, ctx, timeout)
-    if (verbosity >= 3 && matchesFilter) {
+    if (verbosity >= 3 && matchesFilter && !_suppressStream) {
       const v = view(t, { verbosity, width })
       if (v) process.stdout.write(v + '\n')
     }
@@ -690,16 +710,6 @@ async function runPhase(phase) {
   const s = summary(suite)
   suite.state = s.exception > 0 ? 'exception' : s.failed > 0 ? 'failed' : 'passed'
   main.tests.push(suite)
-
-  // `--hogs` é a leitura "quem está bloqueando AGORA" — sem isto, ela só falava no final,
-  // depois da suíte inteira já ter rodado, que é exatamente o cenário que motivou o pedido
-  // ("não conseguimos identificar quem está bloqueando"). Delta desde o INÍCIO GERAL
-  // (`startAll`, antes de qualquer fase), não desde a fase — uma trava no meio do `unit`
-  // ainda mostra o relógio de parede real.
-  if (hogs) {
-    const sinceStart = Math.round(Number(process.hrtime.bigint() - startAll) / 1e6)
-    process.stdout.write(`${phase}/${suite.name} (Δ${Math.round(suite.duration)}ms, +${sinceStart}ms)\n`)
-  }
 
   // ── Update cache ─────────────────────────────────────────────────────────
     // `cache.write` decide sozinho entre gravar o par/sidecar (verde OU vermelho
@@ -839,9 +849,67 @@ const covLine = srcTotal ? `coverage: ${Math.round((srcCovered / srcTotal) * 100
 const anyRed = rendered.some(r => r.main.state !== 'passed')
 const framed = anyRed
 
-// `--hogs` — modo de tempo, formato próprio, cego a falha.
-if (hogs) {
-  process.stdout.write(hogReport(phaseResults, { width, standalone: true }) + '\n')
+// ─── `--hogs` / `-h` — MODO LASER, zero moldura ───────────────────────────────────
+// `--hogs` é uma pergunta sobre TEMPO. A resposta é a lista dos arquivos-hog e seus badges,
+// direto, sem `─────`, sem `utest results`, sem phaseLine, sem `coverage:`. `-v:1` → só
+// `nome 🐢N`; `-v:2` → `nome 🐢N ✔P` (a contagem de checks a mais). NUNCA mostra vermelhos —
+// quem quer falha roda sem `--hogs`. Sem cap: `--hogs 100` pediu TODOS acima de 100ms.
+// Vazio → uma linha seca. Havendo hog, o `tip:` aponta `utest <mais lento> --trace` — o
+// `--trace` é a ferramenta de drill-in de hog.
+if (hogs && !asJson && !doTrace) {
+  const msOf = t => t.lastMs || Math.round(t.duration || 0)
+  const allHogs = rendered
+    .flatMap(r => r.main.tests || [])
+    .filter(t => msOf(t) > hogMs())
+    .sort((a, b) => msOf(b) - msOf(a))
+  if (!allHogs.length) {
+    process.stdout.write(`\x1b[90mnenhum arquivo acima de ${hogMs()}ms\x1b[39m\n`)
+  } else {
+    const spans = allHogs.map(t => fileReportSpan(t, { checks: verbosity >= 2 }))
+    let cur = ''
+    for (const sp of spans) {
+      const add = cur ? cur + '  ' + sp : sp
+      if (displayLen(stripAnsi(add)) > width && cur) { process.stdout.write(cur + '\n'); cur = sp }
+      else cur = add
+    }
+    if (cur) process.stdout.write(cur + '\n')
+    const slow = allHogs[0]
+    const p = slow.address ? path.resolve(root, slow.address) : null
+    const cmd = `utest ${slow.name} --trace`
+    const shown = p ? link('file://' + p, cmd) : cmd
+    process.stdout.write(`\x1b[90mtip: run  \x1b[4m${shown}\x1b[24m  to investigate the slowest\x1b[39m\n`)
+  }
+
+// ─── DIRETO NO ARQUIVO — sem cabeçalhos nem rodapés ────────────────────────────────
+// Vale quando o escopo é UM arquivo (`_isFile`), ou quando `utest .` largo tem EXATAMENTE
+// um arquivo vermelho (aí a forma longa já traz o detalhe sem custar um `utest <arquivo>`).
+// Não vale sob `--json`/`--trace`/`--hogs` (cada um tem forma própria).
+//   VERDE   → uma linha seca `✔N (Wms)`; W = tempo de execução medido ao vivo (a soma das
+//             durações dos testes desta rodada — o arquivo re-executa por design, feature
+//             4.3), não Σ lastMs do storage nem a parede (que traria o boot do bun).
+//   VERMELHO → a barra do arquivo (`fileLine`: nome ✔N ✘M) e, sob ela, cada erro/exceção
+//             por inteiro (`failLines` → `checkView`: callerLine, received/expected
+//             combinados quando cabem, ≥1 frame de callstack por exceção quando há um mais
+//             fundo que a linha do check). Nada de frame `─────`, `utest results`, `tip:`,
+//             phaseLine nem a linha `coverage`.
+} else if (
+  !asJson && !doTrace &&
+  (_isFile || rendered.flatMap(r => (r.main.tests || []).filter(t => t.state !== 'passed')).length === 1)
+) {
+  if (!anyRed) {
+    const only = rendered[0].main
+    const s = summary(only)
+    const runMs = (only.tests || []).reduce((sum, t) => sum + (t.lastMs || Math.round(t.duration || 0)), 0)
+    process.stdout.write(`${glyphs.passed}${s.passed} \x1b[90m(${runMs}ms)\x1b[39m\n`)
+  } else {
+    for (const { main } of rendered) {
+      for (const t of (main.tests || [])) {
+        if (t.state === 'passed') continue
+        process.stdout.write(fileLine(t, { width }) + '\n')
+        for (const l of failLines(t, { width })) process.stdout.write(l + '\n')
+      }
+    }
+  }
 
 // `-v:3` — a árvore por-teste já streamou durante a fase; aqui só a linha-resumo. Mas se
 // NADA rodou de verdade (tudo cache), não houve stream nenhum: cair na linha-resumo seca
@@ -897,8 +965,10 @@ if (hogs) {
   }
   process.stdout.write(`\x1b[1m${covLine}\x1b[22m\n`)
 
-// HÁ VERMELHO OU HOG → relatório emoldurado: frame, linha-título por fase (saída indentada
-// 2), o `tip:` entre réguas, a linha `coverage`. Lê SEMPRE do mesmo registro — quente == frio.
+// >1 ARQUIVO VERMELHO, ou hog → relatório emoldurado: frame, linha-título por fase (saída
+// indentada 2), o `tip:` entre réguas, a linha `coverage`. Lê SEMPRE do mesmo registro —
+// quente == frio. O caso de UM arquivo vermelho (ou escopo `_isFile`) já saiu na forma
+// direta lá em cima.
 } else {
   process.stdout.write(`${rule}\n\x1b[1mutest results\x1b[22m\n${rule}\n`)
   const msOf = t => t.lastMs || Math.round(t.duration || 0)
@@ -914,7 +984,7 @@ if (hogs) {
     for (const t of main.tests) {
       if (t.state !== 'passed' && (!slowestRed || msOf(t) > slowestRed.ms))
         slowestRed = ref(t)
-      if (t.state === 'passed' && msOf(t) > HOG_MS && (!slowestHog || msOf(t) > slowestHog.ms))
+      if (t.state === 'passed' && msOf(t) > hogMs() && (!slowestHog || msOf(t) > slowestHog.ms))
         slowestHog = ref(t)
     }
   }
@@ -1066,8 +1136,13 @@ if (watch) {
   // Só o positional de ESCOPO (a pasta/termo) é substituível — quando um teste único muda,
   // ELE vira o alvo; se a pasta continuasse na linha, virariam dois positionais e o
   // `fs.existsSync` da pasta ganharia, varrendo tudo.
-  const baseArgs  = args.filter(a => (a.startsWith('-') && a !== '--watch' && a !== '-w') || a === phaseArg)
-  const scopeArgs = args.filter(a => !a.startsWith('-') && a !== phaseArg)
+  // O `<N>` de `--hogs <N>` é um positional consumido pela flag — segue no `baseArgs` (junto
+  // da flag), nunca no `scopeArgs`, ou o watch o trataria como pasta/termo de escopo.
+  const baseArgs  = args.filter((a, i) =>
+    (a.startsWith('-') && a !== '--watch' && a !== '-w') || a === phaseArg ||
+    (a === _hogLimitTok && i === _hogFlagIdx + 1))
+  const scopeArgs = args.filter((a, i) =>
+    !a.startsWith('-') && a !== phaseArg && !(a === _hogLimitTok && i === _hogFlagIdx + 1))
   let debounce = null
   let child = null
   let lastChildExit = 0  // epoch ms when the last child process finished
@@ -1082,7 +1157,12 @@ if (watch) {
     clearTimeout(debounce)
     debounce = null
     if (child) { try { child.kill() } catch { } }
-    process.stdout.write('\x1b[2J\x1b[H') // clear screen
+    // Cada refresh recomeça no topo: reset da scroll-region (`\x1b[r`, desfaz qualquer
+    // margem que um run anterior tenha deixado), cursor pra 0,0 (`\x1b[H`), limpa da linha
+    // atual pra baixo (`\x1b[2J`). NÃO usa `\x1b[3J` — o scrollback fica intacto, o
+    // histórico das rodadas anteriores continua rolável pra cima. Só num TTY: redirecionado
+    // pra arquivo/pipe os escapes virariam lixo.
+    if (process.stdout.isTTY) process.stdout.write('\x1b[r\x1b[H\x1b[2J')
 
     // **Delta, não varredura.** Se TODO arquivo tocado é um teste, roda só esses — o caminho
     // `_isFile` não escaneia. Se algum é FONTE (um `.js` que testes importam), aí sim o run
