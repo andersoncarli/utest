@@ -134,7 +134,7 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟡 **[7.2] vazamento cross-arquivo — exceção async tardia no arquivo errado (in-process)** → [7.2](plans/7-isolation/7.2-vazamento-cross-arquivo-exce-o-async-tardia-atribu-da-ao-arquivo-errado-in-process-.md)
 - 🟠 **[7.3] runner.js modular — runTest/run/loadFile/serialize; caminho do subprocesso e da fase eval externa** → [7.3](plans/7-isolation/7.3-runner-js-modular-runtest-run-loadfile-serialize-caminho-do-subprocesso-e-da-fase-eval-externa.md)
 
-### [8] ledger — memoria permanente — o ledger criptografico sobre iodb · implementando · sprint 20  [🔵🔵⚫]
+### [8] ledger — memoria permanente — o ledger criptografico sobre iodb · implementando · sprint 21  [🔵🔵⚫]
 - 🔵 **[8.1] o ledger append-only encadeado sobre iodb — memoria permanente do utest** → [8.1](plans/8-ledger/8.1-o-ledger-append-only-encadeado-sobre-iodb.md)
 - 🔵 **[8.2] .utest/STATE — histórico de scans + deteção de mudança de config** → [8.2](plans/8-ledger/8.2-test-yaml-vira-proje-o-utest-test-yaml-hist-rico-utest-test-jsonl.md)
 - ⚫ **[8.3] scanner.js le .fswatch/PROJECT em vez de readdirSync a cada run** → [8.3](plans/8-ledger/8.3-consumir-fswatch.md)

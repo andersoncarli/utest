@@ -14,7 +14,7 @@ import { openFswatchSource } from "./fswatchSource.js"
 // `uncovered` também — o `--uncovered` não tinha como reportar nada.
 const SOURCE_RE = /\.(js|ts)$/
 
-function walk(dir, root, filter, out = { tests: [], sources: [] }) {
+export function walk(dir, root, filter, out = { tests: [], sources: [] }) {
   let entries
   try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return out }
   for (const e of entries) {

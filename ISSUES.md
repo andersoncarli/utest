@@ -35,9 +35,36 @@ Formato de linha: `- [sistema] frase curta — <ponteiro opcional>`
   arquivo `.js` apontado explicitamente, sem depender de config — o gate hoje e o escopo
   (`narrowScope || _isFile`, utest.js:354), mas o arquivo cai antes, na selecao de entries
   — [ISSUES/006](ISSUES/006-trace-exige-fase-configurada.md)
-- [utest] `ledger.t.js` e `state.t.js` falham (7 checks, 2 excecoes) — `ENOENT` em
-  `.utest/ledger.dash` e `runId` vindo `object` em vez de `string`; anterior ao sprint 022,
-  confirmado com `git stash` — [ISSUES/005](ISSUES/005-ledger-state-testes-vermelhos.md)
+- [utest] agregado global `grand` (exit code) conta `failed`/`exception` vazados entre
+  arquivos concorrentes — `page-cursor.t.js` + `tabular-table.t.js` juntos derrubam o exit
+  code mesmo com todo `state` `passed`; migrado de `iodb` —
+  [ISSUES/007](ISSUES/007-grand-failcount-cross-file.md)
+- [utest] dois caminhos posicionais na CLI: `positional.find` promove so o primeiro
+  existente a target, e `positional.filter` descarta o resto por existir — o segundo
+  caminho nao roda, nao filtra e nao avisa; o relatorio sai verde sobre metade do pedido.
+  Migrado de `iodb` — [ISSUES/008](ISSUES/008-dois-caminhos-posicionais-segundo-ignorado.md)
+- [sprint] `sprint test`/`utest` deveriam ser intercambiaveis, nao dois verbos separados que
+  o usuario precisa lembrar quando usar cada um. Achado no `iodb`: `sprint test <N.F>` roda
+  os comandos de `verify_tests:` (hoje so `utest .`) e DERIVA o degrau 🟡 da feature —
+  bookkeeping que o `utest` sozinho nao faz. Mas rodar `utest .` direto e mais rapido pra
+  iterar e nao exige saber qual `N.F` esta em questao. Ideia a explorar: `utest --json` (ja
+  existe) alimentar o `sprint` pra promover o degrau sem RE-rodar a suite via `sprint test`;
+  ou `sprint test` virar um alias fino que so adiciona bookkeeping por cima de um `utest .`
+  que acabou de rodar. Ganho de ergonomia, nao correcao de bug — mesmo item registrado em
+  `~/sprint-cli/ISSUES.md`.
+- [utest] `utest <N.F>` (ex.: `utest 5.3`) deveria resolver a feature pelo numero — ler o
+  `verify_tests:` do frontmatter em `plans/**/<N.F>-*.md` (mesmo arquivo que o `sprint` ja
+  le) e rodar so aquilo — em vez de cair no filtro posicional generico, que nao casa nada e
+  a suite inteira roda ignorando o argumento (confirmado no `iodb`: `utest 5.3` == `utest .`
+  em efeito, sem aviso de que "5.3" nao filtrou nada). Isso tornaria `N.F` um filtro NORMAL
+  da CLI — natural pra quem ja usa `utest <path>` — e junto com o item anterior
+  (`sprint test`/`utest` intercambiaveis) faria `utest 5.3` bastar sozinho, sem precisar do
+  `sprint` no meio pra saber quais comandos rodar. Convencao a decidir: `N.F` (frontmatter)
+  vs. caminho de arquivo — hoje ambos sao strings positionais indistinguiveis; talvez baste
+  tentar resolver como feature primeiro, cair pro filtro de path se nao achar `N.F` valido.
+  Vale tanto para `utest` (a CLI em si) quanto para o `sprint`, que e quem define o formato
+  do frontmatter que a resolucao teria que ler — proposto originalmente pelo usuario do
+  `iodb`.
 
 ## DOING
 
@@ -49,6 +76,12 @@ _(vazio)_
 
 ## DONE
 
+- [utest] `ledger.t.js` e `state.t.js` falhavam (7 checks, 2 excecoes) — **resolvido**
+  (sprint 021): o import pedia `../iodb/io-engine.js` e o modulo mora em
+  `../iodb/src/io-engine.js`; o `catch` do degrade engolia o `ERR_MODULE_NOT_FOUND` em
+  silencio. Caminho corrigido, degrade agora fala sob `UTEST_DEBUG`, e o falso-verde do
+  `verify()` fechado com `length > 0` — suite verde, 630 checks —
+  [ISSUES/005](ISSUES/005-ledger-state-testes-vermelhos.md)
 - [fswatch] `reconcile()` gravava entry a entry com `flush` default `true`, flushando o store
   inteiro a cada arquivo — **resolvido** (`{ flush: false }` + um `store.flush()` no fim):
   300 arquivos de 4901ms para 241ms, 20x —

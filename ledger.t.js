@@ -30,6 +30,11 @@ test('openLedger: a cadeia sobre iodb', ({ test }) => {
 
     const v = ledger.verify()
     check(v.valid, true)
+    // `valid` sozinho nao distingue "cadeia verificada" de "cadeia inexistente": o no-op
+    // devolve `{ valid: true, length: 0 }` hardcoded, e foi exatamente isso que deixou
+    // este teste passar por engano enquanto o import do iodb estava quebrado. O
+    // comprimento e o que prova que houve cadeia.
+    check(v.length > 0, true, `a cadeia tem registros: length=${v.length}`)
 
     const dashPath = join(root, '.utest', 'ledger.dash')
     check(existsSync(dashPath), true)
@@ -96,6 +101,7 @@ test('openLedger: a cadeia sobre iodb', ({ test }) => {
 
     const v = ledger.verify()
     check(v.valid, true)
+    check(v.length > 0, true, `a cadeia tem registros: length=${v.length}`)
     cleanup()
   })
 
@@ -106,7 +112,11 @@ test('openLedger: a cadeia sobre iodb', ({ test }) => {
     ledger.start([])
     ledger.test('x', {})
     ledger.end({})
+    // O outro lado da mesma moeda: o no-op tambem diz `valid: true`, mas com `length: 0`.
+    // Afirmar os dois aqui e no teste da cadeia real e o que torna os dois estados
+    // DISTINGUIVEIS — sem isso, `valid` sozinho nunca reprova nada.
     check(ledger.verify().valid, true)
+    check(ledger.verify().length, 0, 'no-op: cadeia vazia, nao uma cadeia verificada')
     cleanup()
   })
 })

@@ -28,8 +28,11 @@ export async function openState(root, options = {}) {
 
   let IO, assign
   try {
-    ;({ default: IO, assign } = await import('../iodb/io-engine.js'))
-  } catch {
+    ;({ default: IO, assign } = await import('../iodb/src/io-engine.js'))
+  } catch (e) {
+    // Mesmo degrade silencioso que escondeu o caminho errado no `ledger.js` — ver o
+    // comentario la. Sob `UTEST_DEBUG`, o motivo real sai no stderr.
+    if (process.env.UTEST_DEBUG) process.stderr.write(`[utest] state degradado: ${e.message}\n`)
     return noop()
   }
 

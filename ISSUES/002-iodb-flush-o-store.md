@@ -2,6 +2,9 @@
 
 **Sistema**: `iodb` (engine) · **Achado em**: 2026-09-11, sprint 022 do `utest`
 **Severidade**: alta — e o teto que sobra depois de [001](001-fswatch-reconcile-sem-buffer.md)
+**Status**: parcialmente resolvido — `flushPages()` corrigida em `iodb` feature 1.6 (sprint
+033), ver `iodb/ISSUES/007-flush-incremental-poc.md`. O `open()` custando 1.8s ao reabrir um
+baseline existente (replay do log) segue aberto — nao fazia parte do escopo da 1.6.
 
 ## O sintoma
 

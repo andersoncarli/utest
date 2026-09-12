@@ -1,6 +1,25 @@
 # 005 — `ledger.t.js` e `state.t.js` vermelhos: `.dash` nao nasce
 
 **Sistema**: `utest` (via `iodb`) · **Achado em**: 2026-09-11 · **Severidade**: media
+**Status**: RESOLVIDO no sprint 021 (feature 8.1), 2026-09-12.
+
+## A causa — um caminho de import errado
+
+`ledger.js:33` e `state.js:31` pediam `'../iodb/io-engine.js'`; o modulo mora em
+`'../iodb/src/io-engine.js'`. O `try/catch` do degrade engoliu o `ERR_MODULE_NOT_FOUND` em
+silencio, e o `noop()` resultante devolvia `runId: null` / `configChanged: false` — dai o
+`received: object` e os `ENOENT`. **Os testes sempre estiveram certos; a fonte e que estava
+errada.** O caminho nasceu errado no commit original da 8.1 (`b9b0b66`), nao no sprint 022.
+
+Alem do caminho, o sprint 021 fechou as duas portas que deixaram isso invisivel:
+
+- o `catch` agora imprime o `err.message` sob `UTEST_DEBUG` — segue degradando, nao segue
+  mudo;
+- `noop().verify()` devolve `{ valid: true, length: 0 }` hardcoded, entao
+  `check(v.valid, true)` passava sem cadeia nenhuma. Os testes de cadeia real afirmam
+  `v.length > 0` e o do no-op afirma `length === 0`: os estados ficaram distinguiveis.
+
+Resultado: `utest .` verde, 630 checks, `.utest/ledger.dash` nasce.
 
 ## O sintoma
 

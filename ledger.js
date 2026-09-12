@@ -30,8 +30,14 @@ export async function openLedger(root, options = {}) {
 
   let IO, append
   try {
-    ;({ default: IO, append } = await import('../iodb/io-engine.js'))
-  } catch {
+    ;({ default: IO, append } = await import('../iodb/src/io-engine.js'))
+  } catch (e) {
+    // O degrade continua sendo o contrato. O SILENCIO nao: este `catch` engoliu um
+    // `ERR_MODULE_NOT_FOUND` (o caminho apontava para `../iodb/io-engine.js`, sem o
+    // `src/`) por nove commits, e o no-op resultante fazia `ledger.t.js`/`state.t.js`
+    // falharem por um motivo que nao aparecia em lugar nenhum. Sob `UTEST_DEBUG` o
+    // motivo real sai no stderr, sem que o runner deixe de degradar.
+    if (process.env.UTEST_DEBUG) process.stderr.write(`[utest] ledger degradado: ${e.message}\n`)
     return noop()
   }
 
