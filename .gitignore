@@ -2,3 +2,6 @@ node_modules/
 bun.lock
 .utest/
 .sprint/
+.fswatch/
+STATUS.md
+sprints/_TOC.md

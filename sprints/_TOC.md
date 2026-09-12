@@ -75,7 +75,13 @@ Legenda: ⚫ planejada · 🟠 implementando · 🟡 testada · 🟢 avaliada ·
 
 <details><summary>🟡 [2.7] cache sobre o ledger — o ledger arbitra o frescor por sha256, results.json em paralelo — testada</summary>
 
-[016](sprints/016-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.report.md "cache sobre o ledger — o ledger arbitra o frescor, results.json em paralelo · `cacheLedger.js` — o segundo árbitro do cache, ancorado no **conteúdo** (`sha256`) em vez do inode (`mtime`), derivado da ")
+[016](sprints/016-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.report.md "cache sobre o ledger — o ledger arbitra o frescor, results.json em paralelo · `cacheLedger.js` — o segundo árbitro do cache, ancorado no **conteúdo** (`sha256`) em vez do inode (`mtime`), derivado da ") [018](sprints/018-cacheledger-project-desembrulha-o-registro-iodb-o-ledger-enabled-matava-todo-cache-hit.report.md "cacheLedger project desembrulha o registro iodb - o ledger enabled matava todo cache-hit · `cacheLedger.js#project` lia `entry.event` supondo eventos planos, mas o `iodb` os embrulha na chave-hash (`{")
+
+</details>
+
+<details><summary>🔵 [2.8] scanner-sync — cache miss por divergência de mtime resolve rodando, não repete a cada execução — confirmada</summary>
+
+_(sem sprints ainda)_
 
 </details>
 
@@ -119,7 +125,7 @@ Legenda: ⚫ planejada · 🟠 implementando · 🟡 testada · 🟢 avaliada ·
 
 <details><summary>🟡 [4.1] relatório compacto — phaseLine (Σs 🐢N), compactFails, verbosidade 0-3 — testada</summary>
 
-[001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [002](sprints/002-desacople-do-bot-e-a-evidencia-do-vazamento.report.md "report · Sprint retroativo. Desacople de bot/lib para utils/src, primeiros self-tests, e a evidência documentada do vazamento assíncrono cross-arquivo.") [006](sprints/006-report-compacto-probe-grafo-results-json.report.md "report · Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe grafo (tree/callers/edges), results.json (índice + quente==frio), verbosidade derivada do escopo.") [008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa") [015](sprints/015-validar-saidas-de-utest-v0-v3-json-console-capturado-hogs-so-com-flag-ou-erro-v1-single-line-checkview-esperado-recebido.report.md "validar saidas de utest: v0-v3, --json, console capturado, hogs so com flag ou erro, v1 single-line, checkView esperado/recebido · As quatro verbosidades de `utest` viram teste: v0-v3, `--json` e cons")
+[001](sprints/001-runner-in-process-nasce.report.md "report · Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, contrato zero-import.") [002](sprints/002-desacople-do-bot-e-a-evidencia-do-vazamento.report.md "report · Sprint retroativo. Desacople de bot/lib para utils/src, primeiros self-tests, e a evidência documentada do vazamento assíncrono cross-arquivo.") [006](sprints/006-report-compacto-probe-grafo-results-json.report.md "report · Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe grafo (tree/callers/edges), results.json (índice + quente==frio), verbosidade derivada do escopo.") [008](sprints/008-verbosidade-por-arquivo-e-a-regua-em-colunas.report.md "verbosidade-por-arquivo-e-a-regua-em-colunas · Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão por ARQUIVO (a barra de título que só o `-v:3` alcançava), a cobertura passa") [015](sprints/015-validar-saidas-de-utest-v0-v3-json-console-capturado-hogs-so-com-flag-ou-erro-v1-single-line-checkview-esperado-recebido.report.md "validar saidas de utest: v0-v3, --json, console capturado, hogs so com flag ou erro, v1 single-line, checkView esperado/recebido · As quatro verbosidades de `utest` viram teste: v0-v3, `--json` e cons") [019](sprints/019-interface-issues-utest-arquivo-verde-imprime-so-n-wms-erro-cai-no-checkview-com-callerline-expected-received.report.md "interface-issues: utest <arquivo> verde imprime so ✔N (Wms); erro cai no checkView com callerLine/expected/received · `utest <arquivo>` verde imprimia a entryLine do arquivo E a phaseLine da fase — re")
 
 </details>
 
@@ -150,6 +156,12 @@ _(sem sprints ainda)_
 <details><summary>🔵 [4.6] v2 continuo: rio de passados, bloco cheio so nos falhos — confirmada</summary>
 
 [009](sprints/009-v2-continuo-rio-de-passados-bloco-cheio-so-nos-falhos.report.md "v2 continuo: rio de passados, bloco cheio so nos falhos · `-v:2` (`fullView`, `viewer.js`) trocou uma linha (dotfill + tempo) por ARQUIVO verde por um rio continuo — nome + contagem, dois espacos, sof")
+
+</details>
+
+<details><summary>🔵 [4.7] scan distingue teste de fonte sem config — .eval.js/.tui/.int.js fora do denominador de coverage — confirmada</summary>
+
+[020](sprints/020-fswatch.report.md "consumir-fswatch · Intro: a arvore do projeto pode vir do baseline do sibling `iodb/fswatch`, com identidade por `(dev, ino)`, e o `readdirSync` atual fica como fallback atras da mesma interface; no c")
 
 </details>
 
@@ -239,7 +251,7 @@ _(sem sprints ainda)_
 
 </details>
 
-<details><summary>🔵 <b>[8] ledger</b> — memoria permanente — o ledger criptografico sobre iodb · confirmada</summary>
+<details><summary>🟠 <b>[8] ledger</b> — memoria permanente — o ledger criptografico sobre iodb</summary>
 
 <details><summary>🔵 [8.1] o ledger append-only encadeado sobre iodb — memoria permanente do utest — confirmada</summary>
 
@@ -250,6 +262,12 @@ _(sem sprints ainda)_
 <details><summary>🔵 [8.2] .utest/STATE — histórico de scans + deteção de mudança de config — confirmada</summary>
 
 [014](sprints/014-test-yaml-vira-proje-o-utest-test-yaml-hist-rico-utest-test-jsonl.report.md "TEST.yaml vira projeção .utest/TEST.yaml + histórico .utest/TEST.jsonl · `state.js` — `.utest/STATE`: histórico append-only de rodadas de scan sobre o `iodb`, com deteção de mudança de `TEST.yaml` (`c")
+
+</details>
+
+<details><summary>⚫ [8.3] scanner.js le .fswatch/PROJECT em vez de readdirSync a cada run — planejada</summary>
+
+[020](sprints/020-fswatch.report.md "consumir-fswatch · Intro: a arvore do projeto pode vir do baseline do sibling `iodb/fswatch`, com identidade por `(dev, ino)`, e o `readdirSync` atual fica como fallback atras da mesma interface; no c")
 
 </details>
 

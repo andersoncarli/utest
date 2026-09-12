@@ -2,7 +2,7 @@
 front: 8
 keyword: ledger
 title: memoria permanente — o ledger criptografico sobre iodb
-state: confirmed
+state: active
 updated: 2026-09-06
 ---
 # [8] ledger — memoria permanente, o log encadeado sobre iodb

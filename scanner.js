@@ -4,6 +4,7 @@ import { parse } from "bun:yaml"
 import { Minimatch } from "minimatch"
 import { TestCache } from "./cache.js"
 import { testRe, stripKind } from "./kinds.js"
+import { openFswatchSource } from "./fswatchSource.js"
 
 
 // ─── File Walking ──────────────────────────────────────────────
@@ -123,20 +124,35 @@ export function excludeFilter(configPath, phase = 'unit') {
 }
 
 // ─── Pipeline ─────────────────────────────────────────────────
+// Kinds que NUNCA sao alvo de cobertura. `testRe()` le o registry mutavel de
+// `kinds.js`, que `resetRegistry()` devolve ao vocabulario inicial entre fases — logo,
+// rodando a fase `unit`, `.eval.js` nao esta registrado e escapa do filtro de kind.
+// Escapando, ele cai em `sourceFiles` e entra no DENOMINADOR da cobertura: um arquivo
+// que e roteiro de avaliacao passa a cobrar um teste que nunca vai existir. Esta lista
+// e independente da fase justamente porque o registry nao e.
+const NON_TARGET_RE = /\.(eval|int|tui|probe|bench)\.(js|ts)$|\.tui$/
+
 // `opts.ledger` (opcional): o arbitro por sha256 (`cacheLedger.js`), repassado ao
 // `TestCache`. Sem ele, o cache arbitra pelo `results.json` como sempre.
-export function scan(root, configPath, phase = 'unit', { ledger = null } = {}) {
+// `opts.fswatch`: liga o caminho que le o baseline do sibling `iodb/fswatch` em vez de
+// varrer com `readdirSync`. Desligado por padrao; indisponivel, cai no `walk()`.
+export async function scan(root, configPath, phase = 'unit', { ledger = null, fswatch = false } = {}) {
   const cfg           = parse(readFileSync(configPath, 'utf8')) || {}
   const globalExclude = cfg.exclude || []
   const pcfg          = cfg[phase] || {}
   const include       = pcfg.include || ['**/*.t.js', '**/*.test.js']
   const exclude       = [...globalExclude, ...(pcfg.exclude || [])]
   const filter        = makeFilter(include, exclude)
-  const walked      = walk(root, root, filter)
+
+  // A fonte da arvore e trocavel, a classificacao nao: os dois caminhos passam pelo
+  // MESMO `filter`/`testRe()`, que e o que garante listas identicas. `null` do fswatch
+  // (sibling ausente, baseline ilegivel) devolve a corrida ao `walk()` sem barulho.
+  const source      = await openFswatchSource(root, { enabled: fswatch })
+  const walked      = (source && await source.walk(filter, exclude)) || walk(root, root, filter)
 
   const isTest      = f => testRe().test(basename(f))
   const testFiles   = walked.tests.filter(isTest)
-  const sourceFiles = walked.sources.filter(f => !isTest(f))
+  const sourceFiles = walked.sources.filter(f => !isTest(f) && !NON_TARGET_RE.test(basename(f)))
 
   const cache = TestCache(root, { ledger })
   const entries = testFiles.map(path => {
@@ -155,7 +171,7 @@ if (import.meta.main) {
   const configPath = process.argv[3] || 'TEST.yaml'
   const phase      = process.argv[4] || 'unit'
 
-  const { entries, uncovered } = scan(root, configPath, phase)
+  const { entries, uncovered } = await scan(root, configPath, phase)
   for (const e of entries) {
     const rel = relative(root, e.path)
     console.log(JSON.stringify({ [rel]: { target: e.target ? relative(root, e.target) : null, cache: e.cache } }))

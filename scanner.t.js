@@ -20,9 +20,9 @@ const fixture = (files = {}) => {
 const cleanup = () => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) }
 
 const YAML = 'exclude:\n  - node_modules/**\nunit:\n  include:\n    - "**/*.t.js"\n    - "**/*.test.js"\n'
-const run = (dir, yaml = YAML, phase = 'unit') => {
+const run = async (dir, yaml = YAML, phase = 'unit') => {
   writeFileSync(join(dir, 'TEST.yaml'), yaml)
-  const r = scan(dir, join(dir, 'TEST.yaml'), phase)
+  const r = await scan(dir, join(dir, 'TEST.yaml'), phase)
   return {
     ...r,
     names: r.entries.map(e => relative(dir, e.path)).sort(),
@@ -99,15 +99,15 @@ test('findTarget: o alvo que um teste mede', ({ test }) => {
 
 test('scan: o que entra na suíte', ({ test }) => {
 
-  test('acha teste em qualquer profundidade', ({ check }) => {
+  test('acha teste em qualquer profundidade', async ({ check }) => {
     const d = fixture({ 'a.t.js': '', 'sub/b.t.js': '', 'sub/mais/c.t.js': '' })
-    check(run(d).names, ['a.t.js', 'sub/b.t.js', 'sub/mais/c.t.js'])
+    check((await run(d)).names, ['a.t.js', 'sub/b.t.js', 'sub/mais/c.t.js'])
     cleanup()
   })
 
-  test('fonte não é teste, e vira cobertura pendente', ({ check }) => {
+  test('fonte não é teste, e vira cobertura pendente', async ({ check }) => {
     const d = fixture({ 'm.js': '', 'm.t.js': '', 'sozinho.js': '' })
-    const r = run(d)
+    const r = await run(d)
     check(r.names, ['m.t.js'])
     // `m.js` tem teste; `sozinho.js` não — e é isso que `--uncovered` mostra.
     check(r.uncoveredNames.includes('sozinho.js'), true)
@@ -115,55 +115,55 @@ test('scan: o que entra na suíte', ({ test }) => {
     cleanup()
   })
 
-  test('um include largo não faz a fonte sumir da cobertura', ({ check }) => {
+  test('um include largo não faz a fonte sumir da cobertura', async ({ check }) => {
     // `include: '**/*.js'` (a fase `unit` deste repo) casa a FONTE junto do teste. Quem
     // decide o que é teste é o kind, não o include — mandar a fonte para `tests` a fazia
     // ser filtrada por `isTest` depois e sumir das duas listas: cobertura sempre 100%.
     const d = fixture({ 'm.js': '', 'm.t.js': '', 'sozinho.js': '' })
-    const r = run(d, 'exclude:\n  - node_modules/**\nunit:\n  include:\n    - "**/*.js"\n')
+    const r = await run(d, 'exclude:\n  - node_modules/**\nunit:\n  include:\n    - "**/*.js"\n')
     check(r.names, ['m.t.js'])
     check(r.uncoveredNames, ['sozinho.js'])
     cleanup()
   })
 
-  test('o exclude global tira do caminho', ({ check }) => {
+  test('o exclude global tira do caminho', async ({ check }) => {
     const d = fixture({ 'a.t.js': '', 'node_modules/lib/b.t.js': '' })
-    check(run(d).names, ['a.t.js'])
+    check((await run(d)).names, ['a.t.js'])
     cleanup()
   })
 
-  test('o exclude da FASE soma ao global', ({ check }) => {
+  test('o exclude da FASE soma ao global', async ({ check }) => {
     const d = fixture({ 'a.t.js': '', 'lento.live.t.js': '' })
     const yaml = YAML + '  exclude:\n    - "**/*.live.t.js"\n'
-    check(run(d, yaml).names, ['a.t.js'])
+    check((await run(d, yaml)).names, ['a.t.js'])
     cleanup()
   })
 
-  test('cada fase enxerga o seu conjunto', ({ check }) => {
+  test('cada fase enxerga o seu conjunto', async ({ check }) => {
     const d = fixture({ 'a.t.js': '', 'b.int.t.js': '' })
     const yaml = 'exclude: []\nunit:\n  include:\n    - "**/*.t.js"\n  exclude:\n    - "**/*.int.t.js"\nintegration:\n  include:\n    - "**/*.int.t.js"\n'
-    check(run(d, yaml, 'unit').names, ['a.t.js'])
-    check(run(d, yaml, 'integration').names, ['b.int.t.js'])
+    check((await run(d, yaml, 'unit')).names, ['a.t.js'])
+    check((await run(d, yaml, 'integration')).names, ['b.int.t.js'])
     cleanup()
   })
 
-  test('o par é resolvido na entrada', ({ check }) => {
+  test('o par é resolvido na entrada', async ({ check }) => {
     const d = fixture({ 'm.js': '', 'm.t.js': '', 'orfao.t.js': '' })
-    check(run(d).pairs, { 'm.t.js': 'm.js', 'orfao.t.js': null })
+    check((await run(d)).pairs, { 'm.t.js': 'm.js', 'orfao.t.js': null })
     cleanup()
   })
 
-  test('toda entrada nasce com o veredito do cache', ({ check }) => {
+  test('toda entrada nasce com o veredito do cache', async ({ check }) => {
     // Nada carimbado ainda: `cache` é null e o arquivo roda. Um `undefined`
     // aqui seria pior que null — passaria por "cacheado" num `if (entry.cache)`.
     const d = fixture({ 'm.js': '', 'm.t.js': '' })
-    check(run(d).entries[0].cache, null)
+    check((await run(d)).entries[0].cache, null)
     cleanup()
   })
 
-  test('devolve o cache da raiz para quem for gravar', ({ check }) => {
+  test('devolve o cache da raiz para quem for gravar', async ({ check }) => {
     const d = fixture({ 'm.js': '', 'm.t.js': '' })
-    const { cache } = run(d)
+    const { cache } = await run(d)
     // É por aqui que os runners gravam sem nunca importar `cache.js`.
     check(typeof cache?.write, 'function')
     check(typeof cache?.read, 'function')
@@ -171,17 +171,17 @@ test('scan: o que entra na suíte', ({ test }) => {
     cleanup()
   })
 
-  test('uma raiz sem teste nenhum devolve vazio, não quebra', ({ check }) => {
+  test('uma raiz sem teste nenhum devolve vazio, não quebra', async ({ check }) => {
     const d = fixture({ 'leiame.md': '' })
-    const r = run(d)
+    const r = await run(d)
     check(r.entries, [])
     check(r.names, [])
     cleanup()
   })
 
-  test('sem a chave da fase, cai no include padrão', ({ check }) => {
+  test('sem a chave da fase, cai no include padrão', async ({ check }) => {
     const d = fixture({ 'a.t.js': '' })
-    check(run(d, 'exclude: []\n').names, ['a.t.js'])
+    check((await run(d, 'exclude: []\n')).names, ['a.t.js'])
     cleanup()
   })
 })

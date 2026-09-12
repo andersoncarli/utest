@@ -499,7 +499,7 @@ async function runPhase(phase) {
         entries = [{ path: absFile, target, cache: cache.read(absFile, target, { phase }) }]
       }
     } else {
-      ; ({ entries, uncovered, cache } = scan(root, configPath, phase, { ledger: cacheLedger }))
+      ; ({ entries, uncovered, cache } = await scan(root, configPath, phase, { ledger: cacheLedger }))
     }
   } catch (e) {
     if (e.code !== 'ENOENT') { console.error('[utest] scan error:', e.message); realProcessExit(1) }

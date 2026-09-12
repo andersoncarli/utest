@@ -89,7 +89,7 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟡 **[1.3] sealed — check tardio reabre o veredito de quem o soltou** → [1.3](plans/1-core/1.3-sealed-check-tardio-reabre-o-veredito-de-quem-o-soltou.md)
 - 🟠 **[1.4] console-capture — console.* não vaza de teste verde** → [1.4](plans/1-core/1.4-console-capture-console-n-o-vaza-de-teste-verde.md)
 
-### [2] cache — Cache — a regra sem furo · implementando · sprint 16  [🟡🟡🟡🟡🟡🔵🟡]
+### [2] cache — Cache — a regra sem furo · implementando · sprint 18  [🟡🟡🟡🟡🟡🔵🟡🔵]
 - 🟡 **[2.1] regra do mtime — segundo cravado + ms = contagem de checks; conjunto pareado** → [2.1](plans/2-cache/2.1-regra-do-mtime-segundo-cravado-ms-contagem-de-checks-conjunto-pareado.md)
 - 🟡 **[2.2] grafo de deps — IMPORT_RE (inclui efeito colateral), extraRoots, ciclo, atime** → [2.2](plans/2-cache/2.2-grafo-de-deps-import-re-inclui-efeito-colateral-extraroots-ciclo-atime.md)
 - 🟡 **[2.3] cacheFailure — vermelho reproduzível de eval não re-roda (sidecar)** → [2.3](plans/2-cache/2.3-cachefailure-vermelho-reproduz-vel-de-eval-n-o-re-roda-sidecar-.md)
@@ -97,7 +97,8 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟡 **[2.5] output idêntico quente/frio — render lê sempre do storage** → [2.5](plans/2-cache/2.5-output-id-ntico-quente-frio-render-l-sempre-do-storage.md)
 - 🔵 **[2.6] results.json arbitra o cache — segunda checagem sobre o mtime cravado** → [2.6](plans/2-cache/2.6-results-json-arbitra-o-cache-segunda-checagem-sobre-o-mtime-cravado.md)
 - 🟡 **[2.7] cache sobre o ledger — o ledger arbitra o frescor por sha256, results.json em paralelo** → [2.7](plans/2-cache/2.7-cache-sobre-o-ledger-o-ledger-arbitra-o-frescor-results-json-em-paralelo.md)
-  - próxima: Feature entregue no sprint 016 e 🟡 testada. A proxima acao e o `sprint eval 2.7` passo a
+  - próxima: Regressão do 018 fechada e 🟡 testada. A proxima acao e o `sprint eval 2.7` passo a passo com
+- 🔵 **[2.8] scanner-sync — cache miss por divergência de mtime resolve rodando, não repete a cada execução** → [2.8](plans/2-cache/2.8-scanner-sync-cache-miss-por-diverg-ncia-de-mtime-resolve-rodando-n-o-repete-a-cada-execu-o.md)
 
 ### [3] scan — Scan — descoberta, pareamento, vocabulário · implementando · sprint 17  [🔵🔵🟡🔵🟠]
 - 🔵 **[3.1] walk por glob + TEST.yaml (exclude global/fase, include padrão)** → [3.1](plans/3-scan/3.1-walk-por-glob-test-yaml-exclude-global-fase-include-padr-o-.md)
@@ -106,13 +107,14 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🔵 **[3.4] ganchos de extensão — registerExecutor / registerEntries / registerPhaseSetup** → [3.4](plans/3-scan/3.4-ganchos-de-extens-o-registerexecutor-registerentries-registerphasesetup-eval-js-tuit-chromium-1x-.md)
 - 🟠 **[3.5] cobertura — todo arquivo do utest mapeado em TEST.yaml, sem leaks** → [3.5](plans/3-scan/3.5-cobertura-sources-sem-t-js-pareado-uncovered-.md)
 
-### [4] report — Report — compacto por desenho, expressivo quando precisa · implementando · sprint 15  [🟡🟡🟠🟠🟠🔵]
+### [4] report — Report — compacto por desenho, expressivo quando precisa · implementando · sprint 20  [🟡🟡🟠🟠🟠🔵🔵]
 - 🟡 **[4.1] relatório compacto — phaseLine (Σs 🐢N), compactFails, verbosidade 0-3** → [4.1](plans/4-report/4.1-relat-rio-compacto-phaseline-s-n-compactfails-verbosidade-0-3-derivada-do-escopo.md)
 - 🟡 **[4.2] hogs — badge 🐢N = segundos sempre; deltaTag só em hog que re-rodou** → [4.2](plans/4-report/4.2-hogs-badge-n-segundos-sempre-deltatag-s-em-hog-que-re-rodou-hogs-modo-parte.md)
 - 🟠 **[4.3] drill-in — escopo estreito re-executa e sobe de nível; storage é o índice** → [4.3](plans/4-report/4.3-drill-in-escopo-estreito-re-executa-e-sobe-de-n-vel-storage-o-ndice-utest-3-2-sem-scan-.md)
 - 🟠 **[4.4] progressBar + --watch (delta, não varredura) + OSC-8 hyperlink no tip** → [4.4](plans/4-report/4.4-progressbar-watch-delta-n-o-varredura-osc-8-hyperlink-no-tip.md)
 - 🟠 **[4.5] --json — uma linha por arquivo p/ máquina (sprint eval --sweep)** → [4.5](plans/4-report/4.5--json-uma-linha-por-arquivo-p-m-quina-sprint-eval-sweep-.md)
 - 🔵 **[4.6] v2 continuo: rio de passados, bloco cheio so nos falhos** → [4.6](plans/4-report/4.6-v2-continuo-rio-de-passados-bloco-cheio-so-nos-falhos.md)
+- 🔵 **[4.7] scan distingue teste de fonte sem config — .eval.js/.tui/.int.js fora do denominador de coverage** → [4.7](plans/4-report/4.7-scan-distingue-teste-de-fonte-sem-config-eval-js-tui-int-js-fora-do-denominador-de-coverage.md)
 
 ### [5] profiling — Profiling — que função custou, que região custou · implementando · sprint 10  [🟡🟡🟡🟡🟠]
 - 🟡 **[5.1] probe — instrumenta chamadas p/ hogs: 2 vistas (flat report / grafo tree)** → [5.1](plans/5-profiling/5.1-probe-instrumenta-chamadas-p-hogs-2-vistas-flat-report-grafo-tree-callers-edges-self-time.md)
@@ -132,5 +134,11 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟡 **[7.2] vazamento cross-arquivo — exceção async tardia no arquivo errado (in-process)** → [7.2](plans/7-isolation/7.2-vazamento-cross-arquivo-exce-o-async-tardia-atribu-da-ao-arquivo-errado-in-process-.md)
 - 🟠 **[7.3] runner.js modular — runTest/run/loadFile/serialize; caminho do subprocesso e da fase eval externa** → [7.3](plans/7-isolation/7.3-runner-js-modular-runtest-run-loadfile-serialize-caminho-do-subprocesso-e-da-fase-eval-externa.md)
 
-🟠 12 implementando · 🟡 17 testada · 🔵 5 confirmada
+### [8] ledger — memoria permanente — o ledger criptografico sobre iodb · implementando · sprint 20  [🔵🔵⚫]
+- 🔵 **[8.1] o ledger append-only encadeado sobre iodb — memoria permanente do utest** → [8.1](plans/8-ledger/8.1-o-ledger-append-only-encadeado-sobre-iodb.md)
+- 🔵 **[8.2] .utest/STATE — histórico de scans + deteção de mudança de config** → [8.2](plans/8-ledger/8.2-test-yaml-vira-proje-o-utest-test-yaml-hist-rico-utest-test-jsonl.md)
+- ⚫ **[8.3] scanner.js le .fswatch/PROJECT em vez de readdirSync a cada run** → [8.3](plans/8-ledger/8.3-consumir-fswatch.md)
+  - próxima: Implementar `fswatchSource.js` e o teste de equivalencia; depois `sprint eval 8.3`.
+
+⚫ 1 planejada · 🟠 12 implementando · 🟡 17 testada · 🔵 9 confirmada
 <!-- board:end -->
