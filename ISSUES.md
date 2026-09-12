@@ -15,6 +15,16 @@ Formato de linha: `- [sistema] frase curta — <ponteiro opcional>`
 
 ## TODO
 
+- [sprint-cli] `021-*.report.md` sem frontmatter — o sprint fica invisivel ao vinculo
+  feature↔sprint; o `close` deveria recusar sprint sem `features` —
+  [ISSUES/009](ISSUES/009-report-021-sem-frontmatter.md)
+- [utest] `HANDOFF.md` avulso na raiz (2026-04-24), sem sprint nem data no nome — mover
+  para `handoffs/` conforme a convencao —
+  [ISSUES/010](ISSUES/010-handoff-md-avulso-sem-dono.md)
+- [utest] `requests()` e `open()` divergem em nos profundos da arvore de sprints — duas
+  vias para o mesmo conteudo, uma delas errada —
+  [ISSUES/011](ISSUES/011-arvore-requests-open-divergem.md)
+
 - [iodb] `flush()`/`close()` reescrevem a projecao inteira: com a escrita ja buferizada,
   `in()` x300 custa 4ms e `flush()`+`close()` custam 1150ms — o custo e O(store), nao
   O(dirty), e e o que ainda impede o `fswatch` de ser a fonte de arvore padrao de um runner
