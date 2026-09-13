@@ -45,7 +45,9 @@ definir seus testes**. `test()` é global; `check`, `is`, `log` chegam como argu
 - **3 scan** — `scanner.js` (o walk, o pareamento teste↔alvo).
 - **4 report** — `viewer.js` (a primeira forma do relatório).
 
-## Requisitos verificáveis (o que ficou de pé ao fim da janela)
+## Criterio de pronto
+
+### Requisitos verificáveis (o que ficou de pé ao fim da janela)
 
 - `bun utest.js .` roda a suíte e sai 0/1 conforme falha.
 - `test()` empilha na árvore sem precisar de import.

@@ -85,26 +85,9 @@ Milestone das features **8.1**, **8.2** e **8.3**. O `utest` passa a se apoiar n
 `iodb/fswatch` para o log (8.1), o estado de scan (8.2) e a arvore (8.3) — com o
 `readdirSync` e o `results.json` vivos como fallback e baseline de comparacao.
 
-## Prova
+## O que aconteceu
 
-`bun utest.js .` — **verde, 630 checks** (era `✘7 💥2` com 616). `.utest/ledger.dash` nasce:
-128KB, junto de `ledger.index` e `ledger.yaml`. Quente == frio: duas rodadas, 630 nas duas.
-
-**Os checks novos reprovam contra um no-op** — por sabotagem, nao por suposicao: apontando o
-import para um caminho inexistente, `ledger.t.js` volta a `💥1 ✘4`, e entre os vermelhos estao
-os dois `check(v.length > 0, ...)` recem-adicionados. Um check que nao sabe falhar nao e um
-check.
-
-## O que fica aberto
-
-- O `open()` O(store) do iodb — [ISSUES/002](../ISSUES/002-iodb-flush-o-store.md), ja aberto,
-  e do repo do `iodb`.
-- A assimetria relativo/absoluto entre as duas fontes de arvore.
-- O nome "quente" no `scanner.bench.js`, que mede outra coisa.
-- O `sha256` de conteudo segue no `cacheLedger.js`: o `hash` do fswatch e sempre `null` e
-  `content_changed` nunca e emitido — os dois ja no `ISSUES.md`, ambos do `iodb`.
-
-## O que estava quebrado: um caminho de import
+### O que estava quebrado: um caminho de import
 
 A suite estava vermelha em 7 checks e 2 excecoes, e a causa era UMA: `ledger.js` e `state.js`
 importavam `'../iodb/io-engine.js'`, e o modulo mora em `'../iodb/src/io-engine.js'`. O
@@ -126,7 +109,7 @@ hardcoded — entao `check(v.valid, true)` passava identicamente com cadeia real
 nenhuma. Agora os testes de cadeia real afirmam `v.length > 0` e o do no-op afirma
 `length === 0`: os estados ficaram distinguiveis, que e o que faz o check valer.
 
-## As duas engines de arvore devolvem a mesma lista (8.3)
+### As duas engines de arvore devolvem a mesma lista (8.3)
 
 Medido neste repo, `scan()` com `{ fswatch: false }` contra `{ fswatch: true }`:
 
@@ -142,7 +125,7 @@ dois lados. Nao quebra nada hoje — `cache.read()` resolve os 13 entries nos do
 mas e uma assimetria de contrato entre duas fontes que se anunciam intercambiaveis, e vale
 como item proprio.
 
-## O preco, medido — e ele e maior do que se esperava
+### O preco, medido — e ele e maior do que se esperava
 
 `scanner.bench.js`, duas rodadas, numeros reproduziveis:
 
@@ -174,3 +157,22 @@ humanos e identidade por inode, e o fallback existe precisamente para que o prec
 opcional. Mas o `fswatch` **nao esta pronto para ser o caminho default de um `scan()` por
 rodada** enquanto o `open()` custar isso. Hoje ele nao e: `scan()` tem `fswatch = false` por
 default, e a 8.3 entrega a fonte trocavel, nao a troca.
+
+## Prova
+
+`bun utest.js .` — **verde, 630 checks** (era `✘7 💥2` com 616). `.utest/ledger.dash` nasce:
+128KB, junto de `ledger.index` e `ledger.yaml`. Quente == frio: duas rodadas, 630 nas duas.
+
+**Os checks novos reprovam contra um no-op** — por sabotagem, nao por suposicao: apontando o
+import para um caminho inexistente, `ledger.t.js` volta a `💥1 ✘4`, e entre os vermelhos estao
+os dois `check(v.length > 0, ...)` recem-adicionados. Um check que nao sabe falhar nao e um
+check.
+
+## O que fica aberto
+
+- O `open()` O(store) do iodb — [ISSUES/002](../ISSUES/002-iodb-flush-o-store.md), ja aberto,
+  e do repo do `iodb`.
+- A assimetria relativo/absoluto entre as duas fontes de arvore.
+- O nome "quente" no `scanner.bench.js`, que mede outra coisa.
+- O `sha256` de conteudo segue no `cacheLedger.js`: o `hash` do fswatch e sempre `null` e
+  `content_changed` nunca e emitido — os dois ja no `ISSUES.md`, ambos do `iodb`.

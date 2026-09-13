@@ -177,7 +177,7 @@ A preencher.
 A preencher: quais passos mudaram de ordem, de forma ou de custo, e por que. Um passo que
 saiu exatamente como previsto tambem e um achado — diga.
 
-## Expectativa de budget
+### Expectativa de budget
 
 | | tokens |
 |---|---|

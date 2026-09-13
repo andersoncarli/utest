@@ -70,32 +70,7 @@ permanente sobre iodb que 8.1 e 8.2 ja consomem.
 - **`fswatchSource.t.js`** (novo) — 7 checks: equivalencia entre os caminhos, poda pelo
   exclude, o `.fswatch` fora da arvore que indexa, baseline ilegivel caindo no fallback.
 
-## Onde o PLAN errou
-
-1. **`.fswatch/PROJECT` nao existia como codigo** — era contrato confirmado, entidade nao
-   materializada. Nenhum `.fswatch` existia em disco nesta maquina. Logo `utest` PRODUZ o
-   baseline, nao so o le.
-2. **O dominio nao sai de uma config POJO.** `normalizeConfig` ignora o nome do cluster:
-   toda config POJO cai em `.fswatch/metadata` (fswatch.js:288), qualquer que seja a chave.
-   `PROJECT` so sai de um YAML chamado `PROJECT.yaml`. Como o dominio e
-   `<dir do yaml>/.fswatch/<nome>`, e o YAML mora em `.fswatch/` para nao sujar a raiz, o
-   store acaba em `.fswatch/.fswatch/PROJECT`. O aninhamento e o preco de nao tocar no iodb
-   a partir daqui.
-3. **`path` e ausente, nao apenas opcional.** O contrato documenta `path` como "so presente
-   quando produzido por `scan()`", mas medindo: ZERO de zero entries o trazem — o `Scanner`
-   batch, que e o caminho do `scan()`, nao o preenche. O idiom do proprio contrato
-   (`map(e => relative(root, e.path))`) daria `undefined` para todos os arquivos. O que
-   sempre existe e `parent`, entao o caminho se reconstroi subindo a cadeia.
-
-## Prova
-
-- `bun utest.js fswatchSource.t.js` — 7 checks verdes.
-- `bun utest.js scanner.t.js` — 44 checks verdes.
-- `bun utest.js .` — suite verde, salvo as 7 falhas pre-existentes em `state.t.js` e
-  `ledger.t.js`, identicas antes e depois (conferido com `git stash`).
-- Apagar o baseline e rodar de novo: recria sem erro.
-
-## A revisao de 2.8 e 4.7 a luz do fswatch
+### A revisao de 2.8 e 4.7 a luz do fswatch
 
 Ambas eram stubs do `sprint new`, sem um requisito escrito. Foram absorvidas:
 
@@ -113,7 +88,7 @@ Ambas eram stubs do `sprint new`, sem um requisito escrito. Foram absorvidas:
   ganho do fswatch aqui e futuro e de outra natureza: a identidade por inode DISPENSA a
   arbitragem em vez de corrigi-la. Fica registrado na 8.3, para quando o padrao trocar.
 
-## A medicao que muda a premissa — leia antes de expandir o uso
+### A medicao que muda a premissa — leia antes de expandir o uso
 
 Medido neste repo (186 arquivos de codigo, 1485 entries com tudo que a arvore tem):
 
@@ -191,7 +166,34 @@ pronta.
 Isto e evidencia para a frente 6 do iodb, nao critica ao desenho: o `(dev, ino)` e a
 identidade certa, e a costura fica pronta para o dia em que escrever custar o que ler custa.
 
-## Para o iodb — reportado, nao consertado
+## Onde o PLAN errou
+
+1. **`.fswatch/PROJECT` nao existia como codigo** — era contrato confirmado, entidade nao
+   materializada. Nenhum `.fswatch` existia em disco nesta maquina. Logo `utest` PRODUZ o
+   baseline, nao so o le.
+2. **O dominio nao sai de uma config POJO.** `normalizeConfig` ignora o nome do cluster:
+   toda config POJO cai em `.fswatch/metadata` (fswatch.js:288), qualquer que seja a chave.
+   `PROJECT` so sai de um YAML chamado `PROJECT.yaml`. Como o dominio e
+   `<dir do yaml>/.fswatch/<nome>`, e o YAML mora em `.fswatch/` para nao sujar a raiz, o
+   store acaba em `.fswatch/.fswatch/PROJECT`. O aninhamento e o preco de nao tocar no iodb
+   a partir daqui.
+3. **`path` e ausente, nao apenas opcional.** O contrato documenta `path` como "so presente
+   quando produzido por `scan()`", mas medindo: ZERO de zero entries o trazem — o `Scanner`
+   batch, que e o caminho do `scan()`, nao o preenche. O idiom do proprio contrato
+   (`map(e => relative(root, e.path))`) daria `undefined` para todos os arquivos. O que
+   sempre existe e `parent`, entao o caminho se reconstroi subindo a cadeia.
+
+## Prova
+
+- `bun utest.js fswatchSource.t.js` — 7 checks verdes.
+- `bun utest.js scanner.t.js` — 44 checks verdes.
+- `bun utest.js .` — suite verde, salvo as 7 falhas pre-existentes em `state.t.js` e
+  `ledger.t.js`, identicas antes e depois (conferido com `git stash`).
+- Apagar o baseline e rodar de novo: recria sem erro.
+
+## O que fica aberto
+
+### Para o iodb — reportado, nao consertado
 
 Conforme o nao-objetivo explicito de 8.1:
 

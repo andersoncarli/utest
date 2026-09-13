@@ -82,20 +82,9 @@ manualmente, `sprint eval 5.5` step-by-step com humano.
 
 **Objetivo**
 
-Investigando um hog de wall-time em `sprint-cli` (`degraus.test.js`/`flows.test.js`, cada
-teste dispara dezenas de `Bun.spawnSync` chamando `cmds/eval.js`/`cmds/sprint.js`),
-descobri que `utest.js` nunca chamava `T.wrapSpawns()` no fluxo padrão — a árvore `--trace`
-mostrava um bloco opaco `entry <arquivo>.test.js` sem decompor os subprocessos. Instalei
-`T.wrapSpawns()` em `utest.js` (dentro do bloco `doTrace`) e confirmei que a árvore passou a
-listar cada `sh:bun … eval.js …` individualmente — o hog real (boot de Bun repetido) ficou
-visível.
-
-Essa instalação global colidia com a feature 5.3: `engine.js#sh()` já embrulha seu próprio
-`Bun.spawnSync` numa região `T.region('sh: ' + cmd…, runIt, { fragPrefix })`, e o
-`fragPrefix` é o que permite ao trace enxertar o interior do subprocesso filho. Com
-`wrapSpawns()` ativo sem guard, essa chamada interna batia no patch global e abria uma
-segunda região `sh:` aninhada, sem `fragPrefix` — ruído, não corrupção de totais, mas
-poluía a árvore exatamente no caso (`.eval.js` repetido) que motivou a mudança.
+Diagnóstico completo em "Por que este sprint existe agora" (PLAN): a instalação global de
+`T.wrapSpawns()` colidia com a região `sh:` própria de `engine.js#sh()` (5.3), duplicando-a
+sem `fragPrefix`.
 
 **O que mudou**
 

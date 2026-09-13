@@ -71,6 +71,14 @@ Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe
   `fresh`/`list`. O render passa a ler sempre daqui.
 - **README +205 linhas** — a doc do formato do relatório e da regra do cache.
 
+### Estado das frentes ao fim da janela (== hoje, antes do ZSS)
+
+| frente | estado |
+|---|---|
+| 5 profiling | 🟡 (probe, 5.1) |
+| 4 report | 🟡 (4.1-4.2) / 🟠 (4.3-4.5) |
+| 2 cache | 🟡 (2.1-2.5) |
+
 ## Onde o PLAN errou
 
 - **A parte melhor documentada do repo é o report.** O README tem ~200 linhas só sobre o
@@ -83,11 +91,3 @@ Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe
   no uso (`utest . -v2` == `-v1`, de propósito), e nada a prende — só o aviso de stderr.
 - **`utest.js` passou de ~600 para ~940 linhas em três janelas** (004+005+006). O arquivo
   central do repo é o menos coberto.
-
-## Estado das frentes ao fim da janela (== hoje, antes do ZSS)
-
-| frente | estado |
-|---|---|
-| 5 profiling | 🟡 (probe, 5.1) |
-| 4 report | 🟡 (4.1-4.2) / 🟠 (4.3-4.5) |
-| 2 cache | 🟡 (2.1-2.5) |

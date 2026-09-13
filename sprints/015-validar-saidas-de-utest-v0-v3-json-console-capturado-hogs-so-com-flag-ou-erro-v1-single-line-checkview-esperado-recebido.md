@@ -67,6 +67,13 @@ Duas coisas de uma vez:
 7. Rodar `utest .` no próprio repo e em `~/tui` — conferir v1 single-line, hog só no
    título, `--hogs` traz o detalhe.
 
+### Arquivos
+
+- `viewer.js` — `checkView` (A), `compactFails` (B), `fullView` v1 (C)
+- `utest.js` — o bloco de render (linhas ~795–911): passar o flag `hogs` ao `compactFails`/`fullView`
+- `viewer.t.js` — cobertura nova (1) + regressão de A/B/C
+- `cache.js` — só se o formato gravado (`failData`) precisar de campo novo
+
 ## Criterio de pronto
 
 - `viewer.t.js` cobre v0–v3 + json + console capturado, todos verdes
@@ -75,14 +82,7 @@ Duas coisas de uma vez:
 - `utest ~/tui` com um vermelho = o vermelho traz `received:`/`expected:` e endereço
 - `sprint eval 4.1 --yes` → 🟢
 
-## Arquivos
-
-- `viewer.js` — `checkView` (A), `compactFails` (B), `fullView` v1 (C)
-- `utest.js` — o bloco de render (linhas ~795–911): passar o flag `hogs` ao `compactFails`/`fullView`
-- `viewer.t.js` — cobertura nova (1) + regressão de A/B/C
-- `cache.js` — só se o formato gravado (`failData`) precisar de campo novo
-
-## O que mudou (execução)
+### O que mudou (execução)
 
 **`viewer.js`**
 - `import fs from 'fs'` novo — para a rede de `extractLineCode`/`extractAddr`.
@@ -143,13 +143,13 @@ ou que o arquivo tambem seja vermelho (`nome ✘M 🐢N`). Em `utest.js`, `frame
 **C. `-v:1` verde e uma linha por fase** — sem vermelho e sem `--hogs`, `compactFails`
 devolve vazio e sobra so o `phaseLine`, que ja carrega o total.
 
-## O que fica aberto
-
-`sprint eval 4.1` passo a passo com o humano — a feature esta 🟡 testada e sem nenhuma
-validacao registrada.
-
-## Arquivos
+### Arquivos
 
 - `viewer.js` — `parseStack`/`callerLineOf` (A), `compactFails({hogs})` (B), `fullView` v1 (C)
 - `utest.js` — bloco de render: `framed = anyRed`, `🐢M` no paren do tight e do resumo v3
 - `viewer.t.js` — 9 testes novos, 3 reescritos para o novo contrato de hog
+
+## O que fica aberto
+
+`sprint eval 4.1` passo a passo com o humano — a feature esta 🟡 testada e sem nenhuma
+validacao registrada.

@@ -86,6 +86,18 @@ Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a ár
   `leak.t.js` (o único `.t.js` sem alvo pareado, o que exercita esse caminho) agora
   cacheia junto do `results.json`.
 
+### Frentes / features tocadas
+
+| feature | efeito |
+|---|---|
+| 5.2 trace | ✅ implementada + `trace.t.js` verde → 🟡 |
+| 5.3 trace de subprocesso | ✅ `trace-preload.mjs` + enxerto, coberto → 🟡 |
+| 5.4 trace.json | ✅ `chromeTrace`/`writeChromeTrace` cobertos → 🟡 |
+| 5.5 roteamento --trace | ⚠️ implementado, sem `.t.js` do consumo → 🟠 |
+| 1.3 sealed / clearTimeout | ✅ o `clearTimeout` fechado, `leak.t.js` cobre → 🟡 |
+| 3.3 kinds | ✅ `registerPhaseSetup` no default + teste → 🟡 |
+| 2.3 cacheFailure (sidecar) | ✅ sidecar movido de `.bot/.utest/` para `.utest/` — mesma pasta do `results.json` |
+
 ## Onde o PLAN errou
 
 - **`trace.js` entrou com o melhor `.t.js` do repo** — 14 testes para um módulo novo, com
@@ -100,15 +112,3 @@ Primeiro sprint fechado sob o ZSS. trace.js + trace-preload.mjs + --trace: a ár
 - **`trace-preload.mjs` depende de o `.eval.js` do soml splicar `bun --import` na string
   de bash à mão** — contrato por convenção de env, não tipado (feature 5.3, 🟡 mas com
   essa ressalva).
-
-## Frentes / features tocadas
-
-| feature | efeito |
-|---|---|
-| 5.2 trace | ✅ implementada + `trace.t.js` verde → 🟡 |
-| 5.3 trace de subprocesso | ✅ `trace-preload.mjs` + enxerto, coberto → 🟡 |
-| 5.4 trace.json | ✅ `chromeTrace`/`writeChromeTrace` cobertos → 🟡 |
-| 5.5 roteamento --trace | ⚠️ implementado, sem `.t.js` do consumo → 🟠 |
-| 1.3 sealed / clearTimeout | ✅ o `clearTimeout` fechado, `leak.t.js` cobre → 🟡 |
-| 3.3 kinds | ✅ `registerPhaseSetup` no default + teste → 🟡 |
-| 2.3 cacheFailure (sidecar) | ✅ sidecar movido de `.bot/.utest/` para `.utest/` — mesma pasta do `results.json` |

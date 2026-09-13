@@ -109,7 +109,7 @@ persistências numa só.
 - `ledger.verify().valid === true` depois de tudo;
 - renomear/remover `../iodb` → `utest .` roda como hoje, mesmo número, sem erro.
 
-## 2.6 é absorvida, não adiada
+### 2.6 é absorvida, não adiada
 
 A 2.6 (`results.json` arbitra o cache — segunda checagem sobre o mtime cravado) **não fica
 pendurada**: ela é a mesma arbitragem com o outro árbitro, e este sprint a constrói por
@@ -154,6 +154,14 @@ arbitra o frescor precisa estar aberto quando o primeiro `cache.read` acontece. 
 assinado pelo `run:start` passou a incluir alvos e deps, não só os arquivos de teste: é o
 sha256 deles que ancora o `fresh()`.
 
+### 2.6 foi absorvida, não adiada
+
+A 2.6 (`results.json` arbitra o cache — segunda checagem sobre o mtime cravado) é a mesma
+arbitragem com o outro árbitro. Este sprint montou o ponto de decisão único; o caminho
+`results.json` **é** a 2.6, e passou a ser o **fallback** — o que roda quando não há
+`../iodb`. Implementar os dois separadamente duplicaria a lógica de promoção só para
+desmontá-la no sprint seguinte.
+
 ## Onde o PLAN errou
 
 **1. Hashear no caminho quente derruba a rodada.** A primeira versão calculava o `sha256` do
@@ -189,7 +197,7 @@ pergunta a ele, não a do laço que o produziu.**
 - sem `../iodb`, `enabled` volta `false` e `TestCache(...).judge` volta `'results.json'` — o
   comportamento de sempre.
 
-## O ganho, e a única divergência esperada
+### O ganho, e a única divergência esperada
 
 Os dois árbitros concordam sempre que o conteúdo muda junto com o mtime — que é o caso comum.
 Discordam nos dois casos em que o mtime **mente**:
@@ -201,15 +209,9 @@ Nos dois o ledger diz `fresh` e o `results.json` diz stale, e o ledger está cer
 branch e voltar deixa de re-rodar a suíte inteira à toa. `cacheLedger.t.js` fixa essa
 divergência como teste, porque é ela que justifica a convergência.
 
-## 2.6 foi absorvida, não adiada
+## O que fica aberto
 
-A 2.6 (`results.json` arbitra o cache — segunda checagem sobre o mtime cravado) é a mesma
-arbitragem com o outro árbitro. Este sprint montou o ponto de decisão único; o caminho
-`results.json` **é** a 2.6, e passou a ser o **fallback** — o que roda quando não há
-`../iodb`. Implementar os dois separadamente duplicaria a lógica de promoção só para
-desmontá-la no sprint seguinte.
-
-## Reportado ao `~/iodb` (peer, fora desta árvore)
+### Reportado ao `~/iodb` (peer, fora desta árvore)
 
 O `acquireLock` tem um timeout **fixo** de 1000ms sobre um `flush` que reescreve o arquivo
 inteiro — um custo que **cresce com o store**. Um storage que funciona hoje passa a estourar
@@ -239,7 +241,7 @@ e o número era ruído. É o mesmo tipo de armadilha que o `_front.md` da frente
 2026-09-06: um motor discordando de si mesmo entre duas invocações. Vale um sprint próprio
 no `~/iodb` — provavelmente fixtures compartilhando o mesmo storage entre arquivos de teste.
 
-## Fora de escopo (vira sprint próprio)
+### Fora de escopo (vira sprint próprio)
 
 Remover o `results.json`; migrar o `depgraph.json`; a convergência final das duas
 persistências numa só.

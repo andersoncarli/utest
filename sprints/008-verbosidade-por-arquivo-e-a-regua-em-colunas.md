@@ -130,6 +130,14 @@ Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão po
 - **7 testes novos** (`viewer.t.js` +6, `scanner.t.js` +1) — 320 → 347 checks. Cada um
   verificado FALHANDO contra o código velho antes de entrar.
 
+### Frentes / features tocadas
+
+| feature | efeito |
+|---|---|
+| 4.1 relatório compacto | ✅ a escada v1/v2/v3 passa a existir de fato; régua em colunas; `fileLine`/`displayLen`/`failData` cobertos → 🟡 |
+| 3.5 cobertura | ✅ o MECANISMO fecha (classificação por kind, fase vazia fora da conta, exclude de infra, `--uncovered` imprime); a META (9 fontes sem `.t.js`) segue aberta → 🟠 |
+| 5.5 roteamento --trace | ⚠️ escopo largo passa a agregar por frente/feature; o consumo no `utest.js` segue sem `.t.js` → 🟠 |
+
 ## Onde o PLAN errou
 
 - **Três dos quatro itens do NOTES eram sintoma, não causa.** O `-v:2` "amarrado ao
@@ -154,7 +162,9 @@ Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão po
   já tem: não re-roda, não fura o cache, e por isso é o único trace que escopo largo pode
   pagar (o `--force` largo é o que o `docs/CRASH-LOG.md` do soml tirou do procedimento).
 
-## Achados fora do escopo (NÃO consertados — reportados)
+## O que fica aberto
+
+### Achados fora do escopo (NÃO consertados — reportados)
 
 - **`trace.t.js` é flaky sob carga**: `check(outer.selfMs < 22, …)` mede um sleep de
   ~12ms e estoura quando a suíte inteira roda junta (verde isolado, 3/3). Limiar de
@@ -162,11 +172,3 @@ Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão po
 - **No soml, 3 `.eval.js` divergem entre rodada forçada e cacheada** (45 vs 48
   vermelhos). Mesma categoria: falham sob carga/cache, passam limpos.
 - **`shimmer.js`**: 0 refs, o irmão do `utest2.js` que sobrou — candidato a DELETE.
-
-## Frentes / features tocadas
-
-| feature | efeito |
-|---|---|
-| 4.1 relatório compacto | ✅ a escada v1/v2/v3 passa a existir de fato; régua em colunas; `fileLine`/`displayLen`/`failData` cobertos → 🟡 |
-| 3.5 cobertura | ✅ o MECANISMO fecha (classificação por kind, fase vazia fora da conta, exclude de infra, `--uncovered` imprime); a META (9 fontes sem `.t.js`) segue aberta → 🟠 |
-| 5.5 roteamento --trace | ⚠️ escopo largo passa a agregar por frente/feature; o consumo no `utest.js` segue sem `.t.js` → 🟠 |

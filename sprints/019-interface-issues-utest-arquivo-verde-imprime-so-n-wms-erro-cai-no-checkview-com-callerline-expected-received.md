@@ -40,6 +40,19 @@ E quando há **erro ou exceção**, cai no `checkView` já existente — `✘ <l
 com `callerLine`, `expected:` e `received:` embaixo, **omitindo `received: false` quando
 `expected: true`** (o `trivialTruthy` de `viewer.js:124` já faz isso).
 
+### Diagnóstico
+
+`utest.js`, no bloco de render (~L840+), o escopo de arquivo força `verbosity` a 3
+(`utest.js:327`). Aí:
+
+- **verde, cache-hit** → cai no ramo `verbosity >= 3 && nada rodou fresh` (L850): imprime
+  `fullView(v:2)` = phaseLine + rio de passados.
+- **verde, rodou fresh** → ramo `verbosity >= 3` (L860): a árvore por-teste já streamou em
+  `runPhase`, e aqui sai a linha-resumo `phase: ✔ N (Ns)`. Combinado com a entryLine que o
+  streaming imprimiu, dá as duas linhas.
+
+Nenhum ramo trata "escopo é um arquivo só, verde" como caso especial.
+
 ## Plano de materializacao
 
 1. **`utest.js`** — no início do bloco de render, um curto-circuito: se `_isFile` E
@@ -77,19 +90,6 @@ com `callerLine`, `expected:` e `received:` embaixo, **omitindo `received: false
   emoldurado, `--hogs`)
 - `sprint eval --sweep` — verde
 
-## Diagnóstico
-
-`utest.js`, no bloco de render (~L840+), o escopo de arquivo força `verbosity` a 3
-(`utest.js:327`). Aí:
-
-- **verde, cache-hit** → cai no ramo `verbosity >= 3 && nada rodou fresh` (L850): imprime
-  `fullView(v:2)` = phaseLine + rio de passados.
-- **verde, rodou fresh** → ramo `verbosity >= 3` (L860): a árvore por-teste já streamou em
-  `runPhase`, e aqui sai a linha-resumo `phase: ✔ N (Ns)`. Combinado com a entryLine que o
-  streaming imprimiu, dá as duas linhas.
-
-Nenhum ramo trata "escopo é um arquivo só, verde" como caso especial.
-
 # REPORT
 
 `utest <arquivo>` verde imprimia a entryLine do arquivo E a phaseLine da fase — redundantes
@@ -103,8 +103,7 @@ com 1 arquivo vermelho usa a mesma forma longa (agilidade); com >1, a compacta +
 
 **Objetivo**
 
-Sprint guarda-chuva de quirks de interface — reaberto quantas vezes for preciso até a
-interface consolidar. Primeira leva: a saída de `utest <arquivo>`.
+Primeira leva do sprint guarda-chuva (intro do arquivo): a saída de `utest <arquivo>`.
 
 `utest check.t.js` verde dava:
 ```
@@ -174,32 +173,7 @@ Casos unitários de `checkView`:
 - `check(x, true)` falho E `check(x)` de 1 arg falho → sem `received: false`; `received: 0`
   → aparece (não é trivial)
 
-## Prova
-
-- `bun utest.js check.t.js` (demos comentadas — verde) → `✔20 (Wms)`, uma linha
-- `bun utest.js <scratch vermelho>` e `bun utest.js .` (esse scratch o único vermelho) →
-  SAÍDA IDÊNTICA: `fileLine` + `failLines`, sem frame/tip/coverage/phaseLine;
-  `received/expected` combinados; exceção aninhada mostra os frames (`outer :009`, o
-  callsite `:011`), exceção na linha do check mostra só o endereço
-- `bun utest.js viewer.t.js --force` — verde, ✔195 (10 casos novos de `hogMs`/badge)
-- `bun utest.js .` cold + hot — 📄12 🧪209 ✔613, mesma contagem, exit 0
-- `bun utest.js . --hogs 100` — moldura `-v:2`, só arquivos >100ms + vermelhos, cada hog com
-  `🐢N×`; num cache QUENTE os tempos (e os badges) vêm do storage, idênticos ao frio
-- `bun utest.js . --hogs` — mesmo caminho novo, limiar 1000, badges `🐢N×`
-- `bun utest.js .` sem `--hogs` — inalterado (`🐢Ns` = segundos na linha-título)
-- `sprint eval --sweep` — 12/8 varridos, nada caiu
-- `sprint docs` — ok
-
-## O que fica aberto
-
-- Quirk de cache observado en passant: `utest check.t.js` serviu um `✔20` verde de um estado
-  antigo mesmo com falhas no arquivo, até `rm -f .utest/*check.t.js*` forçar leitura limpa.
-  Pode ser a mesma classe do sprint 018 (arbitragem) ou um staleness à parte — anotar para
-  uma próxima reabertura deste sprint.
-- Outras quirks de interface (output esperado × presente) ainda por levantar — este sprint
-  reabre para cada uma até a interface consolidar.
-
-## Leva 3 — `--hogs [N]` volta ao relatório `-v:2` com badge de múltiplo
+### Leva 3 — `--hogs [N]` volta ao relatório `-v:2` com badge de múltiplo
 
 `--hogs` imprimia uma lista de tempo chapada (`hogReport`: `🐢 fase/nome · Nchecks (Nms)` +
 rodapé parede/soma) — formato próprio, cego a vermelho. O pedido: que voltasse ao formato
@@ -250,3 +224,28 @@ apagando o `(Nms)` e o `🐢` de um hog cacheado:
 - `hogBadge` mínimo `1×`: 1001ms → `🐢1×`, nunca `🐢0×`
 - as ~10 asserções de badge existentes (`🐢9` = segundos) viraram `🐢N×` = múltiplo; as de
   `phaseLine`/`bare` (`(42s 🐢42)`, `(90s 🐢50)`) ficaram — ali `🐢` ainda é segundos
+
+## Prova
+
+- `bun utest.js check.t.js` (demos comentadas — verde) → `✔20 (Wms)`, uma linha
+- `bun utest.js <scratch vermelho>` e `bun utest.js .` (esse scratch o único vermelho) →
+  SAÍDA IDÊNTICA: `fileLine` + `failLines`, sem frame/tip/coverage/phaseLine;
+  `received/expected` combinados; exceção aninhada mostra os frames (`outer :009`, o
+  callsite `:011`), exceção na linha do check mostra só o endereço
+- `bun utest.js viewer.t.js --force` — verde, ✔195 (10 casos novos de `hogMs`/badge)
+- `bun utest.js .` cold + hot — 📄12 🧪209 ✔613, mesma contagem, exit 0
+- `bun utest.js . --hogs 100` — moldura `-v:2`, só arquivos >100ms + vermelhos, cada hog com
+  `🐢N×`; num cache QUENTE os tempos (e os badges) vêm do storage, idênticos ao frio
+- `bun utest.js . --hogs` — mesmo caminho novo, limiar 1000, badges `🐢N×`
+- `bun utest.js .` sem `--hogs` — inalterado (`🐢Ns` = segundos na linha-título)
+- `sprint eval --sweep` — 12/8 varridos, nada caiu
+- `sprint docs` — ok
+
+## O que fica aberto
+
+- Quirk de cache observado en passant: `utest check.t.js` serviu um `✔20` verde de um estado
+  antigo mesmo com falhas no arquivo, até `rm -f .utest/*check.t.js*` forçar leitura limpa.
+  Pode ser a mesma classe do sprint 018 (arbitragem) ou um staleness à parte — anotar para
+  uma próxima reabertura deste sprint.
+- Outras quirks de interface (output esperado × presente) ainda por levantar — este sprint
+  reabre para cada uma até a interface consolidar.

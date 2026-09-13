@@ -70,36 +70,10 @@ raiz e filtrar o callback depois do fato.
 
 ## O que aconteceu
 
-**Objetivo**
+**Objetivo e plano de materialização completos** em "Por que este sprint existe agora" e
+"Plano de materializacao" (PLAN) — implementados como descrito, sem desvio.
 
-O modo watch fazia `fs.watch(root, { recursive: true })`: o SO percorre e
-monitora TODO subdiretório da raiz — `node_modules/`, `archive/`, `.git/` — e o
-único filtro era uma denylist hard-coded (`/node_modules|\.utest/`) aplicada no
-callback, tarde demais. Em projeto grande isso estoura o limite de watches do
-inotify e faz o watch reagir a churn de dependência.
-
-O watch passa a observar só o `exclude` declarado no `TEST.yaml` — o mesmo
-conjunto (global + fase) que o `scanner` já usa no walk da suíte.
-
-**O que mudou**
-
-- **scanner.js**
-  - `makeFilter` deixou de ser interno — agora `export`.
-  - novo `export function excludeFilter(configPath, phase = 'unit')`: lê o
-    `TEST.yaml`, soma `cfg.exclude` + `cfg[phase].exclude`, devolve
-    `makeFilter([], exclude)` — só a face `.excluded(rel)` interessa ao watch.
-
-- **utest.js** (bloco `if (watch)`)
-  - importa `excludeFilter` de `./scanner.js`.
-  - `excl = excludeFilter(configPath, phaseArg || 'unit')` (fallback
-    `{ excluded: () => false }` quando não há `TEST.yaml`).
-  - `isPruned(rel)` = `.utest` (o cache, sempre fora) OU `excl.excluded(rel)`.
-  - o `fs.watch(root, { recursive: true }, …)` virou `watchDir(dir)` recursivo
-    em JS: registra `fs.watch` NÃO-recursivo por diretório e NÃO desce em
-    diretório podado. O callback reusa `isPruned` no arquivo tocado.
-
-- **scanner.t.js** — `excludeFilter` coberto: glob global exclui; exclude da
-  fase soma ao global; `TEST.yaml` sem `exclude` não exclui nada. (28 → 35 checks)
+**O que mudou além do plano**
 
 - **plans/3-scan/3.1.eval.js** — roteiro novo da feature:
   - `sandbox`: `excludeFilter("TEST.yaml", "unit")` contra o `scanner.js` real —

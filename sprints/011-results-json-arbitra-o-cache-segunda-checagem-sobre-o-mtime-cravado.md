@@ -12,7 +12,8 @@ migrated: "0.2"
 
 # 011 — results.json arbitra o cache — segunda checagem sobre o mtime cravado
 
-Investigando "o cache não funciona em ~/soml e ~/sprint-cli" (pedido do usuário), medi diretamente com um probe (`TestCache`/`scan()`) e confirmei que a regra de mtime cravado **está funcionando** (73/78 hits no sprint-cli) — o sintoma real era outra coisa: duas features vermelhas (`40.110`, `40.30`, no projeto sprint-cli) com passos `real`/`linear` (não elegíveis a `cacheFailure` por design) custando 22s+34s a cada rodada, sempre, porque falha comum nunca cacheia. Isso já está documentado como feature aberta no próprio sprint-cli (40.110) e fica fora deste sprint.
+Investigando "o cache não funciona em ~/soml e ~/sprint-cli" (pedido do usuário) — motivo
+completo em "Por que este sprint existe agora", abaixo.
 
 # PLAN
 
@@ -76,6 +77,20 @@ usuário, ver pergunta respondida na sessão: "results.json manda").
    checagem (a prosa existente sobre "os dois detalhes que fazem a regra fechar"
    continua válida).
 
+### O que muda, e o que não muda
+
+**Não muda:** `readPaired`/`writePaired`, `readSelf`/`writeSelf`/`selfFile`,
+`deps`/`newestDep`/`depsFresh`, `bust()`, `CHECKS_MAX`/`FAILED_MARK`, a assinatura
+pública de `cache.read`/`cache.write` (extensão via `opts`, não quebra), e
+`results.record`/`get`/`list`/`flush` na forma.
+
+**Muda:** `results.fresh(phase, p, extraDeps)` passa a ser consultada **dentro** de
+`cache.read` (tanto `readPaired` quanto `readSelf`) antes de confirmar um HIT: se o
+mtime cravado diz HIT mas `results.fresh` diz `false` (ou o record não existe), o
+veredito final é MISS. O caminho inverso (mtime cravado já diz MISS) continua
+definitivo, sem consultar `results.json`. A mensagem de diagnóstico hoje em
+`utest.js:495-497` muda de "aviso passivo" para "explica a decisão real" (só em `-v:2`).
+
 ## Criterio de pronto
 
 **Verificação**
@@ -97,20 +112,6 @@ usuário, ver pergunta respondida na sessão: "results.json manda").
 - O caso do sprint-cli (par com segundos dessincronizados) força re-execução em vez de
   servir um HIT stale.
 
-## O que muda, e o que não muda
-
-**Não muda:** `readPaired`/`writePaired`, `readSelf`/`writeSelf`/`selfFile`,
-`deps`/`newestDep`/`depsFresh`, `bust()`, `CHECKS_MAX`/`FAILED_MARK`, a assinatura
-pública de `cache.read`/`cache.write` (extensão via `opts`, não quebra), e
-`results.record`/`get`/`list`/`flush` na forma.
-
-**Muda:** `results.fresh(phase, p, extraDeps)` passa a ser consultada **dentro** de
-`cache.read` (tanto `readPaired` quanto `readSelf`) antes de confirmar um HIT: se o
-mtime cravado diz HIT mas `results.fresh` diz `false` (ou o record não existe), o
-veredito final é MISS. O caminho inverso (mtime cravado já diz MISS) continua
-definitivo, sem consultar `results.json`. A mensagem de diagnóstico hoje em
-`utest.js:495-497` muda de "aviso passivo" para "explica a decisão real" (só em `-v:2`).
-
 # REPORT
 
 Intro: o mtime cravado continua decidindo sozinho, mas agora `results.json` confere o
@@ -121,16 +122,9 @@ causado só por dessincronia de relógio quando confirma que nada mudou de verda
 
 **Objetivo**
 
-Investigando por que o cache "parecia" não funcionar em ~/soml e ~/sprint-cli, a causa
-raiz do sintoma reportado (loading em teste supostamente cacheado) era outra: duas
-features do sprint-cli (`40.110`, `40.30`) rodam passos `real`/`linear` vermelhos que
-nunca cacheiam por design (só sandbox puro é elegível a `cacheFailure`), custando ~56s
-somados a cada rodada — já rastreado como feature aberta no próprio sprint-cli (40.110).
-
-No caminho, apareceu um caso real de fragilidade: um par teste/alvo no sprint-cli tinha
-o mtime do alvo (`.md`) e do teste (`.eval.js`) em segundos diferentes sem edição
-aparente — o protocolo de "segundo cravado" não tem como distinguir essa dessincronia
-de uma edição de verdade.
+Motivo e diagnóstico completos em "Por que este sprint existe agora" (PLAN) — as duas
+features vermelhas custavam ~56s somados por rodada. Em resumo: a fragilidade real não
+era o sintoma investigado, mas a dessincronia de mtime encontrada no caminho.
 
 **O que mudou**
 
