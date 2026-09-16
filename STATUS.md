@@ -129,16 +129,22 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟠 **[6.3] migrate — codemod expect()->check() (transforms determinísticos, pula lifecycle)** → [6.3](plans/6-compat/6.3-migrate-codemod-expect-check-transforms-determin-sticos-pula-lifecycle-.md)
 - 🟠 **[6.4] .tuit — parser+executor (JSON+arte ASCII, blocos acumulam via _assign/soml)** → [6.4](plans/6-compat/6.4--tuit-parser-executor-json-arte-ascii-blocos-acumulam-via-assign-soml-.md)
 
-### [7] isolation — Isolation — o alvo arquitetural que ainda não chegou · implementando · sprint 2  [🟠🟡🟠]
+### [7] isolation — Isolation — o alvo arquitetural que ainda não chegou · implementando · sprint 24  [🟠🟡🟠]
 - 🟠 **[7.1] workers por arquivo — 1 arquivo = 1 processo (worker.js base; hoje in-process)** → [7.1](plans/7-isolation/7.1-workers-por-arquivo-1-arquivo-1-processo-worker-js-base-hoje-in-process-.md)
 - 🟡 **[7.2] vazamento cross-arquivo — exceção async tardia no arquivo errado (in-process)** → [7.2](plans/7-isolation/7.2-vazamento-cross-arquivo-exce-o-async-tardia-atribu-da-ao-arquivo-errado-in-process-.md)
 - 🟠 **[7.3] runner.js modular — runTest/run/loadFile/serialize; caminho do subprocesso e da fase eval externa** → [7.3](plans/7-isolation/7.3-runner-js-modular-runtest-run-loadfile-serialize-caminho-do-subprocesso-e-da-fase-eval-externa.md)
 
-### [8] ledger — memoria permanente — o ledger criptografico sobre iodb · implementando · sprint 21  [🔵🔵⚫]
+### [8] ledger — memoria permanente — o ledger criptografico sobre iodb · implementando · sprint 22  [🔵🔵⚫⚫]
 - 🔵 **[8.1] o ledger append-only encadeado sobre iodb — memoria permanente do utest** → [8.1](plans/8-ledger/8.1-o-ledger-append-only-encadeado-sobre-iodb.md)
 - 🔵 **[8.2] .utest/STATE — histórico de scans + deteção de mudança de config** → [8.2](plans/8-ledger/8.2-test-yaml-vira-proje-o-utest-test-yaml-hist-rico-utest-test-jsonl.md)
 - ⚫ **[8.3] scanner.js le .fswatch/PROJECT em vez de readdirSync a cada run** → [8.3](plans/8-ledger/8.3-consumir-fswatch.md)
   - próxima: Implementar `fswatchSource.js` e o teste de equivalencia; depois `sprint eval 8.3`.
+- ⚫ **[8.4] storage-contract** → [8.4](plans/8-ledger/8.4-storage-contract.md)
+  - próxima: Extrair `SOURCE_RE` e `classify()` para `classify.js`, com `scanner.t.js` e
 
-⚫ 1 planejada · 🟠 12 implementando · 🟡 17 testada · 🔵 9 confirmada
+### [90] docs — Frente 90 · implementando · sprint 23  [⚫]
+- ⚫ **[90.1] adotar o formato sprint 2.0 — arquivo unico** → [90.1](plans/90-docs/90.1-adotar-o-formato-sprint-2-0-arquivo-unico.md)
+  - próxima: Fechar o sprint 023. Depois: normalizar as 26 secoes livres que sobraram, com o
+
+⚫ 3 planejada · 🟠 12 implementando · 🟡 17 testada · 🔵 9 confirmada
 <!-- board:end -->
