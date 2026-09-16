@@ -93,27 +93,70 @@ as armadilhas (mapa por metade, slug fora do ORDER, YAML octal).
 
 # REPORT
 
-_A preencher no close._
-
 ## O que aconteceu
 
-A preencher.
+Os 5 passos do plano rodaram no commit `83c7ef0`: `sprint-codemod.js --apply` uniu os
+21 pares em `NNN-slug.md` (o 001 nao tinha par — sempre foi so plano, sem report
+separado — o que fecha em 22 sprints unificados, nao 21), `sprint-normalize.js`
+renomeou as secoes por igualdade, os pares foram removidos com `git rm` (42 arquivos,
+confirmado no diff do commit), e o `023` nasceu direto em arquivo unico como o
+`sprint-cli` ja pedia. `utest` ficou como o modelo zero: 23 arquivos em `sprints/`,
+todos `NNN-slug.md`, nenhum par `.plan.md`/`.report.md` remanescente daquela leva.
 
 ## Onde o PLAN errou
 
-A preencher.
+- O passo 4 (`gaps()` do `sprint-template.js`) nao roda contra a arvore v1 do `utest`
+  sem passar `{plansDir:'plans', sprintsDir:'sprints'}` — a raiz default do tool e
+  `.sprint/plans`+`.sprint/sprints` (formato v2). Rodando com o override, `gaps()`
+  reporta **100% das ancoras como faltando**, inclusive em sprints com as 7 secoes do
+  PLAN visivelmente preenchidas — falso-positivo. Causa raiz: `anchor()` em
+  `sprint-template.js` busca o titulo normalizado como CHAVE do dicionario `ANCHOR`
+  (que esta montado `chave_canonica: titulo_em_prosa`, nao o inverso), entao o lookup
+  nunca casa e tudo cai no slug derivado. Reportado como
+  `~/sprint-cli/ISSUES/009-anchor-lookup-invertido.md` — nao consertado aqui, o
+  codigo mora noutro projeto.
+- `sprint-normalize.js` tambem tem uma colisao: `TITLE.budget` e uma unica entrada
+  global, mas `budget` e slug tanto do PLAN ("Expectativa de budget") quanto do
+  REPORT ("Budget: previsto vs real") com textos diferentes por contrato. Rodar
+  `normalize({apply:true})` no `023` regravaria a secao de budget do REPORT com o
+  titulo do PLAN. Descoberto em dry-run antes de aplicar; o arquivo em disco ja tinha
+  os titulos corretos (normalizado a mao antes desta feature ser fechada), entao o
+  `apply` nao foi executado. Reportado como
+  `~/sprint-cli/ISSUES/010-normalize-budget-colide-plan-report.md`.
+- O criterio de pronto fala em "nenhum `.plan.md`/`.report.md` restando em
+  `sprints/`" sem qualificar "daquela leva" — hoje ha 5 pares novos (024-028),
+  criados DEPOIS do 023, porque o `sprint` do `utest` ainda gera par por padrao. Isso
+  nao e regressao da 9.1: e trabalho futuro (o `sprint-cli` adotar arquivo unico por
+  padrao na feature 70.80, citada no plano).
 
 ## Budget: previsto vs real
 
 | | tokens |
 |---|---|
 | previsto | 40k-80k |
-| real | a preencher |
+| real | ver ledger do agente — nao medido nesta sessao de fechamento |
 
 ## Prova
 
-A preencher.
+- `git show 83c7ef0 --stat`: 42 arquivos `.plan.md`/`.report.md` removidos, 23
+  arquivos `NNN-slug.md` presentes em `sprints/`.
+- `bun sprint-normalize.js` em dry-run sobre os 23 arquivos: 137 secoes classificadas
+  por igualdade exata, 0 secoes livres (`kept: []`) — nenhum titulo fora do
+  vocabulario canonico.
+- `sprint test`: 630 checks verdes, coverage 57% — `utest .` verde conforme o
+  criterio pedia.
+- `docs:check` roda e aponta 2 problemas, ambos na feature 9.2 (nao 9.1): state
+  confirmed sem `verify_confirmed`/`confirmed_at`. Fora do escopo desta feature,
+  nao investigado a fundo aqui.
 
 ## O que fica aberto
 
-A preencher.
+- Normalizar as ~26 secoes livres que sobraram fora dos 23 sprints originais (os
+  pares 024-028, ainda no formato antigo) — mencionado no board como proxima acao
+  apos fechar este sprint. Depende de o `sprint` do `utest` (nao o `sprint-cli`)
+  gerar arquivo unico, ou de rodar o codemod manualmente sobre esses 5 pares.
+- Os dois bugs de dicionario invertido/colidido no `sprint-cli`
+  ([[009]]/[[010]] nas ISSUES de la) — fora do escopo de quem achou, quem mantem o
+  `sprint-cli` decide quando consertar.
+- 9.2 com `docs:check` vermelho (`verify_confirmed`/`confirmed_at` ausentes) — reportado
+  aqui, nao consertado, por ser outra feature.
