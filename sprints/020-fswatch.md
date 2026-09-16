@@ -127,7 +127,7 @@ levou a duas causas distintas, ambas medidas e reportadas em `ISSUES.md`:
    o `scan()` publico chama `snapshot()`+`reconcile()`, o caminho caro e o caminho normal.
    300 arquivos: **4901ms -> 241ms (20x)** com a flag. Os 14 checks de `fswatch.t.js` seguem
    verdes com a correcao aplicada localmente (e revertida — o repo do iodb nao foi tocado).
-   [ISSUES/001](../ISSUES/001-fswatch-reconcile-sem-buffer.md)
+   [ISSUES/001](../ISSUES/DONE/001-fswatch-reconcile-sem-buffer.md)
 2. **`flush()`/`close()` do engine sao O(store).** Com a escrita ja buferizada, `in()` x300
    custa 4ms e persistir custa 1150ms. O custo por entry CAI conforme N cresce (5.17ms em
    300, 2.94ms em 1200) — assinatura de custo fixo por persistencia, nao proporcional ao
@@ -137,8 +137,8 @@ levou a duas causas distintas, ambas medidas e reportadas em `ISSUES.md`:
 Corrigido o item 1, o total cai de ~10.2s para ~8.7s; o resto e o item 2 mais uma terceira
 descoberta: o `scan()` publico **varre a arvore duas vezes**, porque `snapshot()` refaz o
 `readdir` inteiro so para preencher o `path` que o `Scanner` nao preencheu
-([ISSUES/003](../ISSUES/003-fswatch-scan-varre-duas-vezes.md) e
-[004](../ISSUES/004-fswatch-path-ausente.md) — uma correcao resolve os dois).
+([ISSUES/003](../ISSUES/DONE/003-fswatch-scan-varre-duas-vezes.md) e
+[004](../ISSUES/DONE/004-fswatch-path-ausente.md) — uma correcao resolve os dois).
 
 ### Corrigido no proprio iodb (autorizado: "utest e o primeiro cliente real")
 
@@ -185,9 +185,9 @@ identidade certa, e a costura fica pronta para o dia em que escrever custar o qu
 
 ## Prova
 
-- `bun utest.js fswatchSource.t.js` — 7 checks verdes.
-- `bun utest.js scanner.t.js` — 44 checks verdes.
-- `bun utest.js .` — suite verde, salvo as 7 falhas pre-existentes em `state.t.js` e
+- `utest fswatchSource.t.js` — 7 checks verdes.
+- `utest scanner.t.js` — 44 checks verdes.
+- `utest .` — suite verde, salvo as 7 falhas pre-existentes em `state.t.js` e
   `ledger.t.js`, identicas antes e depois (conferido com `git stash`).
 - Apagar o baseline e rodar de novo: recria sem erro.
 

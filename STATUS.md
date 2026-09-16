@@ -129,9 +129,9 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - 🟠 **[6.3] migrate — codemod expect()->check() (transforms determinísticos, pula lifecycle)** → [6.3](plans/6-compat/6.3-migrate-codemod-expect-check-transforms-determin-sticos-pula-lifecycle-.md)
 - 🟠 **[6.4] .tuit — parser+executor (JSON+arte ASCII, blocos acumulam via _assign/soml)** → [6.4](plans/6-compat/6.4--tuit-parser-executor-json-arte-ascii-blocos-acumulam-via-assign-soml-.md)
 
-### [7] isolation — Isolation — o alvo arquitetural que ainda não chegou · implementando · sprint 24  [🟠🟡🟠]
+### [7] isolation — Isolation — o alvo arquitetural que ainda não chegou · implementando · sprint 24  [🟠🔵🟠]
 - 🟠 **[7.1] workers por arquivo — 1 arquivo = 1 processo (worker.js base; hoje in-process)** → [7.1](plans/7-isolation/7.1-workers-por-arquivo-1-arquivo-1-processo-worker-js-base-hoje-in-process-.md)
-- 🟡 **[7.2] vazamento cross-arquivo — exceção async tardia no arquivo errado (in-process)** → [7.2](plans/7-isolation/7.2-vazamento-cross-arquivo-exce-o-async-tardia-atribu-da-ao-arquivo-errado-in-process-.md)
+- 🔵 **[7.2] vazamento cross-arquivo — exceção async tardia no arquivo errado (in-process)** → [7.2](plans/7-isolation/7.2-vazamento-cross-arquivo-exce-o-async-tardia-atribu-da-ao-arquivo-errado-in-process-.md)
 - 🟠 **[7.3] runner.js modular — runTest/run/loadFile/serialize; caminho do subprocesso e da fase eval externa** → [7.3](plans/7-isolation/7.3-runner-js-modular-runtest-run-loadfile-serialize-caminho-do-subprocesso-e-da-fase-eval-externa.md)
 
 ### [8] ledger — memoria permanente — o ledger criptografico sobre iodb · implementando · sprint 22  [🔵🔵⚫⚫]
@@ -146,5 +146,5 @@ renderiza logs e testes intermediarios capturados pelo worker.
 - ⚫ **[90.1] adotar o formato sprint 2.0 — arquivo unico** → [90.1](plans/90-docs/90.1-adotar-o-formato-sprint-2-0-arquivo-unico.md)
   - próxima: Fechar o sprint 023. Depois: normalizar as 26 secoes livres que sobraram, com o
 
-⚫ 3 planejada · 🟠 12 implementando · 🟡 17 testada · 🔵 9 confirmada
+⚫ 3 planejada · 🟠 12 implementando · 🟡 16 testada · 🔵 10 confirmada
 <!-- board:end -->

@@ -14,7 +14,7 @@ runner de testes não pode ficar refém do seu próprio log.
 
 ```bash
 # Rodar suite específica
-bun utest/utest.js utils -v2 --force
+utest utils -v2 --force
 
 # Caminho arquitetural em revisao
 bot testio unit -v:2

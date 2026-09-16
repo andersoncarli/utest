@@ -137,7 +137,7 @@ export default (t) => {
       `test('dois níveis de fundura', ({ check }) => { check(K, 41); check(K + 1, 42) })\n`)
     const script = `
 cd ${dir}
-bun ${JSON.stringify(U + "/utest.js")} plugins/deep/nest/m.t.js; echo "EXIT=$?"
+utest plugins/deep/nest/m.t.js; echo "EXIT=$?"
 cd ..
 rm -rf ${dir}
 `

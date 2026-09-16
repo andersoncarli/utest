@@ -55,7 +55,7 @@ loop 10s DEPOIS do relatório (o "teardown misterioso").
   fragmento no tempo certo, splice sem env é no-op.
 - `leak.t.js` verde: "timer do timeout é limpo quando o trabalho ganha a corrida".
 - `kinds.t.js` verde: "registerPhaseSetup — um recurso que a fase monta 1×".
-- `bun utest.js .` verde.
+- `utest .` verde.
 
 # REPORT
 

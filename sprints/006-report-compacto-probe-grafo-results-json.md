@@ -51,7 +51,7 @@ ONDE `mergeProps` é chamado".
 
 - `probe.t.js` verde incluindo §grafo (aresta separa contexto, ciclo com ↻).
 - `viewer.t.js` verde: `phaseLine`, `compactFails`, "o kind não muda o formato".
-- `bun utest.js .` duas vezes → mesmo número.
+- `utest .` duas vezes → mesmo número.
 - `utest cache` re-executa em v2; `utest .` -v:3 emite o aviso.
 
 # REPORT

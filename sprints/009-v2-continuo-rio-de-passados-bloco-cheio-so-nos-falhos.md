@@ -39,8 +39,8 @@ espaco" que `compactFails` ja aplica em `-v:1`.
 
 ## Criterio de pronto
 
-- `bun utest.js utest/viewer.t.js` verde.
-- `bun utest.js .` (no soml raiz) v2 num escopo real mostra o rio continuo e o
+- `utest utest/viewer.t.js` verde.
+- `utest .` (no soml raiz) v2 num escopo real mostra o rio continuo e o
   bloco cheio nos vermelhos, dentro da largura do terminal.
 
 # REPORT
@@ -74,6 +74,6 @@ UNIT ........................................................ (0s) ✘1 📄3 �
         expected: 5
 ```
 
-`bun utest.js utest/viewer.t.js` — 117 checks verdes. `sprint eval 4.6` rodou
+`utest utest/viewer.t.js` — 117 checks verdes. `sprint eval 4.6` rodou
 o roteiro ao vivo (fixture de 3 arquivos) e confirmou (🔵) contra essa saida
 exata.

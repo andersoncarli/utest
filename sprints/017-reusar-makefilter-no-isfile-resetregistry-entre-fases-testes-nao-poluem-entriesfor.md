@@ -18,7 +18,7 @@ Plano do sprint 017. Features **3.2** (findTarget / pareamento por caminho) e **
 
 ## Por que este sprint existe agora
 
-1. **#1 — `bun utest.js path/x.t.js` num subdiretório não imprime relatório** (só
+1. **#1 — `utest path/x.t.js` num subdiretório não imprime relatório** (só
    `coverage: —`, exit 0). O ramo `_isFile` de `runPhase` (utest.js) decide se o arquivo
    pertence à fase com um **regex glob bespoke** que quebra em caminho com ≥ 2 níveis. Trocar
    pelo `makeFilter` que `scanner.js` já exporta e a fase de scan já usa.
@@ -59,7 +59,7 @@ sobre a string inteira e **corrompe o `.` interno** de `(.*/)?`:
 `belongs = false` → `entries = []` → fase sem entries → render imprime só `coverage: —`,
 exit 0. O sidecar `.utest/<mangled>.json` **é** escrito (o arquivo roda) — só o relatório
 some. Repro no `~/utest`: qualquer `.t.js` sob um subdir (o repo tem poucos; a repro
-canônica é `cd ~/tui && bun ../utest/utest.js plugins/eval/pty.t.js`).
+canônica é `cd ~/tui && utest plugins/eval/pty.t.js`).
 
 `scanner.js` já resolve isto certo: `makeFilter(include, exclude)` (exportado, L53) compõe
 `compileGlob` — fast-path `**/*.ext`/`dir/**` + `minimatch` no resto. O ramo `_isFile`
@@ -83,7 +83,7 @@ Sequência sob `utest .`:
 1. `phaseNames = ['unit', 'eval', 'tty']`
 2. `runPhase('unit')` importa todos os `*.t.js` → `utest-phase.t.js` roda → `entriesFor('eval')` deixa de ser `null`
 3. `runPhase('eval')`: `provider = entriesFor('eval')` → o fixture `async () => []` → 0 entries → EVAL vazio
-4. `bun ../utest/utest.js eval` sozinho: `unit` nunca roda, provider fica `null`, cai no `scan()` glob → 11 entries reais ✓
+4. `utest eval` sozinho: `unit` nunca roda, provider fica `null`, cai no `scan()` glob → 11 entries reais ✓
 
 Instrumentação confirmou: `entriesFor('eval')` = `false` logo após o `boot:`, `true` já na
 2ª iteração do loop de fases.
@@ -133,13 +133,13 @@ Instrumentação confirmou: `entriesFor('eval')` = `false` logo após o `boot:`,
 
 ## Criterio de pronto
 
-- `bun utest.js scanner.t.js` verde (verify_tests de 3.2) — com o `belongs` novo coberto.
-- `bun utest.js kinds.t.js` verde — com `resetRegistry` coberto.
-- `bun utest.js .` verde (a suíte do `~/utest`).
-- **Repro #1 fecha**: `cd ~/tui && bun ../utest/utest.js plugins/eval/pty.t.js` imprime o
+- `utest scanner.t.js` verde (verify_tests de 3.2) — com o `belongs` novo coberto.
+- `utest kinds.t.js` verde — com `resetRegistry` coberto.
+- `utest .` verde (a suíte do `~/utest`).
+- **Repro #1 fecha**: `cd ~/tui && utest plugins/eval/pty.t.js` imprime o
   relatório do arquivo (lista de testes + contagem), não só `coverage: —`.
-- **Repro #3 fecha**: `cd ~/tui && bun ../utest/utest.js .` mostra a fase **EVAL** com suas
-  ~11 entries / ~44 testes no relatório — a mesma contagem de `bun ../utest/utest.js eval`.
+- **Repro #3 fecha**: `cd ~/tui && utest .` mostra a fase **EVAL** com suas
+  ~11 entries / ~44 testes no relatório — a mesma contagem de `utest eval`.
 - `sprint test 3.2` e `sprint test 3.4` verdes.
 - `sprint docs` ok.
 
@@ -155,10 +155,10 @@ Dois bugs de severidade alta levantados em `issues/260907-tui.md` (sprint 007 do
 do `~/tui`. Os dois de severidade alta que sao do `~/utest` (o #4 e do `~/tui`, os #2/#5/#6
 sao da frente de cache):
 
-- **#1** — `bun utest.js plugins/eval/pty.t.js` (qualquer `.t.js` a >= 2 niveis de pasta)
+- **#1** — `utest plugins/eval/pty.t.js` (qualquer `.t.js` a >= 2 niveis de pasta)
   imprimia so `coverage: —` e saia 0. O arquivo rodava (o sidecar `.utest/` era escrito),
   mas o relatorio sumia.
-- **#3** — `bun utest.js .` rodava so a fase `unit`; `eval`/`tty` so com o nome explicito.
+- **#3** — `utest .` rodava so a fase `unit`; `eval`/`tty` so com o nome explicito.
   O "criterio de pronto" `utest .` verde era incompleto.
 
 **O que foi entregue**
@@ -188,7 +188,7 @@ double-path. `makeFilter` ja era exportado por `scanner.js` — so faltava o imp
 pedia um; escrevê-los era preencher lacuna de design, nao expandir escopo)
 - `plans/3-scan/3.2.eval.js`: as seis regras de `findTarget` contra o `scanner.js` real; o
   passo que fecha o laço (`3.2.eval.js` -> `3.2-…-md`); e o passo `real` do issue #1 —
-  `bun utest.js plugins/deep/nest/m.t.js` num subdir fundo imprime o relatorio completo.
+  `utest plugins/deep/nest/m.t.js` num subdir fundo imprime o relatorio completo.
 - `plans/3-scan/3.4.eval.js`: os tres `*For` + `resetRegistry`; fase provider ignora o
   `include`; sem `boot:` a fase nem existe; e o passo `real` do issue #3 — um `.t.js` da
   `unit` que chama `registerEntries` nao polui a fase seguinte (`PROV 📄2 🧪2` igual em
@@ -207,15 +207,15 @@ engolia tudo.
 
 ## Prova
 
-- `bun utest.js scanner.t.js` — verde (44 checks), verify_tests da 3.2
-- `bun utest.js kinds.t.js` — verde (31 checks), verify_tests da 3.4
-- `bun utest.js .` (suite do `~/utest`) — verde, 12 📄 / 202 🧪 / 577 ✔, exit 0
+- `utest scanner.t.js` — verde (44 checks), verify_tests da 3.2
+- `utest kinds.t.js` — verde (31 checks), verify_tests da 3.4
+- `utest .` (suite do `~/utest`) — verde, 12 📄 / 202 🧪 / 577 ✔, exit 0
 - `sprint eval 3.2 --yes` — verde (6 sandbox + 1 real) -> 🟢
 - `sprint eval 3.4 --yes` — verde (3 sandbox + 1 real) -> 🟢
-- Repro #1: `cd ~/tui && bun ../utest/utest.js plugins/eval/pty.t.js` -> relatorio completo
+- Repro #1: `cd ~/tui && utest plugins/eval/pty.t.js` -> relatorio completo
   (34 testes), nao mais `coverage: —`
-- Repro #3: `cd ~/tui && bun ../utest/utest.js .` -> UNIT + **EVAL (11 📄 / 44 🧪)** + TTY,
-  a mesma contagem de `bun ../utest/utest.js eval`
+- Repro #3: `cd ~/tui && utest .` -> UNIT + **EVAL (11 📄 / 44 🧪)** + TTY,
+  a mesma contagem de `utest eval`
 - `sprint docs` — ok
 
 ## O que fica aberto

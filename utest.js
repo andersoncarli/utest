@@ -494,7 +494,7 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
       if (_pn) T.end(_pn)
       // `scan()` já restringe por `root` andando o diretório; um provider (`eval`: as
       // entries vêm de `loadFronts()`, não de um walk) não ganha isso de graça — sem
-      // filtrar aqui, `bun utest/utest.js plans/1-motor` varria o CORPUS INTEIRO, não só
+      // filtrar aqui, `utest plans/1-motor` varria o CORPUS INTEIRO, não só
       // a frente pedida. Mesma regra: só entries cujo caminho more sob `root`. `_isFile`
       // corta para UMA entry logo (`utest 3.2` → um `.eval.js`), sem instanciar as outras 76.
       if (_isFile) {

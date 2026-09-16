@@ -60,7 +60,7 @@ export default (t) => {
     write("real.js", "export const R = 1\n")
     write("real.t.js", `import { R } from './real.js'\ntest('nao-e-da-fase-prov', ({ check }) => check(R, 1))\n`)
 
-    const r = await sh(`bun ${JSON.stringify(U + "/utest.js")} prov -v:2`)
+    const r = await sh(`utest prov -v:2`)
     const clean = r.out.replace(/\x1b\[[0-9;]*m/g, "")
     check(clean.includes("entry-do-provider"), true, "a entry veio do registerEntries, não de um walk do disco")
     check(/PROV\s*[.\s]*\(\d+s\)\s*📄1\s*🧪1/.test(clean), true, "1 entry / 1 teste — o passo do registerExecutor rodou")
@@ -74,7 +74,7 @@ export default (t) => {
     write("TEST.yaml", 'exclude: []\nunit:\n  include:\n    - "**/*.t.js"\nprov: {}\n')
     write("m.js", "export const K = 3\n")
     write("m.t.js", `import { K } from './m.js'\ntest('so-unit', ({ check }) => check(K, 3))\n`)
-    const r = await sh(`bun ${JSON.stringify(U + "/utest.js")} .`)
+    const r = await sh(`utest .`)
     const clean = r.out.replace(/\x1b\[[0-9;]*m/g, "")
     check(clean.toUpperCase().includes("UNIT"), true, "a fase unit roda")
     check(/PROV\b/i.test(clean), false, "a fase `prov` sem boot: que a registre não aparece")
@@ -112,9 +112,9 @@ export default (t) => {
     const script = `
 cd ${dir}
 echo "=== utest . (unit DEPOIS prov, mesmo processo) ==="
-bun ${JSON.stringify(U + "/utest.js")} .
+utest .
 echo "=== utest prov (sozinho, sem a unit antes) ==="
-bun ${JSON.stringify(U + "/utest.js")} prov
+utest prov
 cd ..
 rm -rf ${dir}
 `

@@ -33,7 +33,7 @@ Duas causas raiz cobrem 3 das 4 issues:
    - Confirmar se `checks`/`tests` é array compartilhado por referência entre
      arquivos rodando no mesmo processo (hipótese já registrada em [[7.2]]).
    - Corrigir isolando o agregado por arquivo antes de somar no `grand`.
-   - Verify: `bun utest.js src/table --force --json` com múltiplos arquivos
+   - Verify: `utest src/table --force --json` com múltiplos arquivos
      concorrentes não deve mais inflar `checks` de um arquivo com o de outro
      (reproduzir o caso de ISSUES/007 ou equivalente local).
 

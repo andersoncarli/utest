@@ -95,8 +95,8 @@ definitivo, sem consultar `results.json`. A mensagem de diagnóstico hoje em
 
 **Verificação**
 
-- `verify_tests`: `bun utest/utest.js cache.t.js` isolado até verde.
-- `bun utest/utest.js .` (suíte completa do projeto) duas vezes seguidas — segunda
+- `verify_tests`: `utest cache.t.js` isolado até verde.
+- `utest .` (suíte completa do projeto) duas vezes seguidas — segunda
   rodada deve continuar tão rápida quanto hoje (arbitragem é leitura de objeto já em
   memória, sem overhead perceptível).
 - `verify_manual`: simular um par com mtimes dessincronizados por 1s mas `results.json`
@@ -107,7 +107,7 @@ definitivo, sem consultar `results.json`. A mensagem de diagnóstico hoje em
 
 - Nenhum teste existente de `cache.t.js` regride.
 - Os 6 casos novos passam.
-- `bun utest/utest.js .` neste projeto continua com output idêntico quente/frio
+- `utest .` neste projeto continua com output idêntico quente/frio
   (garantia já confirmada pela feature 2.5).
 - O caso do sprint-cli (par com segundos dessincronizados) força re-execução em vez de
   servir um HIT stale.
@@ -163,8 +163,8 @@ era o sintoma investigado, mas a dessincronia de mtime encontrada no caminho.
 
 ## Prova
 
-- `bun utest.js cache.t.js`: 85 checks, 0 falhas.
-- `bun utest.js .` (suíte completa do projeto): 369 checks, 0 falhas, quente em ~0.7s
+- `utest cache.t.js`: 85 checks, 0 falhas.
+- `utest .` (suíte completa do projeto): 369 checks, 0 falhas, quente em ~0.7s
   (sem regressão de performance — a árbitro só lê dados já em memória).
 - Reproduzido manualmente em ~/sprint-cli: dessincronizei deliberadamente o mtime do
   alvo de `plans/40-homologacao/40.10*` (sem editar conteúdo) e confirmei via `-v:2`

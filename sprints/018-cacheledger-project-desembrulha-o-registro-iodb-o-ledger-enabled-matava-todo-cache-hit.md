@@ -55,8 +55,8 @@ faltava enxergá-lo). Os 2 registros multi-chave (o par genesis `{'0':…,'1':�
 
 ## Criterio de pronto
 
-- `bun utest.js cacheLedger.t.js` — verde
-- `bun utest.js .` DUAS vezes seguidas: a 2ª reporta os mesmos 577 ✔ e é ~instantânea
+- `utest cacheLedger.t.js` — verde
+- `utest .` DUAS vezes seguidas: a 2ª reporta os mesmos 577 ✔ e é ~instantânea
   (todos os arquivos pulados — `cached: true`), não um novo full run
 - `.utest/results.json` continua existindo e atualizado (as duas persistências em paralelo)
 - `sprint eval --sweep` — verde (nenhuma demonstração caiu)
@@ -99,7 +99,7 @@ que o bug matava. Sem o fix: 2 ✘ (`get()` undefined, `fresh()` false). Com: ve
 ### Diagnóstico
 
 O usuário reportou: "`utest .` tá ignorando o cache (todos eles) e fazendo full". Reproduzido
-— duas rodadas seguidas de `bun utest.js .`, a 2ª igual ou mais lenta que a 1ª (3.8s → 6.3s),
+— duas rodadas seguidas de `utest .`, a 2ª igual ou mais lenta que a 1ª (3.8s → 6.3s),
 202 🧪 rodados nas duas.
 
 `entry.cache` chegava `null` em TODA entry de `scan()` quando havia um `cacheLedger` — mas
@@ -125,10 +125,10 @@ teste exercia a forma embrulhada do iodb, nem o evento `run:tests` (o lote agreg
 
 ## Prova
 
-- `bun utest.js cacheLedger.t.js --force` — verde, 25 checks (era 22)
+- `utest cacheLedger.t.js --force` — verde, 25 checks (era 22)
 - `git stash` do fix + rodar `cacheLedger.t.js` → 2 ✘ no caso REGRESSÃO; `stash pop` → verde
-- `bun utest.js . --force` — full, 📄12 🧪203 ✔580, exit 0
-- `bun utest.js .` 2× seguidas depois — **📄12 🧪203 ✔580 nas duas**, ~1.5s (era ~6s e
+- `utest . --force` — full, 📄12 🧪203 ✔580, exit 0
+- `utest .` 2× seguidas depois — **📄12 🧪203 ✔580 nas duas**, ~1.5s (era ~6s e
   re-rodava tudo). Quente e frio reportam o mesmo número — o portão da frente 2.
 - `.utest/results.json` continua existindo e atualizado após cada rodada (as duas
   persistências em paralelo)

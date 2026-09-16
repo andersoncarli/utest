@@ -141,7 +141,7 @@ features (`plans/3-scan/3.5`, `plans/4-report/`).
 - **`--uncovered` / `-u` é inerte.** Lido em `utest.js:231` (`showUnc`), nenhum bloco do
   render consome — só o número `coverage: N%` sai, nunca a lista.
 - **`utest.js <alvo-nomeado-inexistente>` roda a suíte inteira e sai 0.**
-  `bun utest.js shims.t.js` (inexistente): `rawTarget` fica `undefined`, `narrowScope`
+  `utest shims.t.js` (inexistente): `rawTarget` fica `undefined`, `narrowScope`
   falso, o run cai em `.` completo, verde, exit 0. Deveria ser erro. É o gatilho do bug do
   `--sweep` acima.
 - **Sidecar de cache no diretório errado** (`cache.js:278`). `selfFile()` gravava em

@@ -50,7 +50,7 @@ posicional descartado em silêncio), 012 (watch/cache mostrando resultado desenc
 
 ## Verificação
 
-- `bun utest.js . --force` — 630 checks verdes, estável em 5 rodadas consecutivas
+- `utest . --force` — 630 checks verdes, estável em 5 rodadas consecutivas
   (`--json`, soma de `checks` idêntica todas as vezes, todo `state` `passed`).
 - `sprint eval 7.2 --yes` — roteiro escrito em `plans/7-isolation/7.2.eval.js`, os 3 passos
   passaram; feature promovida 🟡 → 🟢. Um dos passos reproduziu exatamente o cenário de

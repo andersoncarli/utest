@@ -89,7 +89,7 @@ as armadilhas (mapa por metade, slug fora do ORDER, YAML octal).
   restando em `sprints/`
 - nenhuma secao perdida: contagem do par <= contagem do unificado
 - `gaps()` com 0 links quebrados e `orphan_features` inalterado em 8
-- `bun utest.js .` verde
+- `utest .` verde
 
 # REPORT
 

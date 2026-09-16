@@ -13,10 +13,10 @@ metade do que foi pedido.
 
 ```
 cd ~/iodb
-bun ../utest/utest.js src pagedtext --force   # 📄16 🧪73 ✔310   (pagedtext.t.js NÃO rodou)
-bun ../utest/utest.js pagedtext src --force   # 📄 1 🧪20 ✔ 71   (src NÃO rodou)
-bun ../utest/utest.js pagedtext --force       # 📄 1 🧪20 ✔ 71
-bun ../utest/utest.js src --force             # 📄16 🧪73 ✔310
+utest src pagedtext --force   # 📄16 🧪73 ✔310   (pagedtext.t.js NÃO rodou)
+utest pagedtext src --force   # 📄 1 🧪20 ✔ 71   (src NÃO rodou)
+utest pagedtext --force       # 📄 1 🧪20 ✔ 71
+utest src --force             # 📄16 🧪73 ✔310
 ```
 
 A soma das duas rodadas isoladas é 17 arquivos; nenhuma das duas combinadas chega lá. A
@@ -40,7 +40,7 @@ O modo de falha não é "roda errado", é **"afirma verde sobre código que nunc
 Isso é exatamente o que derrota um `eval` que checa ausência de `✘`:
 
 ```js
-eval("bun ../utest/utest.js src pagedtext --force", (out) => {
+eval("utest src pagedtext --force", (out) => {
   check(!out.includes("✘"))     // passa — e não provou nada sobre pagedtext
 })
 ```
@@ -53,8 +53,8 @@ de arquivos (`📄16`) não batia com o esperado.
 modo que uma rodada vazia deixe de passar por ausência de falha.
 
 ```js
-eval("bun ../utest/utest.js src --force",       (o) => check(Number([...o.matchAll(/🧪(\d+)/g)].pop()[1]) >= 73))
-eval("bun ../utest/utest.js pagedtext --force", (o) => check(o.includes("pagedtext.t.js")))
+eval("utest src --force",       (o) => check(Number([...o.matchAll(/🧪(\d+)/g)].pop()[1]) >= 73))
+eval("utest pagedtext --force", (o) => check(o.includes("pagedtext.t.js")))
 ```
 
 ## Correções possíveis, da mais barata à mais completa
@@ -67,6 +67,6 @@ eval("bun ../utest/utest.js pagedtext --force", (o) => check(o.includes("pagedte
 3. **Aceitar múltiplos targets de verdade**, unindo os escaneamentos. É o comportamento que
    a linha de comando sugere e o que qualquer usuário assume ao digitar dois caminhos.
 
-Um caminho **inexistente** também não produz erro (`bun ../utest/utest.js naoexiste` sai
+Um caminho **inexistente** também não produz erro (`utest naoexiste` sai
 mudo). Provavelmente a mesma família: nada valida que o posicional foi consumido por
 alguém.

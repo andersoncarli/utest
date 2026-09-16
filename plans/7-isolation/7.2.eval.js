@@ -30,7 +30,7 @@ export default (t) => {
 
     const runs = []
     for (let i = 0; i < 3; i++) {
-      const r = await sh("bun " + JSON.stringify(U + "/utest.js") + " . --force --json")
+      const r = await sh("utest") + " . --force --json")
       const arr = JSON.parse(r.out.trim())
       const total = arr.reduce((a, o) => a + (o.checks || 0), 0)
       const bEntry = arr.find(o => o.file === "b.t.js")
@@ -57,7 +57,7 @@ export default (t) => {
       "  check(9, 9)\n" +
       "})\n")
 
-    const r = await sh("bun " + JSON.stringify(U + "/utest.js") + " . --force --json")
+    const r = await sh("utest") + " . --force --json")
     const arr = JSON.parse(r.out.trim())
     const solto = arr.find(o => o.file === "solto.t.js")
     const vizinho = arr.find(o => o.file === "vizinho.t.js")
@@ -75,8 +75,8 @@ export default (t) => {
       "  check(1, 1)\n" +
       "})\n")
 
-    const r1 = await sh("bun " + JSON.stringify(U + "/utest.js") + " a.t.js --force --json")
-    const r2 = await sh("bun " + JSON.stringify(U + "/utest.js") + " a.t.js --force --json")
+    const r1 = await sh("utest") + " a.t.js --force --json")
+    const r2 = await sh("utest") + " a.t.js --force --json")
     const s1 = JSON.parse(r1.out.trim())[0]
     const s2 = JSON.parse(r2.out.trim())[0]
     check(s1.checks, s2.checks, "a.t.js isolado tem a mesma contagem entre rodadas")

@@ -9,13 +9,13 @@ nao ao `iodb`.
 
 ## Sintoma
 
-`bun ../utest/utest.js src/table --force` roda 4 arquivos de teste. `--json` mostra os
+`utest src/table --force` roda 4 arquivos de teste. `--json` mostra os
 quatro com `"state":"passed"` e `"fails":[]` — nenhuma asserção falhou. Mesmo assim o
 processo sai com exit code 1, e o relatorio humano mostra um `✘1` pendurado em
 `tabular-table.t.js`, cujo `"checks"` tambem aparece inflado (18 em vez dos 10 reais —
 exatamente os 8 checks de `page-cursor.t.js` a mais).
 
-Isolado (`bun ../utest/utest.js src/table/tabular-table.t.js`), o mesmo arquivo reporta
+Isolado (`utest src/table/tabular-table.t.js`), o mesmo arquivo reporta
 `checks:10, failCount:0`, limpo. O sintoma so aparece quando `page-cursor.t.js` e
 `tabular-table.t.js` rodam na mesma invocacao (ambos usam `withTempDir` + `PagedText`
 sobre arquivos temporarios proprios, nunca o mesmo path).

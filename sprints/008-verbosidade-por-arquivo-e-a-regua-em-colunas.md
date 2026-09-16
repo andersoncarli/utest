@@ -74,7 +74,7 @@ Recusava escopo largo e mandava filtrar. → escopo largo agrega por FRENTE e FE
 filtrado segue dissecando por chamada. Frente <1% da parede vai para uma linha de resto;
 repo PLANO (uma frente só) avisa e manda para o `-v:2`.
 
-**verify**: no soml, `bun utest/utest.js . --trace` → `plans/5-apps 44%`, `5.32 14%`.
+**verify**: no soml, `utest . --trace` → `plans/5-apps 44%`, `5.32 14%`.
 
 ### 5. A régua em COLUNAS [4.1]
 
@@ -98,7 +98,7 @@ régua.
 
 ## Criterio de pronto
 
-- `./utest.js .` verde nos dois repos, e `bun utest/utest.js .` no soml sem regressão
+- `./utest.js .` verde nos dois repos, e `utest .` no soml sem regressão
   (mesmos vermelhos de antes: são falhas de produto do soml, não deste sprint).
 - v1/v2/v3 visivelmente diferentes, cacheado e forçado.
 - Nenhuma linha do relatório acima da largura, em qualquer largura.

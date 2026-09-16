@@ -7,7 +7,7 @@ const strip = s => String(s || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\
 
 test('viewer — relatório compacto', ({ test, check }) => {
 
-  // `hogMs()` lê `globalThis.utestHogMs`. Se a SUÍTE foi rodada sob `bun utest.js . --hogs N`,
+  // `hogMs()` lê `globalThis.utestHogMs`. Se a SUÍTE foi rodada sob `utest . --hogs N`,
   // esse global vaza pro processo dos testes e as asserções que esperam o fence default (1000)
   // quebram. Cada teste que depende do default começa limpo; os que testam o override usam
   // try/finally. Aqui só garantimos o ponto de partida.
@@ -574,7 +574,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
     writeFileSync(join(dir, 'ok.t.js'),
       "import { n } from './ok.js'\ntest('soma', ({ check }) => { check(n + n, 4); check(n, 2) })\n")
     const r = Bun.spawnSync({
-      cmd: ['bun', join(import.meta.dir, 'utest.js'), 'ok.t.js'],
+      cmd: ['utest'), 'ok.t.js'],
       cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
     })
     const out = strip(r.stdout.toString()).trim()
@@ -598,7 +598,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
       "  check(() => { throw new Error('Boom!') })\n" +
       "})\n")
     const r = Bun.spawnSync({
-      cmd: ['bun', join(import.meta.dir, 'utest.js'), 'bad.t.js'],
+      cmd: ['utest'), 'bad.t.js'],
       cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
     })
     const out = strip(r.stdout.toString())
@@ -634,7 +634,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
       "test('lento', ({ check }) => { const t = Date.now(); while (Date.now() - t < 90) {} check(1, 1) })\n")
     writeFileSync(join(dir, 'quick.t.js'), "test('rápido', ({ check }) => check(2, 2))\n")
     const run = (extra = []) => strip(Bun.spawnSync({
-      cmd: ['bun', join(import.meta.dir, 'utest.js'), '.', '--hogs', '50', ...extra],
+      cmd: ['utest'), '.', '--hogs', '50', ...extra],
       cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
     }).stdout.toString())
 

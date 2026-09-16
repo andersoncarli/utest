@@ -44,7 +44,7 @@ export default (t) => {
     const runs = `sed 's/\\x1b\\[[0-9;]*m//g' w.log | grep -c '^Watching '`;
     const script = `
 cd ${dir}
-nohup bun ../utest.js . -w > w.log 2>&1 < /dev/null &
+nohup utest . -w > w.log 2>&1 < /dev/null &
 WPID=$!
 sleep 3
 printf '// churn\\n' >> node_modules/foo/x.js

@@ -49,7 +49,7 @@ definir seus testes**. `test()` é global; `check`, `is`, `log` chegam como argu
 
 ### Requisitos verificáveis (o que ficou de pé ao fim da janela)
 
-- `bun utest.js .` roda a suíte e sai 0/1 conforme falha.
+- `utest .` roda a suíte e sai 0/1 conforme falha.
 - `test()` empilha na árvore sem precisar de import.
 - `check(a)` / `check(a, b)` com a semântica de `repr()`.
 - O scanner separa teste de fonte.

@@ -116,7 +116,7 @@ export function TestCache(root, { ledger = null } = {}) {
   //      com o que o histórico diz (mesmo mtime? deps não mexeram?). Divergir é
   //      sinal de furo na regra do cache.
   // UM arquivo por PROJETO em `<raiz>/.utest/results.json`, não por `root`: um
-  // `bun utest/utest.js apps/eval/` estreita o `root` para `apps/eval/`, e sem isto o
+  // `utest apps/eval/` estreita o `root` para `apps/eval/`, e sem isto o
   // `results.json` nasceria lá dentro. Sobe de `root` até a raiz do projeto — o primeiro
   // diretório com `.git` ou `TEST.yaml` —, e o storage mora num `.utest/` dedicado ali,
   // sob a chave relativa a essa raiz. Um write por FASE (via `flush()`), não por arquivo.

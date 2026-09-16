@@ -53,7 +53,7 @@ separation, and in-process ESM cache limits should become explicit fixtures for
 
 ### 7. `utils/TEST.yaml` including integration tests
 - **File:** `utils/TEST.yaml`
-- **Problem:** Did not exclude `*.int.t.js`. When running `bun utest/utest.js utils/ -f`, integration tests (G.int.t.js, GlobalPipeline.int.t.js, etc.) ran first and polluted global module state, causing subsequent unit tests (e.g., `hash53.t.js`) to cache `checks=0`.
+- **Problem:** Did not exclude `*.int.t.js`. When running `utest utils/ -f`, integration tests (G.int.t.js, GlobalPipeline.int.t.js, etc.) ran first and polluted global module state, causing subsequent unit tests (e.g., `hash53.t.js`) to cache `checks=0`.
 - **Fix:** Added `"**/*.int.t.js"` and `"**/*.int.js"` to the exclude list in `utils/TEST.yaml`.
 
 ### 8. `process.exit()` truncates stdout on piped runs

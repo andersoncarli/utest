@@ -17,12 +17,12 @@ export default (t) => {
       `test('soma', ({ check }) => { check(soma(1, 2), 3); check(soma(0, 0), 0) })\n`)
 
     // FRIO: nada no cache, tudo roda de verdade.
-    const frio = await sh(`bun ${JSON.stringify(U + "/utest.js")} .`)
+    const frio = await sh(`utest .`)
     const n = (s) => (s.replace(/\x1b\[[0-9;]*m/g, "").match(/✔(\d+)/) || [])[1]
     check(typeof n(frio.out), "string", "a rodada fria reportou um número de checks")
 
     // QUENTE: tudo do cache, com o ledger arbitrando.
-    const quente = await sh(`bun ${JSON.stringify(U + "/utest.js")} .`)
+    const quente = await sh(`utest .`)
     check(n(quente.out), n(frio.out), "quente e frio reportam o MESMO número — o portão da frente 2")
 
     // As DUAS persistências, lado a lado.
@@ -36,13 +36,13 @@ export default (t) => {
     write("m.js", "export const K = 7\n")
     write("m.t.js", `import { K } from './m.js'\ntest('m', ({ check }) => { check(K, 7) })\n`)
 
-    await sh(`bun ${JSON.stringify(U + "/utest.js")} .`)   // aquece
+    await sh(`utest .`)   // aquece
 
     // `touch` muda o inode e não os bytes. O `results.json` (mtime) diria stale; o ledger
     // (sha256) sabe que o conteúdo é o mesmo. É o caso do `git checkout` que devolve os
     // mesmos bytes com mtime novo — trocar de branch e voltar deixa de re-rodar a suíte.
     await sh(`touch m.t.js m.js`)
-    const depois = await sh(`bun ${JSON.stringify(U + "/utest.js")} .`)
+    const depois = await sh(`utest .`)
     const clean = depois.out.replace(/\x1b\[[0-9;]*m/g, "")
 
     // O sinal de que NÃO re-rodou: a fase inteira fecha em 0s. Um teste que roda de
@@ -58,7 +58,7 @@ export default (t) => {
     write("edit/v.js", "export const V = 1\n")
     write("edit/v.t.js", `import { V } from './v.js'\ntest('v', ({ check }) => { check(typeof V, 'number') })\n`)
 
-    const run = () => sh(`cd edit && bun ${JSON.stringify(U + "/utest.js")} .`)
+    const run = () => sh(`cd edit && utest .`)
     const n = (r) => (r.out.replace(/\x1b\[[0-9;]*m/g, "").match(/✔(\d+)/) || [])[1]
 
     check(n(await run()), "1", "aquecido: 1 check")

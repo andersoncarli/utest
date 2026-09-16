@@ -81,12 +81,12 @@ Nenhum ramo trata "escopo é um arquivo só, verde" como caso especial.
 
 ## Criterio de pronto
 
-- `bun utest.js check.t.js` (com as demos de falha comentadas) → exatamente `✔N (Wms)`,
+- `utest check.t.js` (com as demos de falha comentadas) → exatamente `✔N (Wms)`,
   uma linha
-- `bun utest.js check.t.js` (com as demos ativas) → frame + `checkView` com
+- `utest check.t.js` (com as demos ativas) → frame + `checkView` com
   callerLine/expected/received, `received: false` omitido no caso `expected: true`
-- `bun utest.js viewer.t.js` — verde
-- `bun utest.js .` — verde, sem regressão nas outras formas de saída (v0/v1/v2/v3 largo,
+- `utest viewer.t.js` — verde
+- `utest .` — verde, sem regressão nas outras formas de saída (v0/v1/v2/v3 largo,
   emoldurado, `--hogs`)
 - `sprint eval --sweep` — verde
 
@@ -227,17 +227,17 @@ apagando o `(Nms)` e o `🐢` de um hog cacheado:
 
 ## Prova
 
-- `bun utest.js check.t.js` (demos comentadas — verde) → `✔20 (Wms)`, uma linha
-- `bun utest.js <scratch vermelho>` e `bun utest.js .` (esse scratch o único vermelho) →
+- `utest check.t.js` (demos comentadas — verde) → `✔20 (Wms)`, uma linha
+- `utest .` (esse scratch o único vermelho) →
   SAÍDA IDÊNTICA: `fileLine` + `failLines`, sem frame/tip/coverage/phaseLine;
   `received/expected` combinados; exceção aninhada mostra os frames (`outer :009`, o
   callsite `:011`), exceção na linha do check mostra só o endereço
-- `bun utest.js viewer.t.js --force` — verde, ✔195 (10 casos novos de `hogMs`/badge)
-- `bun utest.js .` cold + hot — 📄12 🧪209 ✔613, mesma contagem, exit 0
-- `bun utest.js . --hogs 100` — moldura `-v:2`, só arquivos >100ms + vermelhos, cada hog com
+- `utest viewer.t.js --force` — verde, ✔195 (10 casos novos de `hogMs`/badge)
+- `utest .` cold + hot — 📄12 🧪209 ✔613, mesma contagem, exit 0
+- `utest . --hogs 100` — moldura `-v:2`, só arquivos >100ms + vermelhos, cada hog com
   `🐢N×`; num cache QUENTE os tempos (e os badges) vêm do storage, idênticos ao frio
-- `bun utest.js . --hogs` — mesmo caminho novo, limiar 1000, badges `🐢N×`
-- `bun utest.js .` sem `--hogs` — inalterado (`🐢Ns` = segundos na linha-título)
+- `utest . --hogs` — mesmo caminho novo, limiar 1000, badges `🐢N×`
+- `utest .` sem `--hogs` — inalterado (`🐢Ns` = segundos na linha-título)
 - `sprint eval --sweep` — 12/8 varridos, nada caiu
 - `sprint docs` — ok
 

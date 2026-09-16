@@ -39,7 +39,7 @@ de velocidade bruta.
 silencio e tudo rodou sobre o `noop()`. Nao e regressao do 022: o caminho nasceu errado no
 commit original da 8.1 (`b9b0b66`), nove commits atras.
 
-verify: `bun utest.js ledger.t.js --force` e `bun utest.js state.t.js --force` verdes.
+verify: `utest state.t.js --force` verdes.
 
 ### 2. O degrade deixa de ser mudo
 
@@ -72,7 +72,7 @@ compartilhada com o `sprint-cli`).
 
 ## Criterio de pronto
 
-- `bun utest.js .` verde, zero ✘ e zero 💥.
+- `utest .` verde, zero ✘ e zero 💥.
 - `.utest/ledger.dash` nasce depois da rodada.
 - quente == frio: duas rodadas seguidas, mesmo numero de checks (frente 2).
 - os checks novos falham contra um no-op — provado por sabotagem, nao por suposicao.
@@ -160,7 +160,7 @@ default, e a 8.3 entrega a fonte trocavel, nao a troca.
 
 ## Prova
 
-`bun utest.js .` — **verde, 630 checks** (era `✘7 💥2` com 616). `.utest/ledger.dash` nasce:
+`utest .` — **verde, 630 checks** (era `✘7 💥2` com 616). `.utest/ledger.dash` nasce:
 128KB, junto de `ledger.index` e `ledger.yaml`. Quente == frio: duas rodadas, 630 nas duas.
 
 **Os checks novos reprovam contra um no-op** — por sabotagem, nao por suposicao: apontando o
