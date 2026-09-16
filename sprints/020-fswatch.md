@@ -132,7 +132,7 @@ levou a duas causas distintas, ambas medidas e reportadas em `ISSUES.md`:
    custa 4ms e persistir custa 1150ms. O custo por entry CAI conforme N cresce (5.17ms em
    300, 2.94ms em 1200) — assinatura de custo fixo por persistencia, nao proporcional ao
    delta. E o que o proprio README do iodb lista em "What's Not Here Yet".
-   [ISSUES/002](../ISSUES/002-iodb-flush-o-store.md)
+   [iodb ISSUES/008](~/iodb/ISSUES/008-iodb-flush-o-store.md)
 
 Corrigido o item 1, o total cai de ~10.2s para ~8.7s; o resto e o item 2 mais uma terceira
 descoberta: o `scan()` publico **varre a arvore duas vezes**, porque `snapshot()` refaz o
@@ -154,7 +154,7 @@ As tres correcoes foram aplicadas em `iodb/fswatch/fswatch.js` e registradas em
 O baseline quente passou a ser MAIS BARATO que o frio, que e como um baseline persistente
 deveria se comportar — antes era o contrario.
 
-Sobra o defeito [002](../ISSUES/002-iodb-flush-o-store.md): `flushPages()` re-renderiza a
+Sobra o defeito [iodb ISSUES/008](~/iodb/ISSUES/008-iodb-flush-o-store.md): `flushPages()` re-renderiza a
 projecao inteira a cada flush (a escrita ja e diffada; o re-render nao). Isolado: com 400
 entries no store, acrescentar UM custa 86ms. Isso mexe no nucleo compartilhado por features
 ja 🔵 e precisa de sprint proprio no iodb — por isso foi reportado, nao corrigido junto.

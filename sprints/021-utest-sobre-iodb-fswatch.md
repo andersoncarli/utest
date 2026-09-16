@@ -142,7 +142,7 @@ Duas coisas aqui contrariam a expectativa, e as duas ficam registradas como sao:
 1. **Nao e "um pouco mais lento": e duas ordens de grandeza.** A premissa de que JS-sobre-texto
    perderia pouco para C++-sobre-binario nao se sustenta nesta medicao. O custo nao esta na
    travessia — esta no `open()`/`close()` do store, que e O(store) e nao O(dirty). E exatamente
-   o gargalo que [ISSUES/002](../ISSUES/002-iodb-flush-o-store.md) ja descreve, e que a feature
+   o gargalo que [iodb ISSUES/008](~/iodb/ISSUES/008-iodb-flush-o-store.md) ja descreve, e que a feature
    1.6 do `iodb` resolveu so pela metade: o `flushPages()` foi corrigido, o `open()` com replay
    do log nao.
 
@@ -170,7 +170,7 @@ check.
 
 ## O que fica aberto
 
-- O `open()` O(store) do iodb — [ISSUES/002](../ISSUES/002-iodb-flush-o-store.md), ja aberto,
+- O `open()` O(store) do iodb — [iodb ISSUES/008](~/iodb/ISSUES/008-iodb-flush-o-store.md), ja aberto,
   e do repo do `iodb`.
 - A assimetria relativo/absoluto entre as duas fontes de arvore.
 - O nome "quente" no `scanner.bench.js`, que mede outra coisa.

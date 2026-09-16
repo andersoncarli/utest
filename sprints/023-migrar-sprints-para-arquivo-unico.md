@@ -2,7 +2,7 @@
 sprint: "023"
 slug: migrar-sprints-para-arquivo-unico
 title: "migrar os 22 sprints para o formato de arquivo unico"
-features: ["90.1"]
+features: ["9.1"]
 budget: "40k-80k"
 state: open
 opened: "2026-09-12"
@@ -39,7 +39,7 @@ _Selado em 2026-09-12._ O REPORT contradiz, nao edita.
 
 ## Features que este sprint toca
 
-- **[90.1]** — `plans/90-docs/90.1-adotar-o-formato-sprint-2-0-arquivo-unico.md` —
+- **[9.1]** — `plans/9-docs/9.1-adotar-o-formato-sprint-2-0-arquivo-unico.md` —
   dona da spec. O contrato do formato vive no `~/sprint-cli/docs/sprint-2.0/`.
 
 ## Plano de materializacao
@@ -76,7 +76,7 @@ remocao e reversivel. 42 removidos, 24 arquivos unicos restantes.
   todo par tem `NNN-slug.md` correspondente, e que os 42 estao commitados. Feito
   neste sprint; o `sprint-cli` mantem os seus ate a 70.80 fechar.
 - **O tool nao ve o formato novo** e reservou 022 duas vezes. Contornado a mao;
-  registrado em [ISSUES/011](../ISSUES/011-arvore-requests-open-divergem.md).
+  registrado em `~/sprint-cli/ISSUES/007-arvore-requests-open-divergem.md`.
 
 ## Expectativa de budget
 
