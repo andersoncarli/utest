@@ -729,6 +729,14 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
     continue
   }
 
+  // Um `.t.js` que nunca chama `test()` roda ate o fim sem registrar nada — o cache
+  // trata isso como "passou" (ISSUES/014, sprint 026), mas o autor provavelmente
+  // esqueceu a API. So aplica ao caminho de import() direto: um executor
+  // (`.tuit`/`.eval.js`) gera `test()` sinteticos a partir de `steps`, e um arquivo
+  // sem passo nenhum e outro problema (fase vazia), nao este.
+  if (!executor && fileRoot.tests.length === 0)
+    process.stderr.write(`\x1b[33mutest: ${path.relative(root, entry.path)} não chamou test() nenhuma vez\x1b[39m\n`)
+
   // ── Run all registered tests in-process ──────────────────────────────────
   const suite = {
     name: path.basename(entry.path),

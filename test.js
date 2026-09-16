@@ -2,6 +2,15 @@
 let _current = null
 
 export function test(name, fn = () => {}, op = {}) {
+  // `fn` tem default (`() => {}`) só pra nunca crashar em `t.fn()` — não é um jeito
+  // válido de chamar `test()`, é so uma rede de segurança. `typeof fn` sozinho nunca
+  // pega "omitido" por causa do default; `arguments.length` distingue "não passou"
+  // de "passou uma função de verdade".
+  if (typeof name !== 'string' || arguments.length < 2 || typeof fn !== 'function') {
+    const fnDesc = arguments.length < 2 ? 'ausente' : typeof fn
+    process.stderr.write(`\x1b[33mutest: test() chamado sem nome/função — name:${JSON.stringify(name)} fn:${fnDesc}\x1b[39m\n`)
+  }
+
   const stack = new Error().stack
 
   const t = {
