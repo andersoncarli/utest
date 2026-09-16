@@ -226,12 +226,34 @@ async function runTest(t, ctx, timeout = 1000) {
 
 // ─── Args ────────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2)
-const hogs = args.includes('--hogs') || args.includes('-h')
-// `--hogs <N>` / `-h <N>` — o limiar de hog EM MS para esta execução inteira. O positional
+// `-h`/`--help` sai antes de qualquer outro parsing — convenção universal de CLI. O antigo
+// alias de `--hogs` sobe para `-H` (maiúsculo) para abrir espaço; nenhum `.t.js` testava
+// `-h` como string de CLI isolada (só `--hogs` por extenso), então a troca não quebra teste.
+if (args.includes('-h') || args.includes('--help')) {
+  process.stdout.write(`utest [<path>|<fase>|<termo>] [flags]
+
+  <path>            escopo: arquivo ou diretório (arquivo pula o walk)
+  <nome-de-fase>    roda só aquela fase do TEST.yaml (unit, eval, int, …)
+  <termo>           resolve pelo índice do storage (utest 3.2, utest button)
+
+  -v:0..3           verbosidade (v1 compacto · v2 erros+endereços · v3 +log do teste)
+  --force, -f       ignora o cache (evite em escopo largo — ver README)
+  --json            uma linha JSON por arquivo, para consumidor de máquina
+  --hogs, -H        só a lista de arquivos lentos (>1000ms), cega a passou/falhou
+  --trace[=<path>]  apêndice: onde foi o tempo (regiões de wall-time / probe.tree())
+  --uncovered, -u   lista arquivos-alvo sem .t.js pareado
+  --watch, -w       re-roda ao salvar, respeitando o cache (delta, não varredura)
+  --timeout=N       teto em ms por sh()/subprocesso
+  -h, --help        esta tela
+`)
+  process.exit(0)
+}
+const hogs = args.includes('--hogs') || args.includes('-H')
+// `--hogs <N>` / `-H <N>` — o limiar de hog EM MS para esta execução inteira. O positional
 // logo depois da flag, se for numérico. Sem ele (ou sem `--hogs`), fica o `HOG_MS` de
 // sempre (1000). Grava em `globalThis` (mais abaixo, junto do `utestVerbosity`) porque
 // `viewer.js` já foi importado — `hogMs()` relê de lá a cada chamada.
-const _hogFlagIdx = args.findIndex(a => a === '--hogs' || a === '-h')
+const _hogFlagIdx = args.findIndex(a => a === '--hogs' || a === '-H')
 const _hogLimit = _hogFlagIdx >= 0 && /^\d+$/.test(args[_hogFlagIdx + 1] || '')
   ? parseInt(args[_hogFlagIdx + 1], 10)
   : null
@@ -900,7 +922,7 @@ const covLine = srcTotal ? `coverage: ${Math.round((srcCovered / srcTotal) * 100
 const anyRed = rendered.some(r => r.main.state !== 'passed')
 const framed = anyRed
 
-// ─── `--hogs` / `-h` — MODO LASER, zero moldura ───────────────────────────────────
+// ─── `--hogs` / `-H` — MODO LASER, zero moldura ───────────────────────────────────
 // `--hogs` é uma pergunta sobre TEMPO. A resposta é a lista dos arquivos-hog e seus badges,
 // direto, sem `─────`, sem `utest results`, sem phaseLine, sem `coverage:`. `-v:1` → só
 // `nome 🐢N`; `-v:2` → `nome 🐢N ✔P` (a contagem de checks a mais). NUNCA mostra vermelhos —

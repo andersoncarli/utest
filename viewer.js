@@ -258,12 +258,14 @@ function gatherExceptions(t, out = []) {
   return out
 }
 
-// A barra de título de UM arquivo: `nome 🐢N 💥K ✘M ✔P ······· (243ms)`. É a linha que o
+// A barra de título de UM arquivo: `nome ······· (243ms) 🐢N 💥K ✘M ✔P`. É a linha que o
 // `-v:2` mostra por arquivo e a que encabeça a forma direta (`utest <arquivo>`). O nome
-// vem SUBLINHADO (é um cabeçalho — o que está abaixo o detalha), e os badges seguem a
-// ordem canônica de `fileReportSpan`: 🐢 (múltiplo do limite), 💥 (exceções, separado),
-// ✘ (falhas de check), ✔ (passados). Derivada do REGISTRO (`checkCount`/`failCount`/
-// `excCount`/`lastMs`), não da árvore viva — o arquivo cacheado render igual ao que rodou.
+// vem SUBLINHADO (é um cabeçalho — o que está abaixo o detalha); os badges vêm DEPOIS do
+// tempo — o tempo é a métrica fixa de referência, os badges são o detalhe que a
+// acompanha — na ordem canônica de `fileReportSpan`: 🐢 (múltiplo do limite), 💥
+// (exceções, separado), ✘ (falhas de check), ✔ (passados). Derivada do REGISTRO
+// (`checkCount`/`failCount`/`excCount`/`lastMs`), não da árvore viva — o arquivo cacheado
+// render igual ao que rodou.
 export function fileLine(t, { width = 80, minMs = 10 } = {}) {
   const ms = t.lastMs || Math.round(t.duration || 0)
   const s = summary(t)
@@ -280,7 +282,8 @@ export function fileLine(t, { width = 80, minMs = 10 } = {}) {
   ].filter(Boolean).join(' ')
   // Abaixo do limiar o tempo não é informação — só a coluna que ele empurraria.
   const time = ms >= minMs ? ` (${ms}ms)` : ''
-  return dotfill(`${cl('_', t.name)} ${badges} `, '·', time, width)
+  const right = badges ? `${time} ${badges}` : time
+  return dotfill(cl('_', t.name), '·', right, width)
 }
 
 // O bloco de erro de UM arquivo vermelho, já indentado: a linha do check/exceção e o
@@ -668,7 +671,18 @@ export function compactFails(main, { width = 80, hogs: showHogs = false } = {}) 
     groups.push(hogTokens)
   }
 
-  return wrapTokenGroups(groups, width)
+  const lines = [wrapTokenGroups(groups, width)]
+  // Uma exceção (erro de build/import, `💥`) não é uma falha de `check()` — sem ela, o v1
+  // só diz "💥K" e o usuário tem que re-rodar com `-v2`/`-v3` para descobrir O QUÊ quebrou.
+  // `failLines`/`errorView` já sabem extrair mensagem + endereço (mesmo mecanismo do v2);
+  // aqui só para exceção, não para falha de check comum — essa continua resumida em v1.
+  for (const t of reds) {
+    const exc = t._cached ? (t.excCount || 0) : summary(t).exception
+    if (!exc) continue
+    lines.push(...failLines(t, { width, indent: true }))
+  }
+
+  return lines.join('\n')
 }
 
 // Empacota cada GRUPO de tokens num rio contínuo, dois espaços entre tokens, quebrando

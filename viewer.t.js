@@ -395,7 +395,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
       }],
     }] }
     const out = strip(fullView(main, { verbosity: 2, width: 80, title: 'eval' }))
-    check(/x\.eval\.js .*✘1/.test(out), true, 'a barra de título do arquivo, com a contagem')
+    check(/x\.eval\.js.*✘1/.test(out), true, 'a barra de título do arquivo, com a contagem')
     check(out.includes('check(2 + 2, 5)'), true, 'a linha do check aparece')
     check(out.includes('x.eval.js:012'), true, 'o endereço do stack aparece')
     check(out.includes('saída engolida'), false, 'o log() do teste NÃO aparece no v2')
@@ -574,7 +574,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
     writeFileSync(join(dir, 'ok.t.js'),
       "import { n } from './ok.js'\ntest('soma', ({ check }) => { check(n + n, 4); check(n, 2) })\n")
     const r = Bun.spawnSync({
-      cmd: ['utest'), 'ok.t.js'],
+      cmd: ['utest', 'ok.t.js'],
       cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
     })
     const out = strip(r.stdout.toString()).trim()
@@ -598,13 +598,13 @@ test('viewer — relatório compacto', ({ test, check }) => {
       "  check(() => { throw new Error('Boom!') })\n" +
       "})\n")
     const r = Bun.spawnSync({
-      cmd: ['utest'), 'bad.t.js'],
+      cmd: ['utest', 'bad.t.js'],
       cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
     })
     const out = strip(r.stdout.toString())
     rmSync(dir, { recursive: true, force: true })
     // fileLine + os erros, nada de cabeçalho/rodapé
-    check(/^bad\.t\.js .*✘/.test(out.trim()), true, `começa direto na barra do arquivo: ${JSON.stringify(out.split('\n')[0])}`)
+    check(/^bad\.t\.js.*✘/.test(out.trim()), true, `começa direto na barra do arquivo: ${JSON.stringify(out.split('\n')[0])}`)
     check(out.includes('utest results'), false, 'sem o cabeçalho `utest results`')
     check(out.includes('tip:'), false, 'sem a linha `tip:`')
     check(out.includes('coverage:'), false, 'sem a linha `coverage:`')
@@ -634,7 +634,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
       "test('lento', ({ check }) => { const t = Date.now(); while (Date.now() - t < 90) {} check(1, 1) })\n")
     writeFileSync(join(dir, 'quick.t.js'), "test('rápido', ({ check }) => check(2, 2))\n")
     const run = (extra = []) => strip(Bun.spawnSync({
-      cmd: ['utest'), '.', '--hogs', '50', ...extra],
+      cmd: ['utest', '.', '--hogs', '50', ...extra],
       cwd: dir, env: { ...process.env }, stdout: 'pipe', stderr: 'pipe',
     }).stdout.toString())
 
