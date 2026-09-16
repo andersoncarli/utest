@@ -24,17 +24,10 @@ Formato de linha: `- [sistema] frase curta — <ponteiro opcional>`
 - [sprint-cli] `021-*.report.md` sem frontmatter — o sprint fica invisivel ao vinculo
   feature↔sprint; o `close` deveria recusar sprint sem `features` —
   [ISSUES/009](ISSUES/009-report-021-sem-frontmatter.md)
-- [utest] `HANDOFF.md` avulso na raiz (2026-04-24), sem sprint nem data no nome — mover
-  para `handoffs/` conforme a convencao —
-  [ISSUES/010](ISSUES/010-handoff-md-avulso-sem-dono.md)
-- [utest] `requests()` e `open()` divergem em nos profundos da arvore de sprints — duas
+- [sprint-cli] `requests()` e `open()` divergem em nos profundos da arvore de sprints —
+  mora em `sprint-template.js` (`~/sprint-cli/v2/tools/`, fora do repo `utest`) — duas
   vias para o mesmo conteudo, uma delas errada —
   [ISSUES/011](ISSUES/011-arvore-requests-open-divergem.md)
-- [utest] `.t.js` cru (sem `test()`, so `console.assert`/`console.log`) passa isolado mas
-  reporta falso-vermelho dentro de `utest .` — o sub-ledger do arquivo so tem `passed`,
-  o agregado da raiz marca `failed`; causa identificada (fix aplicado do lado do consumidor
-  em `iodb`, causa raiz no utest ainda aberta) —
-  [ISSUES/014](ISSUES/014-console-assert-cru-falso-vermelho-em-lote.md)
 - [sprint-cli] `.eval.js` com `t.real` + caminho absoluto fora do sandbox (ex.:
   `/tmp/nome-fixture`) resolve errado: o `sh()` desse harness roda com um cwd que nao
   reconhece o path absoluto, cai em "parece caminho mas nao existe — tratado como filtro de
@@ -94,6 +87,28 @@ _(vazio)_
 
 ## DONE
 
+- [utest] `.t.js` cru (sem `test()`, so `console.assert`/`console.log`) passava isolado mas
+  reportava falso-vermelho dentro de `utest .` — **resolvido** (sprint 026):
+  causa raiz era `cache.js` tratando `!result.checks` (zero checks) como sinonimo de
+  falha em duas gravacoes (`write`, linha ~560, e o record de `results.json`, linha
+  ~587) — um arquivo cru sem `check()` tem `checks:0` legitimamente quando passa, e
+  isso e diferente de `result.failed`, que ja e o veredito correto
+  (`suite.state !== 'passed'`, vindo de `utest.js`). O sub-ledger local sempre usou
+  `suite.state` direto e por isso nunca teve o bug; era so o cache/`results.json`
+  (fonte que `utest .` agregado le) que divergia. Fix: as duas condicoes passaram a
+  usar so `result.failed`/`result.exception`, sem `!result.checks`. Confirmado com
+  fixture de 2 arquivos (regra dos 3): isolado `✔1`, agregado `✔2`, `results.json`
+  gravando `"checks":0,"state":"passed"` corretamente —
+  [ISSUES/014](ISSUES/DONE/014-console-assert-cru-falso-vermelho-em-lote.md).
+  Sintoma 2 do mesmo achado (colisao `typed.t.js`/`typedtree.t.js` quando passados
+  juntos) e um bug DIFERENTE, nao tocado aqui — `utest.js:307` so promove o primeiro
+  path existente a `rawTarget`, o segundo vira filtro de nome em vez de rodar junto;
+  comportamento deliberado de ISSUES/008, mas que aqui descarta o segundo arquivo
+  real. Registrado a parte se for reabrir.
+- [utest] `HANDOFF.md` avulso na raiz (2026-04-24), sem sprint nem data no nome —
+  **resolvido**: ja foi movido para `handoffs/260424.md` (commit `4ab3484`,
+  "minor reorg docs") — item estava desatualizado, nao havia mais `HANDOFF.md` na raiz —
+  [ISSUES/010](ISSUES/DONE/010-handoff-md-avulso-sem-dono.md)
 - [utest] `check.test` (fallback global de `check()` sem bind, usado pelo shim `expect()`
   de `shims.js`) apontava para o `t` errado quando um `check`/exceção tardia (trabalho
   solto de `setTimeout`/promise não esperada, ou o `Promise.race` do timeout vencendo)

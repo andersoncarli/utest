@@ -557,13 +557,16 @@ export function TestCache(root, { ledger = null } = {}) {
           // Exceção não tem estrutura fixa pra reconstruir (stack fresco vale mais
           // que o segundo economizado) — sempre re-roda, sem sidecar.
           bust(testPath)
-        } else if (result.failed || !result.checks) {
+        } else if (result.failed) {
           // Vermelho comum agora CACHEIA igual ao verde: o sidecar guarda o
           // resultado e o mtime ATUAL do teste (sem alvo, não há segundo comum pra
           // recravar) — a próxima leitura só re-roda se o teste ou uma dep mudar de
           // verdade, ou sob `--force`. O que atualiza o cache é sempre a ÚLTIMA
           // execução real, passe ou falhe: um vermelho que virou verde limpa o
           // sidecar (branch `else` abaixo, via `writeSelf` do resultado passado).
+          // `result.failed` já é o veredito verdadeiro (`suite.state !== 'passed'`)
+          // — não `!result.checks`: um arquivo `.t.js` "cru" (sem `check()`) que
+          // passa tem `checks:0` legitimamente, e não é uma falha (ISSUES/014).
           writeSelf(testPath, {
             failed: true, exception: false,
             checks: result.checks ?? 0, failCount: result.failCount ?? 1, tests: result.tests ?? 0,
@@ -584,7 +587,7 @@ export function TestCache(root, { ledger = null } = {}) {
         const rec = {
           ms: result.ms, tests: result.tests, checks: result.checks,
           failCount: result.failCount, failLines: result.failLines,
-          state: (result.exception || result.failed || !result.checks) ? 'failed' : 'passed',
+          state: (result.exception || result.failed) ? 'failed' : 'passed',
           exception: !!result.exception,
           extraDeps, targetPath,
         }
