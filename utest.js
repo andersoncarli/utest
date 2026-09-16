@@ -201,7 +201,17 @@ async function runTest(t, ctx, timeout = 1000) {
     // estado — o arquivo passa, cacheia verde, e o defeito some. Selado, ela
     // reabre o veredito de quem a soltou.
     t.sealed = true
-    check.test = saved
+    // `check.test` só volta ao valor salvo se ainda for ESTE `t` — um straggler que
+    // já rodou dentro do `Promise.race` acima pode ter trocado o global de novo (via
+    // `check.bind`) para outro nó da própria árvore; restaurar cegamente pisaria nisso.
+    // E se por algum motivo `check.test` ainda for `t` no próximo `finally` de fora
+    // (arquivo seguinte ainda não chamou `runTest`), um `check()` DESLIGADO (sem bind,
+    // como o `expect()` de `shims.js`) que dispare tarde cairia neste nó já selado —
+    // pior, se `saved` for de outro arquivo, cairia lá. Selar também no global: um
+    // check tardio sem bind explícito passa a ficar sem dono (comportamento já aceito
+    // em `leak.t.js`), em vez de contaminar o próximo `check.test` que vier.
+    if (check.test === t) check.test = null
+    else check.test = saved
     // Um passo cujo custo real já rodou ANTES do `test()` (a fase `eval`: `sweepFeature`
     // roda o `sh()` de verdade uma vez, e o `fn` deste nó só confere o veredito já pronto)
     // mede quase zero aqui — o tempo de verdade se perde, e `--hogs`/o `(Nms)` do viewer
@@ -273,6 +283,16 @@ const positional = args.filter((a, i) =>
 // e cai em filtro de nome (fura o cache inteiro, escaneia todas as fases: o próprio bug
 // que este mecanismo existe para evitar, só que ativado pelo cwd errado).
 let rawTarget = positional.find(a => fs.existsSync(a))
+// Mais de um caminho existente na linha: só o primeiro vira `rawTarget` — os demais NÃO
+// podem só desaparecer (ISSUES/008: `utest src pagedtext` rodava só `src`, `pagedtext.t.js`
+// nunca era tocado, e o relatório saía verde sobre metade do pedido, sem aviso nenhum).
+// Tratados como termo de filtro de nome (o mesmo papel de um `filterTerms` comum) em vez de
+// um segundo target: dá pra "estreitar dentro do escopo já restrito por `rawTarget`" sem
+// reimplementar scan com múltiplas raízes.
+const _extraPaths = positional.filter(a => a !== rawTarget && fs.existsSync(a))
+if (_extraPaths.length) {
+  process.stderr.write(`\x1b[33mutest: ${_extraPaths.length > 1 ? 'caminhos' : 'caminho'} extra ${_extraPaths.map(p => `"${p}"`).join(', ')} não vira(m) target — usado(s) como filtro de nome sobre "${rawTarget}"\x1b[39m\n`)
+}
 // Um positional que casa um NOME DE FASE declarada no TEST.yaml seleciona aquela fase e sai
 // da lista de filtros — `utest.js eval` roda só a fase `eval`, cacheada, em vez de tratar
 // `eval` como termo de nome (que furava o cache e ainda escaneava as outras fases). Os
@@ -287,7 +307,18 @@ const _declaredPhases = new Set(fs.existsSync(_yamlNearCwd)
   ? Object.keys(parseYaml(fs.readFileSync(_yamlNearCwd, 'utf8')) || {}).filter(k => k !== 'boot' && k !== 'exclude')
   : [])
 const phaseArg = positional.find(a => _declaredPhases.has(a) && !fs.existsSync(a))
-let filterTerms = positional.filter(a => a !== phaseArg && !fs.existsSync(a))
+let filterTerms = [
+  ...positional.filter(a => a !== phaseArg && !fs.existsSync(a)),
+  ..._extraPaths.map(p => path.basename(p).replace(/\.(t|it|eval)\.js$|\.js$/, '')),
+]
+// Um positional que PARECE caminho (tem `/` ou termina em `.js`) mas não existe no disco
+// hoje virava filtro de nome mudo — nenhum entry bate, o relatório sai vazio sem dizer por
+// quê (ISSUES/008, nota final). Avisa; segue como filtro de nome mesmo assim (pode ser um
+// termo legítimo tipo "cache.js" que o usuário quis dizer como NOME, não caminho).
+for (const t of filterTerms) {
+  if ((t.includes('/') || /\.js$/.test(t)) && !fs.existsSync(t))
+    process.stderr.write(`\x1b[33mutest: "${t}" parece caminho mas não existe — tratado como filtro de nome\x1b[39m\n`)
+}
 
 // **O storage é o índice.** Um termo que NÃO é path (`utest 3.2`, `utest button`) é
 // resolvido contra as chaves de `.utest/results.json` ANTES de qualquer scan: se casa
@@ -436,7 +467,7 @@ const noStream = args.includes('--no-stream')
 const streamPhase = process.stdout.isTTY && verbosity < 3 && !asJson && !hogs && !watch && !noStream && !doTrace
 
 // ─── Roda UMA fase: scan (ou provider) → executa cada entry → devolve o nó da fase ────────
-async function runPhase(phase) {
+async function runPhase(phase, { forceFileEntry = false } = {}) {
   let entries = [], uncovered = [], cache = null
   const provider = entriesFor(phase)
 
@@ -493,7 +524,12 @@ async function runPhase(phase) {
       const exc = [...(cfgRaw.exclude || []), ...(cfg.exclude || [])]
       const rel = path.relative(path.dirname(configPath), absFile)
       const belongs = makeFilter(inc, exc).included(rel)
-      if (belongs) {
+      // `forceFileEntry`: nenhuma fase declarada casou este arquivo, e esta é a
+      // ÚLTIMA fase do loop — trata-lo como pertencente de qualquer forma. Um
+      // arquivo apontado explicitamente na linha de comando (`_isFile`) é uma
+      // instrução direta do usuário; a regra de fase é para decidir o que entra
+      // num `utest .`, não para recusar um alvo nomeado (ISSUES/006).
+      if (belongs || forceFileEntry) {
         const target = findTarget(absFile)
         cache = TestCache(path.dirname(configPath), { ledger: cacheLedger })
         entries = [{ path: absFile, target, cache: cache.read(absFile, target, { phase }) }]
@@ -767,7 +803,13 @@ for (let _pi = 0; _pi < phaseNames.length; _pi++) {
   // faz `registerEvalPhase({ entries })`). Antes de CADA fase seguinte, devolve o
   // registry ao que só o `boot:` do TEST.yaml monta.
   if (_pi > 0) { resetRegistry(); await runBoot() }
-  phaseResults.push({ phase, ...(await runPhase(phase)) })
+  // Último round: um alvo explícito (`_isFile`) que não casou NENHUMA fase até aqui
+  // cai como entry sintética nesta última — ver `runPhase`. Sem isso, `--trace`
+  // apontado pra um `.js` fora de todo `include` do TEST.yaml sai "nada a traçar"
+  // mesmo com o arquivo existindo (ISSUES/006).
+  const isLastPhase = _pi === phaseNames.length - 1
+  const noEntryYet = _isFile && phaseResults.every(r => !r.main?.tests?.length)
+  phaseResults.push({ phase, ...(await runPhase(phase, { forceFileEntry: isLastPhase && noEntryYet })) })
   if (streamPhase) process.stdout.write('\r\x1b[K')   // apaga a barra viva da fase
 }
 
@@ -800,16 +842,25 @@ if (asJson) {
   for (const { phase, main } of phaseResults) {
     for (const t of main.tests) {
       const m = t.name.match(/^(\d+\.\d+)\.eval\.js$/)
+      // `t.state` (não-cacheado) é um SNAPSHOT gravado uma vez, logo após o loop de
+      // `runTest` do arquivo (utest.js, `suite.state = ... ; main.tests.push(suite)`) —
+      // ele não é atualizado se um straggler (setTimeout, promise solta) reabrir o
+      // veredito de um teste FILHO depois desse ponto. `summary(t)` recursa `t.checks`/
+      // `t.tests` ao VIVO, então relê o estado atual de cada filho a cada chamada —
+      // reflete o reselo mesmo que `t.state` em si tenha ficado para trás. `grand` (o
+      // exit code, mais abaixo) já usa esse recompute; aqui não podia divergir dele.
+      const liveState = t._cached ? t.state
+        : (() => { const s = summary(t); return s.exception > 0 ? 'exception' : s.failed > 0 ? 'failed' : 'passed' })()
       // `fails[]` só nos vermelhos NÃO cacheados (o cache não guarda os `checks[]` — carrega
       // só o `failCount`). É o detalhe que o consumidor de máquina pode querer sem inflar a
       // linha do verde nem o relatório humano.
-      const fails = t.state === 'passed' || t._cached ? []
+      const fails = liveState === 'passed' || t._cached ? []
         : gatherChecks(t).filter(c => c.state !== 'passed').map(failInfo)
       rows.push({
         phase,
         file: t.address || t.name,
         feature: m ? m[1] : null,
-        state: t.state,                                  // 'passed' | 'failed' | 'exception'
+        state: liveState,                                // 'passed' | 'failed' | 'exception'
         cached: !!t._cached,
         tests: t.testCount ?? summary(t).tests,
         checks: t.checkCount ?? summary(t).passed,
@@ -1146,6 +1197,7 @@ if (watch) {
   let debounce = null
   let child = null
   let lastChildExit = 0  // epoch ms when the last child process finished
+  let rerunning = false  // true enquanto um rerun está entre `kill()` e o novo `spawn`
 
   const watchLine = () =>
     process.stdout.write(`\x1b[90mWatching ${root} — press Ctrl+C to stop\x1b[39m\n`)
@@ -1153,10 +1205,26 @@ if (watch) {
   let changed = new Set()   // arquivos tocados desde a última rodada
   const isTestFile = f => /\.(t|test|eval|it|integration|rendering)\.(js|ts)$|\.tuit$/.test(f)
 
-  const rerun = () => {
+  const rerun = async () => {
     clearTimeout(debounce)
     debounce = null
-    if (child) { try { child.kill() } catch { } }
+    // Uma mudança de arquivo pode chegar enquanto este rerun ainda está entre o
+    // `kill()` e o novo `spawn` (esperando `exited`) — sem a trava, o SEGUNDO rerun
+    // dispararia seu próprio `spawn` correndo junto com o do primeiro, dois filhos
+    // no mesmo `stdout: 'inherit'`. `changed` já acumula o arquivo tocado; o
+    // `debounce` seguinte (linha ~1265) roda de novo assim que este terminar.
+    if (rerunning) return
+    rerunning = true
+    // `child.kill()` só PEDE a morte — o processo antigo pode continuar escrevendo em
+    // `stdout: 'inherit'` por mais alguns ms. Sem esperar `exited`, o `Bun.spawn` do
+    // próximo rerun começa a escrever no MESMO stdout enquanto o antigo ainda está
+    // finalizando: as duas saídas intercalam, e o relatório que aparece na tela pode
+    // ser uma mistura do resultado velho com o novo — o sintoma 1 de ISSUES/012 ("o
+    // watch mostra um resultado que uma chamada direta simultânea contradiz").
+    if (child) {
+      try { child.kill() } catch { }
+      try { await child.exited } catch { }
+    }
     // Cada refresh recomeça no topo: reset da scroll-region (`\x1b[r`, desfaz qualquer
     // margem que um run anterior tenha deixado), cursor pra 0,0 (`\x1b[H`), limpa da linha
     // atual pra baixo (`\x1b[2J`). NÃO usa `\x1b[3J` — o scrollback fica intacto, o
@@ -1181,6 +1249,11 @@ if (watch) {
     child = Bun.spawn(['bun', import.meta.path, ...baseArgs, ...scoped, '--no-stream'], {
       stdout: 'inherit', stderr: 'inherit',
     })
+    rerunning = false
+    // Mudanças que chegaram enquanto este rerun esperava o `exited` do antigo ficaram
+    // em `changed` sem debounce agendado (a trava acima devolveu cedo) — agenda agora,
+    // senão elas ficam mudas até a PRÓXIMA edição do usuário.
+    if (changed.size && !debounce) debounce = setTimeout(rerun, 80)
     child.exited.then(() => {
       lastChildExit = Date.now()
       watchLine()

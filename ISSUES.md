@@ -15,6 +15,12 @@ Formato de linha: `- [sistema] frase curta — <ponteiro opcional>`
 
 ## TODO
 
+- [sprint-cli] **desbloqueada, prioritaria** — `utest` deveria ser a autoridade final do
+  degrau no `sprint` (rebaixamento automatico por veredito). As duas pre-condicoes que
+  bloqueavam isto ja fecharam (007 e 012, ver DONE); o que falta agora e so do lado do
+  `sprint-cli`: decidir se/como consumir `--json` como fonte continua de degrau, em vez de
+  `--sweep` manual ocasional —
+  [ISSUES/013](ISSUES/013-utest-deveria-ser-a-autoridade-do-degrau-do-sprint.md)
 - [sprint-cli] `021-*.report.md` sem frontmatter — o sprint fica invisivel ao vinculo
   feature↔sprint; o `close` deveria recusar sprint sem `features` —
   [ISSUES/009](ISSUES/009-report-021-sem-frontmatter.md)
@@ -24,6 +30,11 @@ Formato de linha: `- [sistema] frase curta — <ponteiro opcional>`
 - [utest] `requests()` e `open()` divergem em nos profundos da arvore de sprints — duas
   vias para o mesmo conteudo, uma delas errada —
   [ISSUES/011](ISSUES/011-arvore-requests-open-divergem.md)
+- [utest] `.t.js` cru (sem `test()`, so `console.assert`/`console.log`) passa isolado mas
+  reporta falso-vermelho dentro de `utest .` — o sub-ledger do arquivo so tem `passed`,
+  o agregado da raiz marca `failed`; causa identificada (fix aplicado do lado do consumidor
+  em `iodb`, causa raiz no utest ainda aberta) —
+  [ISSUES/014](ISSUES/014-console-assert-cru-falso-vermelho-em-lote.md)
 
 - [iodb] `flush()`/`close()` reescrevem a projecao inteira: com a escrita ja buferizada,
   `in()` x300 custa 4ms e `flush()`+`close()` custam 1150ms — o custo e O(store), nao
@@ -39,20 +50,6 @@ Formato de linha: `- [sistema] frase curta — <ponteiro opcional>`
 - [fswatch] README documenta `watch({ baseline: false })` mas o codigo le `baselineFirst` — a
   opcao do README e silenciosamente ignorada
 - [fswatch] `hash` e sempre `null` e `content_changed` nunca e emitido, ambos documentados
-- [utest] `--trace` num arquivo que nenhuma fase do `TEST.yaml` inclui responde
-  "nenhum arquivo casou o escopo — nada a tracar" e sai: um `.eval.js` (ou qualquer `.js`)
-  so e tracavel se houver uma fase que case o padrao. O `--trace` deveria aceitar QUALQUER
-  arquivo `.js` apontado explicitamente, sem depender de config — o gate hoje e o escopo
-  (`narrowScope || _isFile`, utest.js:354), mas o arquivo cai antes, na selecao de entries
-  — [ISSUES/006](ISSUES/006-trace-exige-fase-configurada.md)
-- [utest] agregado global `grand` (exit code) conta `failed`/`exception` vazados entre
-  arquivos concorrentes — `page-cursor.t.js` + `tabular-table.t.js` juntos derrubam o exit
-  code mesmo com todo `state` `passed`; migrado de `iodb` —
-  [ISSUES/007](ISSUES/007-grand-failcount-cross-file.md)
-- [utest] dois caminhos posicionais na CLI: `positional.find` promove so o primeiro
-  existente a target, e `positional.filter` descarta o resto por existir — o segundo
-  caminho nao roda, nao filtra e nao avisa; o relatorio sai verde sobre metade do pedido.
-  Migrado de `iodb` — [ISSUES/008](ISSUES/008-dois-caminhos-posicionais-segundo-ignorado.md)
 - [sprint] `sprint test`/`utest` deveriam ser intercambiaveis, nao dois verbos separados que
   o usuario precisa lembrar quando usar cada um. Achado no `iodb`: `sprint test <N.F>` roda
   os comandos de `verify_tests:` (hoje so `utest .`) e DERIVA o degrau 🟡 da feature —
@@ -86,25 +83,63 @@ _(vazio)_
 
 ## DONE
 
+- [utest] `check.test` (fallback global de `check()` sem bind, usado pelo shim `expect()`
+  de `shims.js`) apontava para o `t` errado quando um `check`/exceção tardia (trabalho
+  solto de `setTimeout`/promise não esperada, ou o `Promise.race` do timeout vencendo)
+  disparava depois que `runTest` já tinha selado o nó e restaurado o global — a contagem
+  de `checks` de um arquivo podia vazar para outro que rodasse "ao lado" na mesma
+  invocação — **resolvido**: `check.test` só é restaurado ao valor salvo se
+  ainda apontar para o `t` que está selando; senão zera, e um check tardio sem bind fica
+  sem dono (comportamento já aceito por `leak.t.js`) em vez de contaminar o próximo global
+  — `utest.js` (`runTest`) e `runner.js` (mesma regra) —
+  [ISSUES/007](ISSUES/DONE/007-grand-failcount-cross-file.md). Mesma sessão achou uma segunda
+  fresta da mesma família: o `state` de uma linha do `--json` era um snapshot gravado uma
+  vez logo após o loop de `runTest` do arquivo, e não se atualizava se um straggler reabrisse
+  o veredito de um filho depois — `state:"passed"` podia sair ao lado de `failCount:1` no
+  mesmo objeto. Corrigido junto: `state` de entry não-cacheada é recomputado via `summary(t)`
+  na hora de serializar `--json`, igual o `failCount` já fazia.
+- [utest] `-w` podia mostrar um resultado misturado com o da rodada anterior: `rerun()`
+  matava (`child.kill()`) o processo filho antigo e disparava o novo `Bun.spawn` no MESMO
+  `stdout: 'inherit'` sem esperar o antigo terminar de fato — as duas saídas podiam
+  intercalar. `--force` continuava sendo hábito defensivo porque o cache se autodesconfia e
+  re-roda (comportamento correto, só verboso) — **resolvido**: `rerun` agora
+  aguarda `child.exited` antes do próximo `spawn`, com trava (`rerunning`) contra dois
+  reruns sobrepostos — `utest.js` (bloco `--watch`) —
+  [ISSUES/012](ISSUES/DONE/012-watch-nao-pega-tudo-force-deveria-ser-desnecessario.md)
+- [utest] `--trace` num arquivo que nenhuma fase do `TEST.yaml` inclui respondia "nenhum
+  arquivo casou o escopo — nada a tracar" em vez de traçar o arquivo explícito —
+  **resolvido**: quando `_isFile` e nenhuma fase casou até a última do loop,
+  `runPhase` gera uma entry sintética pro arquivo mesmo assim (um alvo nomeado na linha de
+  comando é instrução direta do usuário, a regra de fase é só para `utest .`) — `utest.js`
+  (`runPhase`, loop de fases) — [ISSUES/006](ISSUES/DONE/006-trace-exige-fase-configurada.md)
+- [utest] dois caminhos posicionais na CLI: `positional.find` promovia só o primeiro
+  existente a target, e `positional.filter` descartava o resto por existir — o segundo
+  caminho não rodava, não filtrava e não avisava; o relatório saía verde sobre metade do
+  pedido. Um positional parecido com caminho mas inexistente também não avisava —
+  **resolvido**: caminho(s) extra(s) viram filtro de nome sobre o
+  `rawTarget`, com aviso; um filtro que parece caminho (`/` ou `.js`) mas não existe no
+  disco também avisa — `utest.js` (parsing de positional) —
+  [ISSUES/008](ISSUES/DONE/008-dois-caminhos-posicionais-segundo-ignorado.md)
 - [utest] `ledger.t.js` e `state.t.js` falhavam (7 checks, 2 excecoes) — **resolvido**
   (sprint 021): o import pedia `../iodb/io-engine.js` e o modulo mora em
   `../iodb/src/io-engine.js`; o `catch` do degrade engolia o `ERR_MODULE_NOT_FOUND` em
   silencio. Caminho corrigido, degrade agora fala sob `UTEST_DEBUG`, e o falso-verde do
   `verify()` fechado com `length > 0` — suite verde, 630 checks —
-  [ISSUES/005](ISSUES/005-ledger-state-testes-vermelhos.md)
+  [ISSUES/005](ISSUES/DONE/005-ledger-state-testes-vermelhos.md)
 - [fswatch] `reconcile()` gravava entry a entry com `flush` default `true`, flushando o store
   inteiro a cada arquivo — **resolvido** (`{ flush: false }` + um `store.flush()` no fim):
   300 arquivos de 4901ms para 241ms, 20x —
-  [ISSUES/001](ISSUES/001-fswatch-reconcile-sem-buffer.md)
+  [ISSUES/001](ISSUES/DONE/001-fswatch-reconcile-sem-buffer.md)
 - [fswatch] `scan()` publico varria a arvore DUAS vezes (`scanner.scan()` e depois
   `snapshot()`) — **resolvido**: com `describe()` preenchendo `path`, o mapa que o Scanner ja
   devolve E o baseline, e a segunda travessia sumiu —
-  [ISSUES/003](ISSUES/003-fswatch-scan-varre-duas-vezes.md)
+  [ISSUES/003](ISSUES/DONE/003-fswatch-scan-varre-duas-vezes.md)
 - [fswatch] entries do `Scanner` batch nao tinham `path`, contra o contrato — **resolvido**:
   `describe()` passa a poe-lo (absoluto), entao TODO produtor o carrega e o idiom publicado
-  no doc volta a funcionar — [ISSUES/004](ISSUES/004-fswatch-path-ausente.md)
+  no doc volta a funcionar — [ISSUES/004](ISSUES/DONE/004-fswatch-path-ausente.md)
 
-Efeito combinado, medido: indexar 400 arquivos caiu de ~6500ms para **814ms**; no repo do
-`utest`, o `scan()` via fswatch caiu de ~13.5s para **1.5s** com baseline quente (e agora o
-quente e mais barato que o frio, como deveria). A suite do `iodb` caiu de 50s para 27s e
-segue verde nos 2703 checks; a do `utest` segue nos mesmos 7 vermelhos pre-existentes.
+Efeito combinado, medido (na epoca destas tres): indexar 400 arquivos caiu de ~6500ms para
+**814ms**; no repo do `utest`, o `scan()` via fswatch caiu de ~13.5s para **1.5s** com
+baseline quente (e agora o quente e mais barato que o frio, como deveria). A suite do
+`iodb` caiu de 50s para 27s e seguia verde nos 2703 checks; a do `utest` seguia nos mesmos
+7 vermelhos pre-existentes daquele momento — ja resolvidos por 005/006/007/008/012 acima.

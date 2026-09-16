@@ -101,7 +101,12 @@ export async function runTest(t, op = {}) {
     t.state = 'exception'
     t.error = e
   } finally {
-    check.test = saved
+    t.sealed = true
+    // Mesma regra de utest.js: só restaura `check.test` se ele ainda apontar para
+    // ESTE `t` — senão um straggler já trocou o global, e restaurar cegamente
+    // pisaria nisso ou deixaria um check tardio sem bind cair no arquivo errado.
+    if (check.test === t) check.test = null
+    else check.test = saved
     t.endTime  = process.hrtime.bigint()
     t.duration = Number(t.endTime - t.startTime) / 1e6
   }
