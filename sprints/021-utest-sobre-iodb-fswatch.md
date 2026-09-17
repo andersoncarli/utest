@@ -12,7 +12,7 @@ migrated: "0.2"
 
 # 021 — utest se apoia em iodb/fswatch, e mantem o fallback
 
-Milestone. Features **8.1** (ledger append-only), **8.2** (`.utest/STATE`) e **8.3** (`scanner.js` sobre o baseline do fswatch).
+Milestone. Features **8.1** (ledger append-only), **8.2** (`.utest/STATE`) e **8.3** (`src/scanner.js` sobre o baseline do fswatch).
 
 # PLAN
 
@@ -34,12 +34,12 @@ de velocidade bruta.
 
 ### 1. O import quebrado (8.1 / 8.2) — a suite volta ao verde
 
-`ledger.js:33` e `state.js:31` pediam `'../iodb/io-engine.js'`; o modulo mora em
+`src/ledger.js:33` e `src/state.js:31` pediam `'../iodb/io-engine.js'`; o modulo mora em
 `'../iodb/src/io-engine.js'`. O `catch` do degrade engoliu o `ERR_MODULE_NOT_FOUND` em
 silencio e tudo rodou sobre o `noop()`. Nao e regressao do 022: o caminho nasceu errado no
 commit original da 8.1 (`b9b0b66`), nove commits atras.
 
-verify: `utest state.t.js --force` verdes.
+verify: `utest src/state.t.js --force` verdes.
 
 ### 2. O degrade deixa de ser mudo
 
@@ -66,7 +66,7 @@ uncovered e targets pareados.
 
 ### 5. A medicao das duas engines
 
-`scanner.bench.js` compara as duas nos mesmos pontos. Nao para escolher a mais rapida — para
+`src/scanner.bench.js` compara as duas nos mesmos pontos. Nao para escolher a mais rapida — para
 saber o PRECO do que se ganha (cadeia verificavel, identidade por inode, varredura
 compartilhada com o `sprint-cli`).
 
@@ -89,7 +89,7 @@ Milestone das features **8.1**, **8.2** e **8.3**. O `utest` passa a se apoiar n
 
 ### O que estava quebrado: um caminho de import
 
-A suite estava vermelha em 7 checks e 2 excecoes, e a causa era UMA: `ledger.js` e `state.js`
+A suite estava vermelha em 7 checks e 2 excecoes, e a causa era UMA: `src/ledger.js` e `src/state.js`
 importavam `'../iodb/io-engine.js'`, e o modulo mora em `'../iodb/src/io-engine.js'`. O
 `try/catch` do degrade — "um runner de testes nao pode ficar refem do seu proprio log" —
 engoliu o `ERR_MODULE_NOT_FOUND` sem dizer nada, e tudo rodou sobre o `noop()`: `runId: null`,
@@ -127,7 +127,7 @@ como item proprio.
 
 ### O preco, medido — e ele e maior do que se esperava
 
-`scanner.bench.js`, duas rodadas, numeros reproduziveis:
+`src/scanner.bench.js`, duas rodadas, numeros reproduziveis:
 
 ```
 | ponto            | entries | readdirSync (ms) | fswatch frio (ms) | fswatch quente (ms) |
@@ -147,7 +147,7 @@ Duas coisas aqui contrariam a expectativa, e as duas ficam registradas como sao:
    do log nao.
 
 2. **O "quente" sai MAIS CARO que o frio**, o que e o oposto de um cache. A causa esta em
-   `fswatchSource.js`: cada `walk()` abre o store, roda `fs.scan()` inteiro e fecha no
+   `src/fswatchSource.js`: cada `walk()` abre o store, roda `fs.scan()` inteiro e fecha no
    `finally`. Nao existe caminho quente — existe o mesmo caminho frio pago duas vezes, sobre um
    store que cresceu entre as duas. O benchmark nomeia essa coluna de "quente", e o nome esta
    errado.
@@ -164,7 +164,7 @@ default, e a 8.3 entrega a fonte trocavel, nao a troca.
 128KB, junto de `ledger.index` e `ledger.yaml`. Quente == frio: duas rodadas, 630 nas duas.
 
 **Os checks novos reprovam contra um no-op** — por sabotagem, nao por suposicao: apontando o
-import para um caminho inexistente, `ledger.t.js` volta a `💥1 ✘4`, e entre os vermelhos estao
+import para um caminho inexistente, `src/ledger.t.js` volta a `💥1 ✘4`, e entre os vermelhos estao
 os dois `check(v.length > 0, ...)` recem-adicionados. Um check que nao sabe falhar nao e um
 check.
 
@@ -173,6 +173,6 @@ check.
 - O `open()` O(store) do iodb — [iodb ISSUES/008](~/iodb/ISSUES/008-iodb-flush-o-store.md), ja aberto,
   e do repo do `iodb`.
 - A assimetria relativo/absoluto entre as duas fontes de arvore.
-- O nome "quente" no `scanner.bench.js`, que mede outra coisa.
-- O `sha256` de conteudo segue no `cacheLedger.js`: o `hash` do fswatch e sempre `null` e
+- O nome "quente" no `src/scanner.bench.js`, que mede outra coisa.
+- O `sha256` de conteudo segue no `src/cacheLedger.js`: o `hash` do fswatch e sempre `null` e
   `content_changed` nunca e emitido — os dois ja no `ISSUES.md`, ambos do `iodb`.

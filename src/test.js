@@ -67,7 +67,7 @@ test.scope = (parent, fn) => {
   try { fn() } finally { _current = prev }
 }
 
-// ─── Singleton (back-compat for worker.js / utest.js) ───────────
+// ─── Singleton (back-compat for src/worker.js / utest.js) ───────────
 test.main = globalThis.test?.main || {
   name: 'Main',
   tests: [],

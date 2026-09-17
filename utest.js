@@ -8,7 +8,7 @@
 //   test('hash53', ({ hash53, check }) => { check(hash53(''), 0) })
 //   — hash53 comes from the target module, check from the runner. Zero imports needed.
 
-import { G } from '../utils/globals.d.js'
+import { G } from './utils/globals.d.js'
 await G._ready
 
 import path from 'path'
@@ -16,29 +16,29 @@ import fs from 'fs'
 import { plugin } from 'bun'
 import { parse as parseYaml } from 'bun:yaml'
 
-import test from './test.js'
-import { check, checkFail, checkException } from './check.js'
-import { scan, findTarget, excludeFilter, makeFilter } from './scanner.js'
-import { TestCache } from './cache.js'
-import { openLedger } from './ledger.js'
-import { openCacheLedger } from './cacheLedger.js'
-import { openState } from './state.js'
-import { view, fullView, failLines, failData, fileLine, fileReportSpan, summary, glyphs, checkView, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, displayLen, hogMs } from './viewer.js'
+import test from './src/test.js'
+import { check, checkFail, checkException } from './src/check.js'
+import { scan, findTarget, excludeFilter, makeFilter } from './src/scanner.js'
+import { TestCache } from './src/cache.js'
+import { openLedger } from './src/ledger.js'
+import { openCacheLedger } from './src/cacheLedger.js'
+import { openState } from './src/state.js'
+import { view, fullView, failLines, failData, fileLine, fileReportSpan, summary, glyphs, checkView, failInfo, phaseLine, phaseMs, phaseHogSecs, progressBar, link, displayLen, hogMs } from './src/viewer.js'
 import { expect, describe, it, spyOn, jest, vi, mock, beforeAll, afterAll,
-         beforeEach, afterEach, withTempDir} from './shims.js'
+         beforeEach, afterEach, withTempDir} from './src/shims.js'
 
-import { busReset } from '../utils/src/bus.js'
+import { busReset } from './utils/src/bus.js'
 
-import is from '../utils/src/is.js'
-import toSource from '../utils/src/toSource.js'
-import callstack from '../utils/src/callstack.js'
-import normalize from '../utils/src/normalize.js'
-import cl from '../utils/src/cl.js'
-import forEach from '../utils/src/forEach.js'
-import dotfill from '../utils/src/dotfill.js'
-import hash53 from '../utils/src/hash53.js'
-import { loaderFilter, kindOf, executorFor, entriesFor, phaseSetupFor, resetRegistry } from './kinds.js'
-import { captureConsole } from './console-capture.js'
+import is from './utils/src/is.js'
+import toSource from './utils/src/toSource.js'
+import callstack from './utils/src/callstack.js'
+import normalize from './utils/src/normalize.js'
+import cl from './utils/src/cl.js'
+import forEach from './utils/src/forEach.js'
+import dotfill from './utils/src/dotfill.js'
+import hash53 from './utils/src/hash53.js'
+import { loaderFilter, kindOf, executorFor, entriesFor, phaseSetupFor, resetRegistry } from './src/kinds.js'
+import { captureConsole } from './src/console-capture.js'
 
 const realProcessExit = process.exit.bind(process)
 const realStdoutWrite = process.stdout.write.bind(process.stdout)
@@ -74,7 +74,7 @@ check.view = (c) => checkView(c, { width: process.stdout.columns || 80 })
 
 // ─── Base context ─────────────────────────────────────────────────────────────
 // Everything a test body might need except target exports (added per file).
-// Mirrors setup.js globals so tests written for the subprocess runner also work in-process.
+// Mirrors src/setup.js globals so tests written for the subprocess runner also work in-process.
 const baseCtx = { check, checkFail, checkException, expect,
   is, cl, toSource, callstack, normalize, hash53, forEach, dotfill,
   withTempDir, spyOn, jest, vi, mock }
@@ -89,7 +89,7 @@ globalThis.utest = true
 globalThis.utestVerbosity = 1
 
 // ─── Plugin: redirect built-in test imports to our shims ─────────────────────
-const shimsPath = new URL('./shims.js', import.meta.url).pathname
+const shimsPath = new URL('./src/shims.js', import.meta.url).pathname
 plugin({
   name: 'bun-test-shim',
   setup(build) {
@@ -206,10 +206,10 @@ async function runTest(t, ctx, timeout = 1000) {
     // `check.bind`) para outro nó da própria árvore; restaurar cegamente pisaria nisso.
     // E se por algum motivo `check.test` ainda for `t` no próximo `finally` de fora
     // (arquivo seguinte ainda não chamou `runTest`), um `check()` DESLIGADO (sem bind,
-    // como o `expect()` de `shims.js`) que dispare tarde cairia neste nó já selado —
+    // como o `expect()` de `src/shims.js`) que dispare tarde cairia neste nó já selado —
     // pior, se `saved` for de outro arquivo, cairia lá. Selar também no global: um
     // check tardio sem bind explícito passa a ficar sem dono (comportamento já aceito
-    // em `leak.t.js`), em vez de contaminar o próximo `check.test` que vier.
+    // em `src/leak.t.js`), em vez de contaminar o próximo `check.test` que vier.
     if (check.test === t) check.test = null
     else check.test = saved
     // Um passo cujo custo real já rodou ANTES do `test()` (a fase `eval`: `sweepFeature`
@@ -252,7 +252,7 @@ const hogs = args.includes('--hogs') || args.includes('-H')
 // `--hogs <N>` / `-H <N>` — o limiar de hog EM MS para esta execução inteira. O positional
 // logo depois da flag, se for numérico. Sem ele (ou sem `--hogs`), fica o `HOG_MS` de
 // sempre (1000). Grava em `globalThis` (mais abaixo, junto do `utestVerbosity`) porque
-// `viewer.js` já foi importado — `hogMs()` relê de lá a cada chamada.
+// `src/viewer.js` já foi importado — `hogMs()` relê de lá a cada chamada.
 const _hogFlagIdx = args.findIndex(a => a === '--hogs' || a === '-H')
 const _hogLimit = _hogFlagIdx >= 0 && /^\d+$/.test(args[_hogFlagIdx + 1] || '')
   ? parseInt(args[_hogFlagIdx + 1], 10)
@@ -262,7 +262,7 @@ const _vArg = args.find(a => /^(-v)?:?([0123])$/.test(a))
 const _vExplicit = !!_vArg
 if (_vArg) verbosity = parseInt(_vArg.match(/([0123])$/)[1])
 // `--hogs [N]` — o limite de hog EM MS para a execução inteira (`globalThis.utestHogMs`,
-// lido por `hogMs()` em `viewer.js`): o divisor do badge `🐢N` (`floor(ms/N)`) e o fence de
+// lido por `hogMs()` em `src/viewer.js`): o divisor do badge `🐢N` (`floor(ms/N)`) e o fence de
 // seleção. Sem `--hogs` → `HOG_MS` (1000), `🐢N` = segundos inteiros. Com `--hogs 100`, um
 // arquivo de 7200ms → `🐢72`. NÃO força `-v:2`: `--hogs` sozinho (v0/v1) é o modo LASER —
 // moldura tight, corpo podado a hogs + vermelhos (dispatch mais abaixo). `-v2 --hogs` mostra
@@ -282,7 +282,7 @@ const asJson = args.includes('--json')
 // `--trace` / `--trace=<path>`: apêndice ao relatório normal — a árvore de
 // PARA-ONDE-FOI-A-PAREDE. Camada auto por fase: fase com provider (`eval`/`int`) →
 // regiões de wall-time (`boot`, `provider`, `entry`, `sweepFeature`, cada `sh:`) + o
-// interior do subprocesso via `--import trace-preload.mjs`; fase de motor in-process →
+// interior do subprocesso via `--import src/trace-preload.mjs`; fase de motor in-process →
 // `probe.tree()`. Essa DISSECAÇÃO é só em escopo filtrado (mesmo motivo do `-v:3` largo:
 // re-executa). Escopo largo responde a outra pergunta — "que parte da suíte custa" — e a
 // responde agregando por FRENTE/FEATURE o tempo já gravado, sem instrumentar nada. Com
@@ -336,7 +336,7 @@ let filterTerms = [
 // Um positional que PARECE caminho (tem `/` ou termina em `.js`) mas não existe no disco
 // hoje virava filtro de nome mudo — nenhum entry bate, o relatório sai vazio sem dizer por
 // quê (ISSUES/008, nota final). Avisa; segue como filtro de nome mesmo assim (pode ser um
-// termo legítimo tipo "cache.js" que o usuário quis dizer como NOME, não caminho).
+// termo legítimo tipo "src/cache.js" que o usuário quis dizer como NOME, não caminho).
 for (const t of filterTerms) {
   if ((t.includes('/') || /\.js$/.test(t)) && !fs.existsSync(t))
     process.stderr.write(`\x1b[33mutest: "${t}" parece caminho mas não existe — tratado como filtro de nome\x1b[39m\n`)
@@ -350,7 +350,7 @@ for (const t of filterTerms) {
 // (talvez o storage esteja vazio; o scan tenta).
 if (!rawTarget && filterTerms.length === 1) {
   try {
-    const { TestCache: _TC } = await import('./cache.js')
+    const { TestCache: _TC } = await import('./src/cache.js')
     const _idxRoot = [process.cwd(), path.dirname(_yamlNearCwd)].find(d => fs.existsSync(path.resolve(d, 'TEST.yaml'))) || process.cwd()
     const _term = filterTerms[0].toLowerCase()
     // Dedup por relpath — o mesmo arquivo pode aparecer em duas fases do storage (`unit` e
@@ -409,7 +409,7 @@ if (doTrace && (hogs || asJson)) {
   process.stderr.write('\x1b[33m--trace ignorado junto de --hogs/--json\x1b[39m\n')
 }
 if (doTrace && !hogs && !asJson) {
-  T = await import('./trace.js')
+  T = await import('./src/trace.js')
   globalThis.__utestTrace = T
   // `performance.now()` aqui = ms desde o boot do processo (bun startup + os imports do
   // topo deste arquivo). Passado como `lead`, vira o span inicial da árvore — o total
@@ -469,7 +469,7 @@ if (T) T.end()   // fecha `boot`
 // `TEST.yaml` pode declarar mais de uma fase (`unit`, `tui`, `integration`, `eval`, ...),
 // cada uma com o próprio `include`/`exclude`. Isto SEMPRE chamava `scan(root, configPath)`
 // sem 3º argumento — `phase` caía no default `'unit'` e as outras fases declaradas no YAML
-// nunca eram varridas: `.tuit` e `.integration.t.js` existiam no vocabulário (`kinds.js`) e
+// nunca eram varridas: `.tuit` e `.integration.t.js` existiam no vocabulário (`src/kinds.js`) e
 // no config, mas nenhuma chamada os alcançava. Uma fase sem `include` E sem provider
 // registrado (`entriesFor`) não é uma fase de arquivo — é ignorada, para um `boot:`/`exclude`
 // não virar fase fantasma.
@@ -537,7 +537,7 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
       const absFile = path.resolve(rawTarget)
       const cfg = cfgRaw[phase] || {}
       const inc = cfg.include || ['**/*.t.js', '**/*.test.js']
-      // O MESMO glob-match do walk (`scanner.js#makeFilter` → `compileGlob` com fast-path +
+      // O MESMO glob-match do walk (`src/scanner.js#makeFilter` → `compileGlob` com fast-path +
       // minimatch), não um regex reimplementado à mão: o bespoke antigo montava a expressão
       // trocando `**/`→`(.*/)?` e DEPOIS `*`→`[^/]*` sobre a string toda, corrompendo o `.`
       // interno de `(.*/)?` para `(.[^/]*/)?` — que casa exatamente UM nível de pasta. Um
@@ -584,7 +584,7 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
 
   // O conjunto assinado e o que foi EXERCITADO, nao so os arquivos de teste: o alvo pareado
   // e as deps extras entram junto, porque e o sha256 deles que o arbitro por conteudo
-  // (`cacheLedger.js`) cruza para responder frescor na proxima rodada. Um `Set` porque N
+  // (`src/cacheLedger.js`) cruza para responder frescor na proxima rodada. Um `Set` porque N
   // testes dividem um alvo (`pixel.js` serve tres `.t.js`) e o hash e o mesmo.
   ledger.start([...new Set(entries.flatMap(e =>
     [e.path, e.target, ...(e.extraDeps ?? [])].filter(Boolean)))])
@@ -674,12 +674,12 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
   const fileRoot = test.begin(path.basename(entry.path))
 
   // Um `.tuit`/`.eval.js` não é módulo ESM chamando `test()` — um executor registrado
-  // (`kinds.js#registerExecutor`, via `boot:`) devolve os PASSOS e cada um vira um
+  // (`src/kinds.js#registerExecutor`, via `boot:`) devolve os PASSOS e cada um vira um
   // `test()` filho aqui; sem executor para o kind, cai no `import()` de sempre.
   //
   // Uma fase com PROVIDER já É o kind — não precisa de `kindOf()`/`register()` pra dizer
-  // isso. `register('eval')` global em `KINDS` (`kinds.js`) contaminaria QUALQUER teste que
-  // afirme o vocabulário base antes da fase eval rodar (achou `kinds.t.js` fazendo
+  // isso. `register('eval')` global em `KINDS` (`src/kinds.js`) contaminaria QUALQUER teste que
+  // afirme o vocabulário base antes da fase eval rodar (achou `src/kinds.t.js` fazendo
   // exatamente isso — `register()` já tinha acontecido no boot, antes do teste que prova
   // "antes de registrar, não reconhece").
   const executor = executorFor(provider ? phase : kindOf(path.basename(entry.path)))
@@ -706,7 +706,7 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
   let _probe = null
   if (doTrace && !provider) {
     try {
-      ;({ probe: _probe } = await import('./probe.js'))
+      ;({ probe: _probe } = await import('./src/probe.js'))
       if (globalThis.pixel?._registry) _probe(globalThis.pixel._registry)
       const somlPath = path.resolve(path.dirname(configPath), 'soml.js')
       if (fs.existsSync(somlPath)) {
@@ -782,7 +782,7 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
     // comum — ambos cacheiam agora) ou só `bust` (só uma EXCEÇÃO nunca fica
     // marcada como reusável) — e grava sempre o record em `results.json` por
     // baixo, com o mtime do alvo JÁ recravado (a ordem interna importa: ver
-    // comment-block de `cache.js#write`). É essa dupla escrita que alimenta a
+    // comment-block de `src/cache.js#write`). É essa dupla escrita que alimenta a
     // árbitro na próxima leitura, e é a FONTE do render — quente e frio
     // convergem no mesmo registro (`utest/results.json`).
     cache.write(entry.path, entry.target, {
@@ -799,7 +799,7 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
       error: suite.state === 'exception' ? failData(suite) : null,
       elapsed: suite.duration, cached: false,
     }, {
-      // O que o arbitro por conteudo (`cacheLedger.js`) le na proxima rodada: o alvo e as
+      // O que o arbitro por conteudo (`src/cacheLedger.js`) le na proxima rodada: o alvo e as
       // deps extras deste teste, hasheados no registro.
       phase, target: entry.target ?? null, deps: entry.extraDeps ?? [],
       tests: s.tests, checks: s.passed,

@@ -164,7 +164,7 @@ test('scan: o que entra na suíte', ({ test }) => {
   test('devolve o cache da raiz para quem for gravar', async ({ check }) => {
     const d = fixture({ 'm.js': '', 'm.t.js': '' })
     const { cache } = await run(d)
-    // É por aqui que os runners gravam sem nunca importar `cache.js`.
+    // É por aqui que os runners gravam sem nunca importar `src/cache.js`.
     check(typeof cache?.write, 'function')
     check(typeof cache?.read, 'function')
     check(typeof cache?.bust, 'function')

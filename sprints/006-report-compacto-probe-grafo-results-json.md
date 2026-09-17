@@ -43,14 +43,14 @@ ONDE `mergeProps` é chamado".
 
 ## Features que este sprint toca
 
-- **5 profiling** — `probe.js` (a vista de grafo).
-- **4 report** — `viewer.js` (+378 nos dois commits), `utest.js` (o render, a verbosidade).
-- **2 cache** — `cache.js` `results` (`get`/`record`/`flush`/`fresh`/`list`).
+- **5 profiling** — `src/probe.js` (a vista de grafo).
+- **4 report** — `src/viewer.js` (+378 nos dois commits), `utest.js` (o render, a verbosidade).
+- **2 cache** — `src/cache.js` `results` (`get`/`record`/`flush`/`fresh`/`list`).
 
 ## Criterio de pronto
 
-- `probe.t.js` verde incluindo §grafo (aresta separa contexto, ciclo com ↻).
-- `viewer.t.js` verde: `phaseLine`, `compactFails`, "o kind não muda o formato".
+- `src/probe.t.js` verde incluindo §grafo (aresta separa contexto, ciclo com ↻).
+- `src/viewer.t.js` verde: `phaseLine`, `compactFails`, "o kind não muda o formato".
 - `utest .` duas vezes → mesmo número.
 - `utest cache` re-executa em v2; `utest .` -v:3 emite o aviso.
 
@@ -60,14 +60,14 @@ Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe
 
 ## O que aconteceu
 
-- **`probe` grafo** (`e7f1b66`) — `probe.js` +78: `edges`/`callers`/`tree`, `callStack`
-  para a aresta caller▸callee. `probe.t.js` +94 (§grafo). Denunciou o hog real de perf do
+- **`probe` grafo** (`e7f1b66`) — `src/probe.js` +78: `edges`/`callers`/`tree`, `callStack`
+  para a aresta caller▸callee. `src/probe.t.js` +94 (§grafo). Denunciou o hog real de perf do
   soml: GOPD em `mergeProps`, 20% self-time.
-- **Report compacto** (`9de0e22` + `40368b6`) — `viewer.js` +378: `phaseLine`,
-  `compactFails`, `progressBar`, `deltaTag`, `phaseHogSecs`. `viewer.t.js` +305. `utest.js`
+- **Report compacto** (`9de0e22` + `40368b6`) — `src/viewer.js` +378: `phaseLine`,
+  `compactFails`, `progressBar`, `deltaTag`, `phaseHogSecs`. `src/viewer.t.js` +305. `utest.js`
   +428: as três formas de render (tight / emoldurada / v3), a verbosidade derivada do
   escopo, o `narrowScope`.
-- **`results.json`** (`b1586c7`→`40368b6`) — `cache.js` `results`: `get`/`record`/`flush`/
+- **`results.json`** (`b1586c7`→`40368b6`) — `src/cache.js` `results`: `get`/`record`/`flush`/
   `fresh`/`list`. O render passa a ler sempre daqui.
 - **README +205 linhas** — a doc do formato do relatório e da regra do cache.
 
@@ -84,7 +84,7 @@ Sprint retroativo. Report compacto (phaseLine/compactFails/🐢=segundos), probe
 - **A parte melhor documentada do repo é o report.** O README tem ~200 linhas só sobre o
   formato (`🐢` = segundos, `Σ lastMs`, as três formas). Sprints 084c/084d do soml são a
   história do lado de lá.
-- **Cobertura de `viewer.js` é parcial.** `viewer.t.js` mira `phaseLine`/`compactFails`/
+- **Cobertura de `src/viewer.js` é parcial.** `src/viewer.t.js` mira `phaseLine`/`compactFails`/
   `deltaTag`/`failInfo` — o `view()` recursivo (v3), o `fullView` emoldurado e o
   `hogReport` standalone ficaram de fora. Feature 4.1 é 🟡 mas com essa ressalva.
 - **A verbosidade-derivada-do-escopo (4.3) não tem `.t.js`.** É a lógica que mais confunde

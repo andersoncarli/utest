@@ -18,7 +18,7 @@ Plano do sprint 019 (feature 4.1). Sprint guarda-chuva de quirks de interface �
 
 ## Por que este sprint existe agora
 
-`utest check.t.js` (um arquivo, verde) hoje imprime DUAS linhas:
+`utest src/check.t.js` (um arquivo, verde) hoje imprime DUAS linhas:
 
 ```
 check ✔20 ------------------------------------------------------ (1ms)
@@ -38,7 +38,7 @@ esperado é UMA linha, seca:
 
 E quando há **erro ou exceção**, cai no `checkView` já existente — `✘ <lineCode> .... <addr>`
 com `callerLine`, `expected:` e `received:` embaixo, **omitindo `received: false` quando
-`expected: true`** (o `trivialTruthy` de `viewer.js:124` já faz isso).
+`expected: true`** (o `trivialTruthy` de `src/viewer.js:124` já faz isso).
 
 ### Diagnóstico
 
@@ -69,9 +69,9 @@ Nenhum ramo trata "escopo é um arquivo só, verde" como caso especial.
 2. **`utest.js`** — o caso com **vermelho** num arquivo só: JÁ funciona via o ramo `else`
    (→ `fullView` → `failLines` → `checkView`). Conferido: `✘ <lineCode> .... <addr>` com
    `received:`/`expected:` embaixo, e `received: false` omitido quando o esperado era `true`
-   (o `trivialTruthy` de `viewer.js:124`). Nada a mudar aqui.
+   (o `trivialTruthy` de `src/viewer.js:124`). Nada a mudar aqui.
 
-3. **`viewer.t.js`** — testes novos:
+3. **`src/viewer.t.js`** — testes novos:
    - escopo de arquivo verde → a saída é UMA linha, casa `/^✔\d+ \(\d+ms\)$/`, sem `unit:`
      nem o nome do arquivo
    - escopo de arquivo com um `check(1,2)` → `checkView`: tem o `lineCode`, `received: 2`,
@@ -81,11 +81,11 @@ Nenhum ramo trata "escopo é um arquivo só, verde" como caso especial.
 
 ## Criterio de pronto
 
-- `utest check.t.js` (com as demos de falha comentadas) → exatamente `✔N (Wms)`,
+- `utest src/check.t.js` (com as demos de falha comentadas) → exatamente `✔N (Wms)`,
   uma linha
-- `utest check.t.js` (com as demos ativas) → frame + `checkView` com
+- `utest src/check.t.js` (com as demos ativas) → frame + `checkView` com
   callerLine/expected/received, `received: false` omitido no caso `expected: true`
-- `utest viewer.t.js` — verde
+- `utest src/viewer.t.js` — verde
 - `utest .` — verde, sem regressão nas outras formas de saída (v0/v1/v2/v3 largo,
   emoldurado, `--hogs`)
 - `sprint eval --sweep` — verde
@@ -105,7 +105,7 @@ com 1 arquivo vermelho usa a mesma forma longa (agilidade); com >1, a compacta +
 
 Primeira leva do sprint guarda-chuva (intro do arquivo): a saída de `utest <arquivo>`.
 
-`utest check.t.js` verde dava:
+`utest src/check.t.js` verde dava:
 ```
 check ✔20 ------------------------------------------------------ (1ms)
 unit:  ✔20                                                       (0s)
@@ -145,7 +145,7 @@ dos ramos `verbosity >= 3` (que o `_isFile` forçava e faziam sair a phaseLine +
 streamada). O stream por-teste do `-v:3` durante a fase é suprimido quando `_isFile` — o
 render final fala sozinho nos dois casos (verde e vermelho).
 
-**`checkView` — três ajustes** (`viewer.js`)
+**`checkView` — três ajustes** (`src/viewer.js`)
 - `received`/`expected` **combinados numa linha** (`received: 1  expected: 2`, 2 espaços)
   quando cabem na largura sob a indentação de 2; senão volta às duas linhas.
 - `trivialTruthy` → `trivialFalsy` (`a==='false' && (b===undefined || b==='true')`): agora
@@ -157,9 +157,9 @@ render final fala sozinho nos dois casos (verde e vermelho).
   frame redundante. A linha de frame virou `  <func> ..... <file>:NNN` (antes duplicava o
   nome da função e tinha um `padEnd(2)` sem efeito).
 
-**Cobertura** (`viewer.t.js`)
+**Cobertura** (`src/viewer.t.js`)
 Dois casos de integração (spawnam `utest.js` de verdade contra um `.t.js` scratch, porque o
-render mora no dispatch de `utest.js`, não numa fn de `viewer.js`):
+render mora no dispatch de `utest.js`, não numa fn de `src/viewer.js`):
 - escopo de arquivo verde → a saída casa `/^✔\d+ \(\d+ms\)$/`, sem `unit:`, sem o nome do
   arquivo, sem `---`
 - escopo de arquivo com falha → começa direto na `fileLine` (`^bad\.t\.js .*✘`), SEM `utest
@@ -183,7 +183,7 @@ acima de 100ms).
 
 **`--hogs [N]` — o limiar EM MS para a execução inteira** (`utest.js`)
 `--hogs 100` / `-h 100`: o positional numérico logo após a flag vira `globalThis.utestHogMs`,
-e `viewer.js` ganhou `hogMs() = globalThis.utestHogMs ?? HOG_MS`. Todo ponto que classificava
+e `src/viewer.js` ganhou `hogMs() = globalThis.utestHogMs ?? HOG_MS`. Todo ponto que classificava
 hog por `> HOG_MS` (o `🐢` inline do `-v:2`, `phaseHogSecs`, a linha-título, o rodapé,
 `compactFails`, `fullView`) passou a ler `hogMs()` — **um só conceito de hog por rodada**.
 Sem `<N>` (ou sem `--hogs`), `undefined` → cai no `HOG_MS` de sempre (1000). O `<N>` é
@@ -197,14 +197,14 @@ somem; os vermelhos rápidos FICAM (a leitura de saúde continua inteira). `hogR
 existindo como a seção automática de fim-de-relatório (`fullView` sem `--hogs`), intacta —
 só saiu do caminho da flag.
 
-**O badge vira `🐢N×` — N = múltiplo do limiar** (`viewer.js`)
+**O badge vira `🐢N×` — N = múltiplo do limiar** (`src/viewer.js`)
 `hogBadge(ms) = 🐢${Math.max(1, Math.floor(ms / hogMs()))}×`. `--hogs 100`, arquivo de 450ms
 → `🐢4×`. `--hogs` só, arquivo de 2300ms → `🐢2×`. Mínimo `1×` (se `isHog` já o selecionou,
 passou ≥1×). **O `N×` do badge por-arquivo é distinto do `🐢Ns` da linha-título/rodapé**, que
 continua sendo SEGUNDOS — o `×` marca a diferença: o badge responde "quantas vezes passou do
 limite que EU pedi", o parén "quanto tempo a fase gastou nisso".
 
-**Os tempos vêm do cache — quente == frio** (`viewer.js`)
+**Os tempos vêm do cache — quente == frio** (`src/viewer.js`)
 Dois pontos de `fullView` liam `t.duration` (a parede desta rodada, ~0 num replay de cache),
 apagando o `(Nms)` e o `🐢` de um hog cacheado:
 - o `tookMs` do header do arquivo virou `t.lastMs || Math.round(t.duration || 0)` — como o
@@ -217,7 +217,7 @@ apagando o `(Nms)` e o `🐢` de um hog cacheado:
   `prevMs`) igual ao `compactFails`.
 - a contagem `hogs` do rodapé de `fullView` v3 trocou `t.duration` por `t.lastMs || …`.
 
-**Cobertura** (`viewer.t.js`)
+**Cobertura** (`src/viewer.t.js`)
 - `hogMs()` respeita `globalThis.utestHogMs`, senão `HOG_MS`; limpa depois
 - `compactFails` com `--hogs 100`: pega arquivos que 1000 não pegava, badge = múltiplo de 100
   (450ms → `🐢4×`, 2300ms → `🐢23×`); 60ms segue fora
@@ -227,12 +227,12 @@ apagando o `(Nms)` e o `🐢` de um hog cacheado:
 
 ## Prova
 
-- `utest check.t.js` (demos comentadas — verde) → `✔20 (Wms)`, uma linha
+- `utest src/check.t.js` (demos comentadas — verde) → `✔20 (Wms)`, uma linha
 - `utest .` (esse scratch o único vermelho) →
   SAÍDA IDÊNTICA: `fileLine` + `failLines`, sem frame/tip/coverage/phaseLine;
   `received/expected` combinados; exceção aninhada mostra os frames (`outer :009`, o
   callsite `:011`), exceção na linha do check mostra só o endereço
-- `utest viewer.t.js --force` — verde, ✔195 (10 casos novos de `hogMs`/badge)
+- `utest src/viewer.t.js --force` — verde, ✔195 (10 casos novos de `hogMs`/badge)
 - `utest .` cold + hot — 📄12 🧪209 ✔613, mesma contagem, exit 0
 - `utest . --hogs 100` — moldura `-v:2`, só arquivos >100ms + vermelhos, cada hog com
   `🐢N×`; num cache QUENTE os tempos (e os badges) vêm do storage, idênticos ao frio
@@ -243,8 +243,8 @@ apagando o `(Nms)` e o `🐢` de um hog cacheado:
 
 ## O que fica aberto
 
-- Quirk de cache observado en passant: `utest check.t.js` serviu um `✔20` verde de um estado
-  antigo mesmo com falhas no arquivo, até `rm -f .utest/*check.t.js*` forçar leitura limpa.
+- Quirk de cache observado en passant: `utest src/check.t.js` serviu um `✔20` verde de um estado
+  antigo mesmo com falhas no arquivo, até `rm -f .utest/*src/check.t.js*` forçar leitura limpa.
   Pode ser a mesma classe do sprint 018 (arbitragem) ou um staleness à parte — anotar para
   uma próxima reabertura deste sprint.
 - Outras quirks de interface (output esperado × presente) ainda por levantar — este sprint

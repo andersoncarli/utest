@@ -24,15 +24,15 @@ causas raiz já fechadas (007/012):
 1. `utest.js` (~linha 228): bloco novo `-h`/`--help` — imprime tabela de
    flags e `process.exit(0)` antes de qualquer outro parsing. `-H` substitui
    `-h` como alias de `--hogs` (linhas do `includes`/`findIndex`).
-2. `viewer.js#fileLine`: `dotfill(left, fill, right)` — badges saem do
+2. `src/viewer.js#fileLine`: `dotfill(left, fill, right)` — badges saem do
    `left` (antes do nome+fill) e entram no `right` (depois do tempo).
-3. `viewer.js#compactFails`: para cada `t` vermelho com exceção
+3. `src/viewer.js#compactFails`: para cada `t` vermelho com exceção
    (`t._cached ? t.excCount : summary(t).exception`), empilhar
    `failLines(t, {width, indent:true})` logo abaixo do rio de tokens — só
    para exceção, falha de check comum continua resumida em v1.
 4. `README.md`: tabela de flags — `-h`→`-H` na linha de `--hogs`, nova linha
    para `--help`/`-h`.
-5. `viewer.t.js`: 2 testes que casavam o formato ANTIGO de `fileLine`
+5. `src/viewer.t.js`: 2 testes que casavam o formato ANTIGO de `fileLine`
    (regex exigindo espaço logo após o nome do arquivo) atualizados para o
    novo layout.
 
@@ -45,7 +45,7 @@ causas raiz já fechadas (007/012):
   de `-v2`.
 - `utest .` e `utest . --force` no repo próprio: idênticos, `✔630`, zero
   vermelho.
-- `check.t.js`: as 3 linhas de exceção forçada (demo, descomentadas
+- `src/check.t.js`: as 3 linhas de exceção forçada (demo, descomentadas
   manualmente pelo usuário para reproduzir o bug) foram recomentadas —
   o arquivo é fixture de demonstração, não teste permanente.
 

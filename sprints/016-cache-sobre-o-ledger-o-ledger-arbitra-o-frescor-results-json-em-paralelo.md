@@ -48,10 +48,10 @@ era**, não só **quando o inode mudou**.
 
 ## Plano de materializacao
 
-1. **`cacheLedger.js`** (arquivo novo). `openCacheLedger(root, { enabled, phase })` →
+1. **`src/cacheLedger.js`** (arquivo novo). `openCacheLedger(root, { enabled, phase })` →
    `{ get, record, fresh, flush, verify, enabled }` — a **mesma forma** que o objeto
-   `results` interno do `cache.js` já expõe (`cache.js:169`), para que o `TestCache` troque
-   um pelo outro sem saber a diferença. Abre o mesmo storage do `ledger.js`
+   `results` interno do `src/cache.js` já expõe (`src/cache.js:169`), para que o `TestCache` troque
+   um pelo outro sem saber a diferença. Abre o mesmo storage do `src/ledger.js`
    (`.utest/ledger`) por `openLedger`, projetando os `test:result` da stream num índice
    `{ relpath → último registro }`. Degrada para no-op com `enabled === false` ou sem
    `../iodb`, e nesse caso `enabled` volta `false` — o sinal que o `TestCache` usa para
@@ -63,7 +63,7 @@ era**, não só **quando o inode mudou**.
    targetPath)` → `boolean`, para caber no `arbitrate` existente sem reescrevê-lo.
 
 3. **`TestCache(root, { ledger })`** — segundo parâmetro opcional. Quando
-   `ledger?.enabled`, `arbitrate` (`cache.js:461`) consulta o ledger; senão, o
+   `ledger?.enabled`, `arbitrate` (`src/cache.js:461`) consulta o ledger; senão, o
    `results.json` como hoje. `results.record` continua rodando **sempre**, nos dois casos —
    é o "escrito em paralelo" do requisito. Nenhuma assinatura pública muda: quem chama
    `TestCache(root)` sem opts tem o comportamento de hoje, byte por byte.
@@ -73,7 +73,7 @@ era**, não só **quando o inode mudou**.
    Mover a abertura para antes da montagem das entries e passar o handle ao `TestCache`.
    Cuidado: `ledger.start(entries)` continua onde está — só a *abertura* sobe.
 
-5. **`cacheLedger.t.js`** — cobre: projeção do índice a partir da stream; `fresh()` verde
+5. **`src/cacheLedger.t.js`** — cobre: projeção do índice a partir da stream; `fresh()` verde
    quando o sha256 bate; vermelho quando o conteúdo muda; **verde quando só o mtime mudou e
    o conteúdo não** (o ganho sobre o `results.json`, e a única divergência esperada entre os
    dois árbitros); no-op sem `../iodb`; e o cross-check de que ledger e `results.json`
@@ -124,14 +124,14 @@ testes deste sprint).
 
 # REPORT
 
-`cacheLedger.js` — o segundo árbitro do cache, ancorado no **conteúdo** (`sha256`) em vez do
+`src/cacheLedger.js` — o segundo árbitro do cache, ancorado no **conteúdo** (`sha256`) em vez do
 inode (`mtime`), derivado da stream que o ledger já grava. As duas persistências rodam em
 paralelo: o ledger arbitra, o `results.json` continua sendo escrito por inteiro.
 
 ## O que aconteceu
 
-**`cacheLedger.js` (novo).** `openCacheLedger(root, opts)` devolve a **mesma forma** que o
-objeto `results` interno do `cache.js` já expunha — `get`/`fresh`/`record`/`flush` —, mais um
+**`src/cacheLedger.js` (novo).** `openCacheLedger(root, opts)` devolve a **mesma forma** que o
+objeto `results` interno do `src/cache.js` já expunha — `get`/`fresh`/`record`/`flush` —, mais um
 `enabled`. É essa igualdade de forma que deixa o `TestCache` trocar um pelo outro sem saber a
 diferença: o `arbitrate` não sabe qual dos dois está respondendo, e não precisa saber.
 
@@ -140,16 +140,16 @@ arquivo do conjunto, os `run:tests` dão o veredito de cada teste, e o mais rece
 propriedade que o `_front.md` da frente 8 nomeia — o estado presente é derivado do histórico,
 nunca mantido em paralelo a ele.
 
-**`cache.js`.** `TestCache(root, { ledger })`. Um `judge` — o ledger quando há um, o
+**`src/cache.js`.** `TestCache(root, { ledger })`. Um `judge` — o ledger quando há um, o
 `results.json` quando não —, e o `arbitrate` (que já existia) passa a consultá-lo em vez de
 falar direto com o `results`. `results.record` continua rodando **sempre**, nos dois casos.
 `TestCache(root)` sem opts é idêntico a antes, byte por byte.
 
-**`ledger.js`.** Ganhou `state()` (o histórico projetado — com `reduce: append`, o estado
+**`src/ledger.js`.** Ganhou `state()` (o histórico projetado — com `reduce: append`, o estado
 reduzido do iodb já É o array de eventos) e `test()` passou a carregar `phase`, `target` e
 `deps` no registro.
 
-**`utest.js` / `scanner.js`.** A abertura do ledger subiu para **antes** das entries — quem
+**`utest.js` / `src/scanner.js`.** A abertura do ledger subiu para **antes** das entries — quem
 arbitra o frescor precisa estar aberto quando o primeiro `cache.read` acontece. E o conjunto
 assinado pelo `run:start` passou a incluir alvos e deps, não só os arquivos de teste: é o
 sha256 deles que ancora o `fresh()`.
@@ -183,7 +183,7 @@ pergunta a ele, não a do laço que o produziu.**
 ## Prova
 
 - `utest .` no `~/utest`: **559 checks, 198 testes, 12 arquivos, verde**, com o ledger
-  arbitrando (baseline antes do sprint: 492 checks — os +67 são o `cacheLedger.t.js`);
+  arbitrando (baseline antes do sprint: 492 checks — os +67 são o `src/cacheLedger.t.js`);
 - **quente e frio reportam o MESMO número** (559 = 559), o portão da frente 2, em rodadas
   seguidas sem lock timeout;
 - o `touch` medido: **6.79s sem, 6.84s depois de tocar três `.t.js`** — os arquivos tocados
@@ -206,7 +206,7 @@ Discordam nos dois casos em que o mtime **mente**:
 - `git checkout` / rebase — o git reescreve o arquivo com os mesmos bytes e mtime novo.
 
 Nos dois o ledger diz `fresh` e o `results.json` diz stale, e o ledger está certo: trocar de
-branch e voltar deixa de re-rodar a suíte inteira à toa. `cacheLedger.t.js` fixa essa
+branch e voltar deixa de re-rodar a suíte inteira à toa. `src/cacheLedger.t.js` fixa essa
 divergência como teste, porque é ela que justifica a convergência.
 
 ## O que fica aberto

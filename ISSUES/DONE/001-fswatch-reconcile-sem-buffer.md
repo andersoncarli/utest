@@ -6,7 +6,7 @@
 
 ## O sintoma
 
-Consumir o baseline do `fswatch` em vez do `readdirSync` de `scanner.js` custava ~10.2s
+Consumir o baseline do `fswatch` em vez do `readdirSync` de `src/scanner.js` custava ~10.2s
 neste repo (1485 entries), contra **6ms** do `readdirSync`. A suspeita do usuario — "as
 chamadas de `in()` nao estao sendo buferizadas" — estava certa, e e metade da conta.
 

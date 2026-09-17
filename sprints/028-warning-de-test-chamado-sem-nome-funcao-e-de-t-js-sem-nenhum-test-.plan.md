@@ -15,7 +15,7 @@ pelo menos uma warning no console" — refinado apos pergunta de esclarecimento:
 
 ## Investigacao
 
-Via Explore: `test(name, fn = () => {}, op = {})` em `test.js:4` nao valida nada
+Via Explore: `test(name, fn = () => {}, op = {})` em `src/test.js:4` nao valida nada
 hoje. O default de `fn` complica a deteccao de "omitido" — `typeof fn` sozinho
 nunca pega isso, porque o default ja e uma funcao valida; a distincao certa e
 `arguments.length`. Convencao de warning ja usada no projeto: `process.stderr.write`
@@ -30,7 +30,7 @@ partir de `steps`, e isso e um caminho diferente, nao o "arquivo cru".
 
 ## Passos
 
-1. `test.js` — validar `name`/`fn` no topo de `test()`: `typeof name !== 'string'
+1. `src/test.js` — validar `name`/`fn` no topo de `test()`: `typeof name !== 'string'
    || arguments.length < 2 || typeof fn !== 'function'` dispara o warning.
 2. `utest.js` — apos `test.end()` (loop de execucao por arquivo), se `!executor &&
    fileRoot.tests.length === 0`, avisar que o arquivo nao chamou `test()`.

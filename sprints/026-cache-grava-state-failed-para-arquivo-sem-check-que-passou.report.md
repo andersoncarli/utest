@@ -18,7 +18,7 @@ veredito agregado de `utest .` (falso `failed`) para um `.t.js` "cru" — sem
 
 ## O que mudou
 
-- **`cache.js`**: duas condições que tratavam `!result.checks` (zero checks) como
+- **`src/cache.js`**: duas condições que tratavam `!result.checks` (zero checks) como
   sinônimo de falha corrigidas para usar só `result.failed`/`result.exception` — o
   veredito real, já calculado corretamente em `utest.js` (`suite.state !== 'passed'`)
   antes de chegar no cache:
@@ -29,7 +29,7 @@ veredito agregado de `utest .` (falso `failed`) para um `.t.js` "cru" — sem
   Um arquivo cru sem `check()` tem `checks:0` legitimamente quando passa; isso nunca
   deveria ter sido tratado como falha.
 - **`plans/2-cache/2.4.eval.js`** (novo): a feature 2.4 nunca tinha um `.eval.js`
-  próprio (só o `cache.t.js` unitário sustentava o degrau 🟡 testada) — 2 passos
+  próprio (só o `src/cache.t.js` unitário sustentava o degrau 🟡 testada) — 2 passos
   `t.sandbox` (regra dos 3, 2 arquivos bastam): (1) fixture cru+normal, compara
   isolado vs. agregado via `--json`; (2) mesma fixture, confirma que o cache QUENTE
   também lê `state:"passed"`/`checks:0` corretamente.

@@ -3,11 +3,11 @@ import { join, relative, dirname, resolve, parse as parsePath } from 'path'
 import { createHash } from 'crypto'
 
 /**
- * cacheLedger.js — o SEGUNDO árbitro do cache, ancorado no CONTEÚDO.
+ * src/cacheLedger.js — o SEGUNDO árbitro do cache, ancorado no CONTEÚDO.
  *
- * O `results.json` (dentro de `cache.js`) responde "este teste está fresco?" comparando
+ * O `results.json` (dentro de `src/cache.js`) responde "este teste está fresco?" comparando
  * `mtime`: o instante em que o inode mudou. Este módulo responde a MESMA pergunta olhando
- * o `sha256` que o ledger (`ledger.js`, feature 8.1) já grava no `fileSet` de cada
+ * o `sha256` que o ledger (`src/ledger.js`, feature 8.1) já grava no `fileSet` de cada
  * `run:start` — o que o arquivo ERA, não quando ele foi tocado.
  *
  * A diferença não é acadêmica, e aparece nos dois casos em que o mtime mente:
@@ -24,7 +24,7 @@ import { createHash } from 'crypto'
  * ── As duas persistências rodam em PARALELO ─────────────────────────────────
  *
  * Este módulo não substitui o `results.json`: ele arbitra, e o `results.json` continua
- * sendo escrito integralmente (`results.record` roda sempre, ver `cache.js#write`), porque
+ * sendo escrito integralmente (`results.record` roda sempre, ver `src/cache.js#write`), porque
  * ainda é o índice que `utest <N.F>` resolve sem escanear e o dono do `failLines` que o
  * `-v:2` renderiza. A convergência — as duas virarem uma — é sprint futuro, e só depois
  * que a igualdade quente/frio provar que dá no mesmo.
@@ -32,7 +32,7 @@ import { createHash } from 'crypto'
  * ── Custo zero quando desligado ─────────────────────────────────────────────
  *
  * Sem `../iodb` presente, ou desligado por config, `enabled` volta `false` e o `TestCache`
- * fica no `results.json` — a arbitragem por mtime de sempre. Mesma lei do `ledger.js`: um
+ * fica no `results.json` — a arbitragem por mtime de sempre. Mesma lei do `src/ledger.js`: um
  * runner de testes não fica refém do seu próprio log.
  */
 
@@ -41,7 +41,7 @@ const sha256 = (file) => {
   catch { return null }
 }
 
-// Mesma subida que o `cache.js` faz para achar onde mora o `.utest/` — o ledger é UM por
+// Mesma subida que o `src/cache.js` faz para achar onde mora o `.utest/` — o ledger é UM por
 // projeto, não por `root` estreitado numa invocação (`utest apps/eval/`).
 const findProjectRoot = (from) => {
   for (let d = resolve(from); ; d = dirname(d)) {
@@ -61,7 +61,7 @@ const noop = () => ({
 
 /**
  * `openCacheLedger(root, opts)` → a MESMA forma que o objeto `results` interno do
- * `cache.js` expõe (`get`/`fresh`/`record`/`flush`), para que o `TestCache` troque um pelo
+ * `src/cache.js` expõe (`get`/`fresh`/`record`/`flush`), para que o `TestCache` troque um pelo
  * outro sem saber a diferença. Só `enabled` é novo, e é o sinal de qual dos dois vale.
  *
  * `ledger` (opcional): um handle de `openLedger` já aberto — `utest.js` abre um por rodada
@@ -99,7 +99,7 @@ export async function openCacheLedger(root, options = {}) {
     } else if (entry.event === 'test:result') {
       records.set(key(entry.phase, entry.file), entry)
     } else if (entry.event === 'run:tests') {
-      // O lote agregado que o `ledger.js#end` grava — mesma forma de cada `test:result`,
+      // O lote agregado que o `src/ledger.js#end` grava — mesma forma de cada `test:result`,
       // um write so (ver o comment-block do `buffered` la).
       for (const r of entry.results || []) records.set(key(r.phase, r.file), r)
     }
@@ -124,7 +124,7 @@ export async function openCacheLedger(root, options = {}) {
   const known = (p) => shas.get(rel(p)) ?? null
 
   // Bate com o disco AGORA? `null` de qualquer lado é "não sei", e não saber nunca
-  // promove: a assimetria é a mesma do `arbitrate` do `cache.js` — o lado arriscado é
+  // promove: a assimetria é a mesma do `arbitrate` do `src/cache.js` — o lado arriscado é
   // sempre o menos permissivo.
   const matches = (p) => {
     const before = known(p)

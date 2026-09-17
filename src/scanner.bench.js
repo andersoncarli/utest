@@ -1,12 +1,12 @@
-// scanner.bench.js — compara as duas engines de arvore (readdirSync vs
+// src/scanner.bench.js — compara as duas engines de arvore (readdirSync vs
 // fswatch/iodb) nos mesmos pontos, para medir se uma otimizacao no iodb
 // (ex: feature 1.6, flush-o-dirty-nao-o-store) reduz a distancia entre elas.
 //
-// `.bench.js` e um kind reconhecido por NON_TARGET_RE (scanner.js) — fora do
+// `.bench.js` e um kind reconhecido por NON_TARGET_RE (src/scanner.js) — fora do
 // denominador de cobertura, fora de `sprint test`. Roda sob demanda:
 //
-//   bun scanner.bench.js            # N padrao (300/600/1200) + este repo
-//   bun scanner.bench.js --n=2000   # N customizado, alem dos padrao
+//   bun src/scanner.bench.js            # N padrao (300/600/1200) + este repo
+//   bun src/scanner.bench.js --n=2000   # N customizado, alem dos padrao
 //
 // Nao integra a suite: e ferramenta de medicao/regressao, nao um teste.
 

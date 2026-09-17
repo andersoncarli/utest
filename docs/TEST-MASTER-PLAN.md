@@ -40,7 +40,7 @@ The core insight agreed on:
 1. Explicit: `*.t.js`, `*.test.js`, `*.tuit` — always included
 2. Content scan: any `.js` file matching `/(?<![.\w])test\s*\(/` — standalone `test(` calls only (NOT method calls like `.test(` or `str.test(`)
 3. Skipped: files where any `.`-separated basename segment starts or ends with `_` (disabled-test convention from TEST-SPEC.md)
-4. Skipped: infrastructure files: `utest.js`, `scanner.js`, `runner.js`, `viewer.js`, `index.t.js`
+4. Skipped: infrastructure files: `utest.js`, `src/scanner.js`, `src/runner.js`, `src/viewer.js`, `index.t.js`
 
 **Output:** `test.main` — plain object with shape:
 ```json
@@ -54,7 +54,7 @@ The core insight agreed on:
 ```
 `fn` refs are present (needed by runner) but the shape is otherwise a plain object, no class instances.
 
-**Key invariant:** Scanner has no knowledge of G. It must be possible to run scanner.js in a completely fresh process with only `bun`/`node` installed.
+**Key invariant:** Scanner has no knowledge of G. It must be possible to run src/scanner.js in a completely fresh process with only `bun`/`node` installed.
 
 ---
 
@@ -211,19 +211,19 @@ All 7 failures are in `utils/src/G.t.js`. They are **pre-existing** — identica
 const PLUGIN_DIR = path.join(__dirname, '../g-plugins')  // utils/g-plugins/
 const TEST_DIR   = path.join(__dirname, '../test')       // utils/test/   ← WRONG
 ```
-These tests expect to load a `test` module from `[utils/src/, utils/g-plugins/, utils/test/]`. But `test.js` lives at `utils/test.js` (root) — not inside `utils/test/` (subdirectory).
+These tests expect to load a `test` module from `[utils/src/, utils/g-plugins/, utils/test/]`. But `src/test.js` lives at `utils/test.js` (root) — not inside `utils/test/` (subdirectory).
 
-The discovery plugin (`g-plugins/discovery.js`) scans those three dirs and finds no `test.js`. G then falls through to `import.meta.resolve('test')` which fails: `Cannot find package 'test'`.
+The discovery plugin (`g-plugins/discovery.js`) scans those three dirs and finds no `src/test.js`. G then falls through to `import.meta.resolve('test')` which fails: `Cannot find package 'test'`.
 
 **Fix (one line in G.t.js):**
 ```js
 // Change line 10 from:
 const TEST_DIR = path.join(__dirname, '../test')
 // To:
-const TEST_DIR = path.join(__dirname, '..')       // utils/ root — where test.js actually lives
+const TEST_DIR = path.join(__dirname, '..')       // utils/ root — where src/test.js actually lives
 ```
 
-Alternatively, place a `test.js` symlink or re-export stub in `utils/test/`:
+Alternatively, place a `src/test.js` symlink or re-export stub in `utils/test/`:
 ```js
 // utils/test/test.js
 export { default } from '../test.js'
@@ -296,14 +296,14 @@ The `YAML` dependency is the only non-builtin. If truly zero-dep is needed, repl
 
 ### P2 — Runner.js: `path` is used but not imported
 
-`runner.js` uses `path.resolve(addr)` (line ~175) but `path` is accessed via `G.path` (which is global after boot). Make this explicit:
+`src/runner.js` uses `path.resolve(addr)` (line ~175) but `path` is accessed via `G.path` (which is global after boot). Make this explicit:
 
 ```js
-// runner.js — at top of run()
+// src/runner.js — at top of run()
 const { path } = G
 ```
 
-Or add an explicit import since runner.js is G-dependent anyway:
+Or add an explicit import since src/runner.js is G-dependent anyway:
 ```js
 import path from 'path'
 ```
@@ -313,7 +313,7 @@ import path from 'path'
 Scanner.js doesn't implement the underscore-skip convention yet:
 > Files where any `.`-separated segment of the basename starts or ends with `_` are silently skipped. This lets you disable a test by renaming `foo.t.js` → `foo_.t.js`.
 
-Add to scanner.js `walk()`:
+Add to src/scanner.js `walk()`:
 ```js
 // In the file loop, after entry.name checks:
 const segments = entry.name.split('.')
@@ -344,11 +344,11 @@ if (fullPath.endsWith('.tuit')) {
   // ... register a test node that wraps the TUIT runner
 }
 ```
-This needs to move into scanner.js (the registration part) with runner.js calling the TUIT execution. The TUIT runner (`soml/tuit-runner.js`) is a G-dependent module, so scanner would register a stub and runner would execute it.
+This needs to move into src/scanner.js (the registration part) with src/runner.js calling the TUIT execution. The TUIT runner (`soml/tuit-runner.js`) is a G-dependent module, so scanner would register a stub and runner would execute it.
 
 ### P6 — Transitive dep mtime for cache (from UTESTS-REVIEW.md)
 
-`runner.js:findSourceFile()` only checks the direct source file mtime. `lib/test-runner.js` has `getMt()` which recursively walks `import` statements to find the max mtime across the whole dependency tree. This catches utility changes that invalidate a test without touching the source.
+`src/runner.js:findSourceFile()` only checks the direct source file mtime. `lib/test-runner.js` has `getMt()` which recursively walks `import` statements to find the max mtime across the whole dependency tree. This catches utility changes that invalidate a test without touching the source.
 
 Port from `lib/test-runner.js:getMt()`:
 ```js
@@ -370,7 +370,7 @@ function getMt(file, seen = new Set()) {
 
 The `utest/` directory is a separate self-seeded runner targeting portability. After the `utils/utest.js` refactor stabilizes, the consolidation target is `utest/index.js`. Key gaps in `utest/`:
 
-1. **`typeOf` at shim init time** — add `'typeOf'` to shimmer.js globals array (line 17)
+1. **`typeOf` at shim init time** — add `'typeOf'` to src/shimmer.js globals array (line 17)
 2. **Transitive dep mtime** — adopt `getMt()` into `utest/cacher.js`
 3. **Global cleanup** — add `cleanup()` restore after run
 4. **TUIT phase** — stub for future
@@ -383,7 +383,7 @@ The `utest/` directory is a separate self-seeded runner targeting portability. A
 ```
 utest.js (CLI orchestrator)
   │
-  ├─ scanner.js ──────── test.js (Layer 0 stub)
+  ├─ src/scanner.js ──────── src/test.js (Layer 0 stub)
   │   import()s all .js      globalThis.test = test
   │   files matching         tree built by test() calls
   │   test() heuristic       ↓
@@ -392,12 +392,12 @@ utest.js (CLI orchestrator)
   ├─ globals.d.js ────── G atmosphere
   │   boots G               is, check, cl, debug, callstack, ...
   │                          │
-  ├─ runner.js ──────── G.check, G.test, G.callstack
+  ├─ src/runner.js ──────── G.check, G.test, G.callstack
   │   executes tree          fn(context) for each node
   │   mtime cache            ↓
   │                      results POJO (no fn refs, fully serializable)
   │                          │
-  └─ viewer.js ──────── G.cl, G.dotfill, G.checkView, G.errorView
+  └─ src/viewer.js ──────── G.cl, G.dotfill, G.checkView, G.errorView
       render()               formatted string → stdout
 ```
 

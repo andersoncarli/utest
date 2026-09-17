@@ -86,7 +86,7 @@ export function findTarget(testPath) {
   }
 
   // Progressive strip: a.b.c.t.js → a.b.js → a.js. `stripKind` não conhece
-  // `eval` (registrá-lo global contaminaria `kinds.t.js`), então o `.eval.js`
+  // `eval` (registrá-lo global contaminaria `src/kinds.t.js`), então o `.eval.js`
   // é descascado aqui, na origem.
   const base  = name.endsWith('.eval.js') ? name.slice(0, -'.eval.js'.length) : stripKind(name)
   const parts = base.split('.')
@@ -125,14 +125,14 @@ export function excludeFilter(configPath, phase = 'unit') {
 
 // ─── Pipeline ─────────────────────────────────────────────────
 // Kinds que NUNCA sao alvo de cobertura. `testRe()` le o registry mutavel de
-// `kinds.js`, que `resetRegistry()` devolve ao vocabulario inicial entre fases — logo,
+// `src/kinds.js`, que `resetRegistry()` devolve ao vocabulario inicial entre fases — logo,
 // rodando a fase `unit`, `.eval.js` nao esta registrado e escapa do filtro de kind.
 // Escapando, ele cai em `sourceFiles` e entra no DENOMINADOR da cobertura: um arquivo
 // que e roteiro de avaliacao passa a cobrar um teste que nunca vai existir. Esta lista
 // e independente da fase justamente porque o registry nao e.
 const NON_TARGET_RE = /\.(eval|int|tui|probe|bench)\.(js|ts)$|\.tui$/
 
-// `opts.ledger` (opcional): o arbitro por sha256 (`cacheLedger.js`), repassado ao
+// `opts.ledger` (opcional): o arbitro por sha256 (`src/cacheLedger.js`), repassado ao
 // `TestCache`. Sem ele, o cache arbitra pelo `results.json` como sempre.
 // `opts.fswatch`: liga o caminho que le o baseline do sibling `iodb/fswatch` em vez de
 // varrer com `readdirSync`. Desligado por padrao; indisponivel, cai no `walk()`.

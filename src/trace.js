@@ -1,6 +1,6 @@
-// trace.js — para onde foi a PAREDE.
+// src/trace.js — para onde foi a PAREDE.
 //
-// `probe.js` responde "que FUNÇÃO custou" — grafo caller▸callee, self-time por chamada.
+// `src/probe.js` responde "que FUNÇÃO custou" — grafo caller▸callee, self-time por chamada.
 // Este responde "que REGIÃO de tempo custou" — a fase de boot, o entry, o Bun.spawnSync
 // do check, e o tempo que sobrou fora de toda região marcada (o `(untracked)`, sempre
 // explícito). `utest --trace` liga uma OU outra conforme a fase — `probe.tree()` para um
@@ -15,7 +15,7 @@
 //
 // Uma REGIÃO é `region(nome, fn)` ou o par `mark()`/`end()`. Aninham (via `depth`).
 // Para o subprocesso (`sh()` do `apps/eval/engine.js` roda `bash -lc '… bun … '`), o
-// `.eval.js` splica `bun --import trace-preload.mjs`; o preload marca regiões DENTRO do
+// `.eval.js` splica `bun --import src/trace-preload.mjs`; o preload marca regiões DENTRO do
 // filho e despeja `<prefix>.<pid>` JSON, que `graftFragments()` costura no log com o
 // `ts` deslocado para dentro da região `sh:`.
 

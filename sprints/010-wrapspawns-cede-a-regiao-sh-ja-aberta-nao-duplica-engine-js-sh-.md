@@ -20,7 +20,7 @@ Plano do sprint 010 (feature 5.5).
 
 Investigando um hog em `sprint-cli` (`degraus.test.js`/`flows.test.js`, cada teste dispara
 dezenas de `Bun.spawnSync` chamando `cmds/eval.js`/`cmds/sprint.js`), descobri que
-`utest.js` nunca chamava `T.wrapSpawns()` (trace.js) no fluxo padrão — a árvore `--trace`
+`utest.js` nunca chamava `T.wrapSpawns()` (src/trace.js) no fluxo padrão — a árvore `--trace`
 mostrava um bloco opaco `entry <arquivo>.test.js` sem decompor os subprocessos. Instalei
 `T.wrapSpawns()` logo após `T.mark('boot')`, dentro do bloco `if (doTrace && !hogs &&
 !asJson)` (utest.js:333-338), e confirmei que a árvore passou a listar cada `sh:bun … eval.js
@@ -37,23 +37,23 @@ motivou a mudança.
 
 Este sprint corrige: `wrapSpawns()` deve ceder quando já está dentro de uma região `sh:`
 aberta, em vez de duplicá-la. Sem tocar em `engine.js` (vendored/externo a projetos
-consumidores como `sprint-cli/node_modules/soml/...`) — o guard vive só em `trace.js`.
+consumidores como `sprint-cli/node_modules/soml/...`) — o guard vive só em `src/trace.js`.
 
 ## Plano de materializacao
 
-1. **`trace.js`** — `wrapSpawns()` (linhas 79-95): adicionar `insideShRegion()`, que olha o
-   topo de `openStack` (já módulo-local a `trace.js`) e retorna true se o nome da região mais
+1. **`src/trace.js`** — `wrapSpawns()` (linhas 79-95): adicionar `insideShRegion()`, que olha o
+   topo de `openStack` (já módulo-local a `src/trace.js`) e retorna true se o nome da região mais
    recente começa com `'sh:'`. `Bun.spawnSync`/`Bun.spawn` passam a rodar o original SEM abrir
    nova região quando `insideShRegion()` é true — deixando a instrumentação externa (com
    `fragPrefix`, se houver) ser a única fonte para aquela chamada.
 
-2. **`trace.t.js`** — teste novo ao lado do existente "wrapSpawns() rotula pelo cmd e
+2. **`src/trace.t.js`** — teste novo ao lado do existente "wrapSpawns() rotula pelo cmd e
    restaura" (~linha 46-55): abrir uma região `sh: outer` via `region()`, instalar
    `wrapSpawns()`, chamar `Bun.spawnSync` dentro dela — a árvore/`nodes()` resultante deve
    mostrar SÓ a região externa, nenhuma `sh:` aninhada. Cobrir também o caso sem região aberta
    (comportamento anterior preservado: uma região `sh:<cmd>` é criada normalmente).
 
-3. **`trace.js`** — comentário de cabeçalho (linhas 1-20, já explica o modelo): acrescentar
+3. **`src/trace.js`** — comentário de cabeçalho (linhas 1-20, já explica o modelo): acrescentar
    uma frase curta notando que `wrapSpawns()` cede a uma região `sh:` externa já aberta para
    não duplicar `engine.js#sh()` (5.3). Sem novo arquivo de doc.
 
@@ -61,7 +61,7 @@ consumidores como `sprint-cli/node_modules/soml/...`) — o guard vive só em `t
 
 **Verificação**
 
-- `bun test trace.t.js` — verde, incluindo o teste novo do guard.
+- `bun test src/trace.t.js` — verde, incluindo o teste novo do guard.
 - Reproduzir o caso que expôs o bug: dentro do sprint-cli, rodar `utest <arquivo-que-chama-
   eval.js-via-engine> --trace` e confirmar UMA região `sh:` por subprocesso (com o fragmento
   do filho enxertado), não duas aninhadas.
@@ -71,7 +71,7 @@ consumidores como `sprint-cli/node_modules/soml/...`) — o guard vive só em `t
 
 **Critério de pronto**
 
-`sprint test` verde (inclui `trace.t.js`), os dois cenários de verificação acima confirmados
+`sprint test` verde (inclui `src/trace.t.js`), os dois cenários de verificação acima confirmados
 manualmente, `sprint eval 5.5` step-by-step com humano.
 
 # REPORT
@@ -88,16 +88,16 @@ sem `fragPrefix`.
 
 **O que mudou**
 
-- `trace.js` — `wrapSpawns()`: adicionado `insideShRegion()`, que olha o topo de
+- `src/trace.js` — `wrapSpawns()`: adicionado `insideShRegion()`, que olha o topo de
   `openStack` e cede (roda o spawn original sem abrir nova região) quando já há uma região
   `sh:` aberta. Comentário de cabeçalho da função atualizado explicando o porquê.
-- `trace.t.js` — teste novo cobrindo o guard (região `sh:` externa não ganha uma `sh:`
+- `src/trace.t.js` — teste novo cobrindo o guard (região `sh:` externa não ganha uma `sh:`
   aninhada por dentro) e o comportamento anterior preservado (sem região aberta, uma
   `sh:<cmd>` é criada normalmente).
 
 ## Prova
 
-- `utest trace.t.js` — 35 checks verdes, incluindo o teste novo do guard.
+- `utest src/trace.t.js` — 35 checks verdes, incluindo o teste novo do guard.
 - `sprint test` — suite inteira verde (📄9 🧪141 ✔359).
 - `utest degraus.test.js --trace` (sprint-cli, sem `engine.js` no caminho) — árvore continua
   decompondo os `Bun.spawnSync` diretos do teste em `sh:bun … eval.js …`, sem regressão.

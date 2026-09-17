@@ -22,7 +22,7 @@ A preencher.
 
 # REPORT
 
-`ledger.js` — memória permanente do `utest` sobre o `iodb`: um log append-only,
+`src/ledger.js` — memória permanente do `utest` sobre o `iodb`: um log append-only,
 criptograficamente encadeado, com `run:start`/`test:result`/`run:end`, verificável via
 `verify()` e com degradação no-op quando `../iodb` não está presente.
 

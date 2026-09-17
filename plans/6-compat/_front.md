@@ -7,9 +7,9 @@ updated: 2026-09-03
 ---
 # [6] compat — rodar o que já existe, e sair aos poucos
 
-Uma suíte escrita para `bun:test`/`jest` roda no utest sem reescrita: `shims.js` fornece
+Uma suíte escrita para `bun:test`/`jest` roda no utest sem reescrita: `src/shims.js` fornece
 `describe`/`it`/`expect` (~40 matchers), lifecycle hooks e `spyOn`; o plugin `onLoad`
-comenta os imports de `bun:test`/`node:test` e injeta os shims. `migrate.js` é o caminho
+comenta os imports de `bun:test`/`node:test` e injeta os shims. `src/migrate.js` é o caminho
 de SAÍDA — codemod determinístico `expect()` → `check()`. `.tuit` é o formato próprio de
 snapshot ASCII (JSON + arte intercalados).
 

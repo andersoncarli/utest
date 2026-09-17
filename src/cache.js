@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, statSync, utimesSync, mkdirSync, rmSync, e
 import { join, relative, dirname, resolve, parse as parsePath } from 'path'
 
 /**
- * cache.js — o cache do utest, e a regra que o torna confiável.
+ * src/cache.js — o cache do utest, e a regra que o torna confiável.
  *
  * A regra é uma só, e seguida à risca não tem furo. Ela vive inteira nos
  * timestamps que todo inode já tem — sem banco, sem sidecar, sem hash, sem um
@@ -538,7 +538,7 @@ export function TestCache(root, { ledger = null } = {}) {
   // `extraDeps` (opcional): raízes de dep além do grafo estático do teste — a
   // fase `eval` passa aqui o `files:` do `.md` de feature (ver `utest.js#runPhase`).
   // `phase` (opcional, default `'unit'`): qual fatia de `results.json` a árbitro
-  // consulta — sem isto, cai na fase mais comum, mesmo default que `scanner.js` usa
+  // consulta — sem isto, cai na fase mais comum, mesmo default que `src/scanner.js` usa
   // pro `include` de um `TEST.yaml` sem seção própria.
   return {
     deps,

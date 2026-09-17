@@ -1,5 +1,5 @@
 // utest/tuit.js — parser + executor para `.tuit`: JSON parcial + arte ASCII esperada,
-// intercalados. `kinds.js` já reconhecia o sufixo (scanner + shim), mas nada executava o
+// intercalados. `src/kinds.js` já reconhecia o sufixo (scanner + shim), mas nada executava o
 // arquivo — `utest.js` faz `await import(entry.path)` em todo entry, e um `.tuit` não é um
 // módulo ESM chamando `test()`.
 //

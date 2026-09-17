@@ -21,7 +21,7 @@ const noop = () => ({
 
 // `.utest/STATE.jsonl` (histórico append-only, um registro por rodada de scan) projeta
 // `.utest/STATE.yaml` (o último estado) via `iodb` — mesma infraestrutura do
-// `ledger.js` (8.1). Degrada para no-op sem `../iodb`: um runner de testes não pode
+// `src/ledger.js` (8.1). Degrada para no-op sem `../iodb`: um runner de testes não pode
 // ficar refém do seu próprio log.
 export async function openState(root, options = {}) {
   if (options.enabled === false) return noop()
@@ -30,7 +30,7 @@ export async function openState(root, options = {}) {
   try {
     ;({ default: IO, assign } = await import('../iodb/src/io-engine.js'))
   } catch (e) {
-    // Mesmo degrade silencioso que escondeu o caminho errado no `ledger.js` — ver o
+    // Mesmo degrade silencioso que escondeu o caminho errado no `src/ledger.js` — ver o
     // comentario la. Sob `UTEST_DEBUG`, o motivo real sai no stderr.
     if (process.env.UTEST_DEBUG) process.stderr.write(`[utest] state degradado: ${e.message}\n`)
     return noop()

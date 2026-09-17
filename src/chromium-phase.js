@@ -1,4 +1,4 @@
-// chromium-phase.js — UM Chromium para a fase inteira, em vez de um por `.check.mjs`.
+// src/chromium-phase.js — UM Chromium para a fase inteira, em vez de um por `.check.mjs`.
 //
 // Sobe o browser com `--remote-debugging-port` e publica o endereço em `CHROMIUM_CDP`;
 // cada `.check.mjs` (todos passam por `connectOrLaunch`, em

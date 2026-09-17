@@ -78,7 +78,7 @@ Dois blocos duplicados no mesmo arquivo:
    acrescentar fato novo. Regra "REPORT encolhe quando duplica o PLAN" aplicada: virou
    citação de 2 linhas. O PLAN não foi tocado.
 
-Verificado: `cache.t.js` segue verde (178 checks), `gaps()` com `asked`/`broken_links`/
+Verificado: `src/cache.t.js` segue verde (178 checks), `gaps()` com `asked`/`broken_links`/
 `intents`/`requests` inalterados.
 
 ### 010, 012 — PLAN↔REPORT ≥15%, processados

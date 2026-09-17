@@ -1,4 +1,4 @@
-// `ledger.js` grava a memoria permanente do utest sobre o iodb: uma cadeia
+// `src/ledger.js` grava a memoria permanente do utest sobre o iodb: uma cadeia
 // append-only que ancora a garantia no CONTEUDO exercitado (sha256 do file set)
 // e prova, via `verify()`, que nada no meio foi adulterado sem deixar rastro.
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs'

@@ -66,7 +66,7 @@ barata de descobrir.
 Esta frente comecou como "o utest com memoria". O que foi construido e maior que isso, e vale
 nomear porque muda quem pode usar.
 
-Olhe as propriedades do `ledger.js` sem olhar o nome: log **append-only**; cadeia
+Olhe as propriedades do `src/ledger.js` sem olhar o nome: log **append-only**; cadeia
 criptografica (`sha64(payload) XOR sha64(prevKey)`, sem back-pointers); `verify()` que nao so
 detecta adulteracao mas **localiza** (`failedAt`); ancoragem no **conteudo** (`sha256` por
 arquivo, a cada rodada); **projecao que converge** — o estado presente e derivado do

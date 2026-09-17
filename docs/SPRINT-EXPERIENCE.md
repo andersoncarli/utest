@@ -86,7 +86,7 @@ para retratar o código existente, adotou 7 sprints históricos (`sprint adopt`)
 
 - **`sprint feature new <N.F> --front <kw>` com auto-bootstrap.** A primeira feature de
   uma frente já cria `plans/N-kw/_front.md` — não precisa de um `front new` separado.
-- **`sprint scan`** derivou os pilares (`utest.js ←19`, `check.js ←8`, `test.js ←8`) e a
+- **`sprint scan`** derivou os pilares (`utest.js ←19`, `src/check.js ←8`, `src/test.js ←8`) e a
   cadeia de referência sem abrir um arquivo. Bom ponto de partida para as fronteiras das
   frentes.
 - **`sprint init` é idempotente e diz a verdade do dia** ("instalado, mas AINDA NÃO
@@ -144,7 +144,7 @@ features (`plans/3-scan/3.5`, `plans/4-report/`).
   `utest shims.t.js` (inexistente): `rawTarget` fica `undefined`, `narrowScope`
   falso, o run cai em `.` completo, verde, exit 0. Deveria ser erro. É o gatilho do bug do
   `--sweep` acima.
-- **Sidecar de cache no diretório errado** (`cache.js:278`). `selfFile()` gravava em
+- **Sidecar de cache no diretório errado** (`src/cache.js:278`). `selfFile()` gravava em
   `.bot/.utest/` (nome legado de quando o utest vivia em `~/bot`), enquanto todo o resto
   usa `.utest/`. Corrigido no sprint 007.
 

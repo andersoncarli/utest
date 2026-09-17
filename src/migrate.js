@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// migrate.js — convert bun:test expect() style to native check() calls
+// src/migrate.js — convert bun:test expect() style to native check() calls
 //
 // Safe (deterministic) transforms only. Files with describe/beforeAll/
 // beforeEach/afterAll/afterEach are skipped — those need manual work.

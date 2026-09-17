@@ -218,7 +218,7 @@ const td = new Date(T + Math.min(checks, 999))
 fs.utimesSync(testFile, td, td)
 ```
 
-Reader (`scanner.js`, `cacheCount()`):
+Reader (`src/scanner.js`, `cacheCount()`):
 ```js
 const srcMin  = Math.floor(srcStat.mtimeMs  / 60000)
 const testMin = Math.floor(testStat.mtimeMs / 60000)

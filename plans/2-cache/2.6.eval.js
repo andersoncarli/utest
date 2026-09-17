@@ -1,7 +1,7 @@
 // Eval da feature 2.6 — o `results.json` arbitra o cache: a segunda checagem sobre o mtime
 // cravado.
 //
-// A 2.6 é a MESMA arbitragem que a 2.7, com o outro árbitro: o `judge` do `cache.js` é um
+// A 2.6 é a MESMA arbitragem que a 2.7, com o outro árbitro: o `judge` do `src/cache.js` é um
 // ponto de decisão único, e este roteiro exercita o caminho `results.json` — o que roda
 // quando não há `../iodb`. Por isso ele monta o `TestCache` SEM ledger em todos os passos:
 // é assim que um projeto sem o peer instalado se comporta, e é o fallback que precisa
@@ -10,7 +10,7 @@ export default (t) => {
 
   t.sandbox("2.6: o mtime dizendo HIT é REBAIXADO quando o results.json discorda", async ({ sh, check, write }) => {
     const U = process.cwd()
-    write("probe.js",
+    write("src/probe.js",
       `import { TestCache } from ${JSON.stringify(U + "/cache.js")}\n` +
       `import { writeFileSync } from 'fs'\n` +
       `const root = process.cwd()\n` +
@@ -27,7 +27,7 @@ export default (t) => {
       // que tem que rebaixar, porque o mtime do alvo não bate mais com o record.
       `writeFileSync(root + '/m.js', 'export const K = 2\\n')\n` +
       `console.log('APOS=' + JSON.stringify(cache.read(root + '/m.t.js', root + '/m.js', { phase: 'unit' })))\n`)
-    const r = await sh(`bun probe.js`)
+    const r = await sh(`bun src/probe.js`)
     check(r.out.includes("JUDGE=results.json"), true, "sem ledger, o results.json arbitra")
     check(r.out.includes("HIT=5"), true, "o par cravado devolve a contagem gravada")
     check(r.out.includes("APOS=null"), true, "alvo alterado → o results.json rebaixa o HIT a MISS")
@@ -50,7 +50,7 @@ export default (t) => {
       `utimesSync(root + '/p.js', t, t)\n` +
       `const r = cache.read(root + '/p.t.js', root + '/p.js', { phase: 'unit' })\n` +
       `console.log('PROMOVIDO=' + JSON.stringify(r?.checks))\n`)
-    const r = await sh(`cd promo && bun probe.js`)
+    const r = await sh(`cd promo && bun src/probe.js`)
     // O mtime do alvo mudou, então o `results.json` NÃO confirma — e não promover é o
     // comportamento certo: a assimetria proposital do `arbitrate` é que promover exige
     // confirmação, enquanto rebaixar tolera a dúvida.
@@ -73,7 +73,7 @@ export default (t) => {
       // passava por "não mudou". Sumir é uma mudança.
       `rmSync(root + '/d.js')\n` +
       `console.log('DEPOIS=' + cache.results.fresh('unit', root + '/t.t.js', [], root + '/t.js'))\n`)
-    const r = await sh(`cd dep && bun probe.js`)
+    const r = await sh(`cd dep && bun src/probe.js`)
     check(r.out.includes("ANTES=true"), true, "com a dep no lugar, o histórico está fresco")
     check(r.out.includes("DEPOIS=false"), true, "a dep sumiu → o histórico deixa de estar fresco")
   })
@@ -95,7 +95,7 @@ export default (t) => {
       `const rec = cache.results.get('unit', root + '/u.t.js')\n` +
       `console.log('STATE=' + rec?.state)\n` +
       `console.log('TEM_TARGET_MTIME=' + (rec?.targetMtime != null))\n`)
-    const r = await sh(`cd um && bun probe.js`)
+    const r = await sh(`cd um && bun src/probe.js`)
     check(r.out.includes("STATE=failed"), true, "um vermelho comum também deixa rastro no results.json")
     check(r.out.includes("TEM_TARGET_MTIME=true"), true, "e o record carrega o targetMtime do alvo pareado")
     check(exists("um/.utest/results.json"), true, ".utest/results.json foi escrito")
@@ -120,7 +120,7 @@ export default (t) => {
       `writeFileSync(root + '/nada-a-ver.js', 'export const X = 9\\n')\n` +
       `const d = TestCache(root).read(root + '/e.t.js', root + '/e.js', { phase: 'unit' })?.checks\n` +
       `console.log('ESTAVEL=' + [a, b, c, d].join(','))\n`)
-    const r = await sh(`cd est && bun probe.js`)
+    const r = await sh(`cd est && bun src/probe.js`)
     check(r.out.includes("ESTAVEL=4,4,4,4"), true, "releitura, instância nova e arquivo fora do grafo: o HIT não se move")
   })
 }

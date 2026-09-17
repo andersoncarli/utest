@@ -1,4 +1,4 @@
-// O árbitro por CONTEÚDO exige disco de verdade pelo mesmo motivo que `cache.t.js`: o que
+// O árbitro por CONTEÚDO exige disco de verdade pelo mesmo motivo que `src/cache.t.js`: o que
 // se prova aqui é a relação entre bytes no disco, sha256 e o veredito de frescor. Um mock
 // provaria só que o mock concorda consigo mesmo.
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, utimesSync, statSync, existsSync } from 'fs'
@@ -66,7 +66,7 @@ test('cacheLedger: o árbitro por conteúdo', ({ test }) => {
     // EMBRULHADO — `{ "<hash>": { event, ... } }` — não plano. `openLedger().state()`
     // devolve essa forma. Antes do sprint 018, `project` lia `entry.event` direto,
     // pegava `undefined` em TODOS, e a projeção ficava vazia: `fresh()` nunca
-    // confirmava, `enabled` seguia `true`, e o `arbitrate` do `cache.js` rebaixava
+    // confirmava, `enabled` seguia `true`, e o `arbitrate` do `src/cache.js` rebaixava
     // todo HIT de tempo — o `utest .` refazia a suíte inteira a cada rodada.
     const wrap = (ev, i) => ({ [`#${i}`]: ev })
     const l = await openCacheLedger(dir, {
@@ -75,7 +75,7 @@ test('cacheLedger: o árbitro por conteúdo', ({ test }) => {
         // tem que ser ignorado sem quebrar o laço
         { '0': { note: 'genesis' }, '1': { note: 'genesis' } },
         wrap(startEvent([{ file: 'm.t.js', sha256: sha(at('m.t.js')) }, { file: 'm.js', sha256: sha(at('m.js')) }]), 2),
-        // o lote agregado que `ledger.js#end` realmente grava (não `test:result` solto)
+        // o lote agregado que `src/ledger.js#end` realmente grava (não `test:result` solto)
         wrap({ event: 'run:tests', results: [
           { file: 'm.t.js', phase: 'unit', status: 'passed', checks: 7, tests: 2, failCount: 0, exception: false },
         ] }, 3),
@@ -178,7 +178,7 @@ test('cacheLedger: o árbitro por conteúdo', ({ test }) => {
   test('um arquivo que o ledger nunca viu nunca é fresh', async ({ check }) => {
     const { dir, at } = fixture(SET)
     const l = await openCacheLedger(dir, { ledger: fakeLedger([]) })
-    // Não saber nunca promove — a mesma assimetria do `arbitrate` do `cache.js`: o lado
+    // Não saber nunca promove — a mesma assimetria do `arbitrate` do `src/cache.js`: o lado
     // arriscado é sempre o menos permissivo.
     check(l.fresh('unit', at('m.t.js')), false)
     check(l.get('unit', at('m.t.js')), null)

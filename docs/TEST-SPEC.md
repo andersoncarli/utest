@@ -36,13 +36,13 @@ utest <phase|'unit'> <path|.> [name-filter] [-v:1*|2|3] [--force]
 
 ```
 utest/
-├── index.js      CLI entry — args parsing, orchestration
+├── src/index.js      CLI entry — args parsing, orchestration
 ├── config.js     TEST.yaml loader → { exclude[], unit, tui, integration }
-├── scanner.js    File discovery — all .js/.ts containing test(), _ exclusion, config excludes
+├── src/scanner.js    File discovery — all .js/.ts containing test(), _ exclusion, config excludes
 ├── cacher.js     mtime-offset cache — encoding + dependency graph for source
 ├── harness.js    Test API — test/it/describe/hooks/expect/spyOn + check wiring
 ├── seeder.js     Global setup — fs, path, utils/src/* (check, is, cl, ...)
-├── runner.js     Execution — subprocess (Bun) or in-process (Node), verbosity output
+├── src/runner.js     Execution — subprocess (Bun) or in-process (Node), verbosity output
 ├── executor.js   Subprocess entry — run one file, output JSON result with logs[]
 ├── loader.js     Node ESM hook — redirects bun:* imports to bun-mock.js
 └── bun-mock.js   Bun API shims for Node.js environments
@@ -50,7 +50,7 @@ utest/
 
 ---
 
-## File Discovery (`scanner.js`)
+## File Discovery (`src/scanner.js`)
 
 ### What counts as a test file
 
@@ -155,7 +155,7 @@ the FRM check API rather than `expect()`.
 
 ---
 
-## Verbosity (`runner.js`)
+## Verbosity (`src/runner.js`)
 
 ### `-v:0`
 
@@ -183,7 +183,7 @@ the FRM check API rather than `expect()`.
 
 ---
 
-## Subprocess Model (`runner.js` + `executor.js`)
+## Subprocess Model (`src/runner.js` + `executor.js`)
 
 Under Bun, each test file should run in a child `bun` process. This is required
 for real isolation: ESM module cache, globals, timers, process state and native

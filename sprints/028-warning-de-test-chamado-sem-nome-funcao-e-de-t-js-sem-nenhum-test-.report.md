@@ -17,7 +17,7 @@ função avisa; (2) `.t.js` sem nenhum `test()` (arquivo "cru", ISSUES/014) avis
 
 ## O que mudou
 
-- **`test.js`**: `test(name, fn = () => {}, op = {})` ganhou uma validação no
+- **`src/test.js`**: `test(name, fn = () => {}, op = {})` ganhou uma validação no
   topo — `typeof name !== 'string' || arguments.length < 2 || typeof fn !==
   'function'` dispara `process.stderr.write` em amarelo (convenção já usada no
   projeto, ex. `utest.js:316` — sem `console.warn`). `arguments.length` foi

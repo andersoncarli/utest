@@ -35,7 +35,7 @@ if (!watch) {
 ```
 
 O exit code vem de `grand`, um agregado SEPARADO do `state` por-arquivo que o `--json`
-imprime (`utest.js:812`, `state: t.state`). `summary()` (`viewer.js:384`) recursa
+imprime (`utest.js:812`, `state: t.state`). `summary()` (`src/viewer.js:384`) recursa
 `t.checks`/`t.tests` — se dois arquivos rodando concorrentemente (workers do runner)
 compartilham por engano a mesma referencia de array de checks/tests em algum objeto de
 teste global mal isolado, um incrementa o contador do outro. A contagem de checks vazando
@@ -63,7 +63,7 @@ Desconhecida — pede isolar `grand`/`summary()` por worker/arquivo dentro do `u
 Descoberto por acidente, no `iodb`: os arquivos `.t.js` daquela feature tinham um bug
 PROPRIO, `withTempDir(dir => {...})` chamado sem `return` dentro do corpo de `test()`. Como
 `withTempDir` e assincrono e o runner so `await`s quando a funcao de teste devolve uma
-Promise (`runner.js:84`, `if (r instanceof Promise) await r`), os testes terminavam
+Promise (`src/runner.js:84`, `if (r instanceof Promise) await r`), os testes terminavam
 "vazios" (sincronos, sem devolver nada) e o corpo real — dentro do `withTempDir` — rodava
 DEPOIS, solto, sem o runner aguardar. Isso mascarou o defeito por um tempo: testes com
 `check()` errados ainda apareciam verdes, porque o `check()` nunca era observado dentro do

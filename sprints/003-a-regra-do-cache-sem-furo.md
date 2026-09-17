@@ -43,50 +43,50 @@ timestamps que todo inode já tem:
 - ms fracionário (arquivo escrito) ≠ ms inteiro (`utimesSync`) — separa carimbo de edição.
 - Deps medidas contra o `atime` (precisão cheia), não o segundo cravado.
 
-E, no mesmo movimento: `kinds.js` (o vocabulário de sufixos num lugar) e `leak.t.js`
+E, no mesmo movimento: `src/kinds.js` (o vocabulário de sufixos num lugar) e `src/leak.t.js`
 (prender a mecânica do `check` tardio + o `clearTimeout`).
 
 ## Features que este sprint toca
 
-- **2 cache** — a regra inteira, `cache.js` + `cache.t.js`.
-- **3 scan** — `kinds.js` nasce (`register()` abre um tipo nas duas pontas); `scanner.js`
-  encolhe de 89 linhas para menos (a lógica de sufixo migra para `kinds.js`).
-- **1 core** — `leak.t.js` (sealed); `test.js` ganha `oncheck`/`sealed`.
+- **2 cache** — a regra inteira, `src/cache.js` + `src/cache.t.js`.
+- **3 scan** — `src/kinds.js` nasce (`register()` abre um tipo nas duas pontas); `src/scanner.js`
+  encolhe de 89 linhas para menos (a lógica de sufixo migra para `src/kinds.js`).
+- **1 core** — `src/leak.t.js` (sealed); `src/test.js` ganha `oncheck`/`sealed`.
 
 ## Criterio de pronto
 
-- `cache.t.js` verde: a regra do conjunto, o que invalida, o grafo de deps.
+- `src/cache.t.js` verde: a regra do conjunto, o que invalida, o grafo de deps.
 - Quente e frio reportam o MESMO número.
-- `kinds.t.js` verde: `register()` idempotente nas duas pontas.
-- `leak.t.js` verde: o check tardio reabre o veredito; o timer é limpo.
+- `src/kinds.t.js` verde: `register()` idempotente nas duas pontas.
+- `src/leak.t.js` verde: o check tardio reabre o veredito; o timer é limpo.
 
 # REPORT
 
-Sprint retroativo. A regra do cache reescrita para não ter furo (bucket de segundo + grafo de deps); kinds.js nasce; leak.t.js trava o sealed.
+Sprint retroativo. A regra do cache reescrita para não ter furo (bucket de segundo + grafo de deps); src/kinds.js nasce; src/leak.t.js trava o sealed.
 
 ## O que aconteceu
 
-- **A regra do cache reescrita** (`d9a14ad` "-bug no sistema de cache +tests") — `cache.js`
-  +198 linhas, `cache.t.js` +274. Bucket de segundo, grafo de deps recursivo (efeito
+- **A regra do cache reescrita** (`d9a14ad` "-bug no sistema de cache +tests") — `src/cache.js`
+  +198 linhas, `src/cache.t.js` +274. Bucket de segundo, grafo de deps recursivo (efeito
   colateral incluído), os dois detalhes que fecham a regra (ms inteiro vs. fracionário;
   deps contra `atime`).
-- **`kinds.js` nasce** (+45 linhas) — o vocabulário de sufixos declarado uma vez;
-  `scanner.js` encolhe 89→~30 (a lógica de sufixo migra). `kinds.t.js` +65.
-- **`leak.t.js`** (`b93b49e`, +90 linhas) — prende a mecânica do check tardio; `test.js`
+- **`src/kinds.js` nasce** (+45 linhas) — o vocabulário de sufixos declarado uma vez;
+  `src/scanner.js` encolhe 89→~30 (a lógica de sufixo migra). `src/kinds.t.js` +65.
+- **`src/leak.t.js`** (`b93b49e`, +90 linhas) — prende a mecânica do check tardio; `src/test.js`
   ganha `oncheck`/`sealed`.
-- **`scanner.t.js` +147** — `findTarget` e `scan` cobertos de verdade.
+- **`src/scanner.t.js` +147** — `findTarget` e `scan` cobertos de verdade.
 
 ## Onde o PLAN errou
 
 - **É o sprint mais sólido da história do repo.** A regra do cache é a única parte com
-  cobertura à prova de regressão (`cache.t.js` = 42 testes / 75 checks) e um critério de
+  cobertura à prova de regressão (`src/cache.t.js` = 42 testes / 75 checks) e um critério de
   aceite explícito (quente == frio). As duas regressões que a regra antiga deixava passar
   estão documentadas E cobertas.
-- **`leak.t.js` tapa metade do problema de 002.** O `sealed` reabre o veredito de um
+- **`src/leak.t.js` tapa metade do problema de 002.** O `sealed` reabre o veredito de um
   `check` tardio — mas uma **exceção** assíncrona tardia continua atribuída ao arquivo
   seguinte. A frente 7 permanece aberta.
-- **`kinds.js` foi bem desenhado** — `register()` nas duas pontas de uma vez, e um teste
-  em `kinds.t.js` que prova "antes de registrar, não reconhece" (o que impede
+- **`src/kinds.js` foi bem desenhado** — `register()` nas duas pontas de uma vez, e um teste
+  em `src/kinds.t.js` que prova "antes de registrar, não reconhece" (o que impede
   `register('eval')` global). Mas `registerExecutor`/`registerEntries` ficaram sem teste
   próprio (viriam no 004, e continuam sem).
 
@@ -95,5 +95,5 @@ Sprint retroativo. A regra do cache reescrita para não ter furo (bucket de segu
 | frente | estado |
 |---|---|
 | 2 cache | 🟡 — a regra inteira coberta, quente == frio |
-| 3 scan | 🟡 — `scanner.t.js` + `kinds.t.js` verdes |
-| 1 core | 🟡 — `leak.t.js` trava o `sealed` |
+| 3 scan | 🟡 — `src/scanner.t.js` + `src/kinds.t.js` verdes |
+| 1 core | 🟡 — `src/leak.t.js` trava o `sealed` |

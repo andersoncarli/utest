@@ -34,16 +34,16 @@ Um runner in-process com um contrato claro: **um arquivo de teste nunca importa 
 definir seus testes**. `test()` é global; `check`, `is`, `log` chegam como argumentos de
 `fn` em tempo de execução. Três fases, três responsabilidades:
 
-1. **scan** (`scanner.js`) — walk por `TEST.yaml`, `import()` de cada arquivo casando a
+1. **scan** (`src/scanner.js`) — walk por `TEST.yaml`, `import()` de cada arquivo casando a
    heurística, a árvore `test.main` como POJO.
 2. **run** — executa cada `fn(context)`, captura checks/exceções/output/duração.
-3. **render** (`viewer.js`) — o relatório.
+3. **render** (`src/viewer.js`) — o relatório.
 
 ## Features que este sprint toca
 
-- **1 core** — `test.js` (coletor), `check.js` (asserção), o contrato "zero import".
-- **3 scan** — `scanner.js` (o walk, o pareamento teste↔alvo).
-- **4 report** — `viewer.js` (a primeira forma do relatório).
+- **1 core** — `src/test.js` (coletor), `src/check.js` (asserção), o contrato "zero import".
+- **3 scan** — `src/scanner.js` (o walk, o pareamento teste↔alvo).
+- **4 report** — `src/viewer.js` (a primeira forma do relatório).
 
 ## Criterio de pronto
 
@@ -62,7 +62,7 @@ Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, 
 
 - **`utest.js` in-process funcional** — scan → import alvo → `runTest` → render, num
   processo só. `71d6c20` marca "All green ✔ 1511 (103ms)".
-- **`scanner.js` "simple scanner"** (`914cbee`) — o walk por glob + `TEST.yaml`.
+- **`src/scanner.js` "simple scanner"** (`914cbee`) — o walk por glob + `TEST.yaml`.
 - **`TEST-SPEC.md` / `TEST-PROBLEMS-I-FOUND.md`** (`ed8b175`) — o contrato-alvo e os
   achados da migração escritos em prosa.
 - **`utest2.js`** (`48cb204` "utest2 optimized") — uma segunda cópia do runner, "otimizada".
@@ -83,6 +83,6 @@ Sprint retroativo. O runner in-process nasce: scan/run/render num processo só, 
 
 | frente | estado |
 |---|---|
-| 1 core | 🟠 — `test.js`/`check.js` existem, sem `.t.js` próprio ainda |
-| 3 scan | 🟠 — `scanner.js` funcional, `findTarget` básico |
-| 4 report | 🟠 — `viewer.js` na primeira forma (`═══`, glyph por check) |
+| 1 core | 🟠 — `src/test.js`/`src/check.js` existem, sem `.t.js` próprio ainda |
+| 3 scan | 🟠 — `src/scanner.js` funcional, `findTarget` básico |
+| 4 report | 🟠 — `src/viewer.js` na primeira forma (`═══`, glyph por check) |

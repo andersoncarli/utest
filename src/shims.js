@@ -1,5 +1,5 @@
 /**
- * shims.js - Bun/Jest Global Compatibility Layer
+ * src/shims.js - Bun/Jest Global Compatibility Layer
  *
  * Provides mocks for describe(), it(), expect(), and lifecycle hooks
  * to allow hybrid Bun tests to run in our unified runner.

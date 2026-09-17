@@ -34,7 +34,7 @@ export async function openLedger(root, options = {}) {
   } catch (e) {
     // O degrade continua sendo o contrato. O SILENCIO nao: este `catch` engoliu um
     // `ERR_MODULE_NOT_FOUND` (o caminho apontava para `../iodb/io-engine.js`, sem o
-    // `src/`) por nove commits, e o no-op resultante fazia `ledger.t.js`/`state.t.js`
+    // `src/`) por nove commits, e o no-op resultante fazia `src/ledger.t.js`/`src/state.t.js`
     // falharem por um motivo que nao aparecia em lugar nenhum. Sob `UTEST_DEBUG` o
     // motivo real sai no stderr, sem que o runner deixe de degradar.
     if (process.env.UTEST_DEBUG) process.stderr.write(`[utest] ledger degradado: ${e.message}\n`)
@@ -91,7 +91,7 @@ export async function openLedger(root, options = {}) {
     // em paralelo. A anfora do conteudo e a mesma; o lugar dela e o evento agregado.
     //
     // `payload.target` / `payload.deps` viajam como CAMINHO relativo: quem projeta
-    // (`cacheLedger.js`) cruza com o `fileSet` do `run:start`, que ja tem o sha de todos.
+    // (`src/cacheLedger.js`) cruza com o `fileSet` do `run:start`, que ja tem o sha de todos.
     test(file, result, payload = {}) {
       const { target, deps, phase, ...rest } = payload
       buffered.push({
@@ -120,7 +120,7 @@ export async function openLedger(root, options = {}) {
     verify: () => io.verify(),
     // O HISTORICO projetado: com `reduce: append` e `initial: []`, o estado reduzido do
     // iodb JA E o array de eventos na ordem em que entraram. Quem quer derivar algo da
-    // stream (o `cacheLedger.js` deriva o frescor por sha256) le daqui — nao remonta a
+    // stream (o `src/cacheLedger.js` deriva o frescor por sha256) le daqui — nao remonta a
     // projecao por conta propria, e nao mantem um segundo registro em paralelo.
     state: () => io.state() || [],
     out: (h) => io.out(h),

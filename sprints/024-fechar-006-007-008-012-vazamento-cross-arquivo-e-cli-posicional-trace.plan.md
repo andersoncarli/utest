@@ -12,7 +12,7 @@ Duas causas raiz cobrem 3 das 4 issues:
 - **Causa raiz A — vazamento de estado entre arquivos concorrentes
   (in-process)**: já documentada em [[7.2]] e parcialmente coberta por
   [[1.3]] (sealed cobre check tardio, não exceção tardia nem o array de
-  checks/tests). `grand` (utest.js ~1124-1129) e `summary()` (viewer.js:384)
+  checks/tests). `grand` (utest.js ~1124-1129) e `summary()` (src/viewer.js:384)
   somam sobre um agregado que vaza entre `page-cursor.t.js` e
   `tabular-table.t.js` (ISSUES/007). O mesmo padrão explica o sintoma 3 de
   ISSUES/012 (isolado vs. agregado divergem pro mesmo arquivo sem mudança de
@@ -28,8 +28,8 @@ Duas causas raiz cobrem 3 das 4 issues:
 
 1. **Causa raiz A (007 + 012 sintoma 3)**
    - Ler `utest.js` em torno de `grand`/exit code (~1124-1129) e
-     `viewer.js:384` (`summary()`), e o ciclo de vida por-arquivo em
-     `runner.js` ([[7.1]]/[[7.2]] in-process).
+     `src/viewer.js:384` (`summary()`), e o ciclo de vida por-arquivo em
+     `src/runner.js` ([[7.1]]/[[7.2]] in-process).
    - Confirmar se `checks`/`tests` é array compartilhado por referência entre
      arquivos rodando no mesmo processo (hipótese já registrada em [[7.2]]).
    - Corrigir isolando o agregado por arquivo antes de somar no `grand`.

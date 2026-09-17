@@ -1,4 +1,4 @@
-// Test.t.js - Tests for test.js
+// Test.t.js - Tests for src/test.js
 test('test', async ({ test, check, checkFail, checkException, log }) => {
   // Test 1: Basic check integration
   check(1 + 1, 2)

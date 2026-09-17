@@ -29,7 +29,7 @@ próprio sprint-cli (40.110) e fica fora deste sprint.
 
 No caminho, porém, apareceu um caso real de fragilidade: um par teste/alvo no
 sprint-cli tinha o mtime do alvo (`.md`) e do teste (`.eval.js`) em **segundos
-diferentes** sem edição aparente — o protocolo de "segundo cravado" (`cache.js`) exige
+diferentes** sem edição aparente — o protocolo de "segundo cravado" (`src/cache.js`) exige
 que os dois compartilhem o mesmo segundo truncado, e qualquer dessincronia (do
 filesystem, de uma race na escrita, de uma cópia/checkout) já invalida o par
 silenciosamente, sem deixar rastro do motivo.
@@ -46,23 +46,23 @@ usuário, ver pergunta respondida na sessão: "results.json manda").
 
 ## Plano de materializacao
 
-1. **`cache.js`** — em `readPaired` e `readSelf`, antes do `return` de sucesso,
+1. **`src/cache.js`** — em `readPaired` e `readSelf`, antes do `return` de sucesso,
    adicionar checagem: se `phase` foi passado em `opts` e `!results.fresh(phase,
    testPath, extraDeps)`, retornar `null` (MISS) mesmo que o mtime cravado dissesse
    HIT. `cache.read`/`cache.write` ganham `phase` como campo extra dentro do objeto de
    opções já existente (`{ extraDeps, phase }`) — sem `phase`, arbitragem é pulada
    (compat total com qualquer chamador que não a informe).
-2. **`scanner.js:131`** — `cache.read(path, target)` vira `cache.read(path, target,
+2. **`src/scanner.js:131`** — `cache.read(path, target)` vira `cache.read(path, target,
    { phase })` (`phase` já está no escopo de `scan()`).
 3. **`utest.js`** — dois pontos de leitura (linha ~403 e ~419) passam a incluir `phase`
    no objeto de opções. `cache.write` (linha ~645) não muda — a arbitragem só afeta
    leitura.
 4. **`utest.js:495-497`** — remover o bloco antigo de "cache diz HIT mas histórico está
    stale" (não faz mais sentido: se chegou a HIT em `entry.cache`, os dois mecanismos já
-   concordaram por construção). Substituir por diagnóstico dentro de `cache.js`: quando
+   concordaram por construção). Substituir por diagnóstico dentro de `src/cache.js`: quando
    a arbitragem descarta um HIT do mtime por divergência do `results.json`, e
    `globalThis.utestVerbosity >= 2`, logar o motivo real da re-execução.
-5. **`cache.t.js`** — adicionar 6 casos novos (não remove nenhum existente):
+5. **`src/cache.t.js`** — adicionar 6 casos novos (não remove nenhum existente):
    - mtime diz HIT, sem record em `results.json` para o path/phase → MISS.
    - mtime diz HIT, record existe mas `mtime` diverge do atual → MISS (replica o bug
      real do sprint-cli).
@@ -73,7 +73,7 @@ usuário, ver pergunta respondida na sessão: "results.json manda").
    - mtime diz MISS (arquivo editado) → MISS independente do `results.json` (caminho
      inverso não é arbitrado).
    - chamada sem `phase` → arbitragem pulada, comportamento idêntico ao atual (compat).
-6. **Comment-block do topo de `cache.js`** — acrescentar parágrafo explicando a dupla
+6. **Comment-block do topo de `src/cache.js`** — acrescentar parágrafo explicando a dupla
    checagem (a prosa existente sobre "os dois detalhes que fazem a regra fechar"
    continua válida).
 
@@ -95,7 +95,7 @@ definitivo, sem consultar `results.json`. A mensagem de diagnóstico hoje em
 
 **Verificação**
 
-- `verify_tests`: `utest cache.t.js` isolado até verde.
+- `verify_tests`: `utest src/cache.t.js` isolado até verde.
 - `utest .` (suíte completa do projeto) duas vezes seguidas — segunda
   rodada deve continuar tão rápida quanto hoje (arbitragem é leitura de objeto já em
   memória, sem overhead perceptível).
@@ -105,7 +105,7 @@ definitivo, sem consultar `results.json`. A mensagem de diagnóstico hoje em
 
 **Critério de pronto**
 
-- Nenhum teste existente de `cache.t.js` regride.
+- Nenhum teste existente de `src/cache.t.js` regride.
 - Os 6 casos novos passam.
 - `utest .` neste projeto continua com output idêntico quente/frio
   (garantia já confirmada pela feature 2.5).
@@ -128,7 +128,7 @@ era o sintoma investigado, mas a dessincronia de mtime encontrada no caminho.
 
 **O que mudou**
 
-- `cache.js`: `readPaired`/`readSelf` agora passam pelo veredito do mtime cravado
+- `src/cache.js`: `readPaired`/`readSelf` agora passam pelo veredito do mtime cravado
   (`readPairedByTime`/`readSelf`, inalterados) e depois por `arbitrate` — que cruza esse
   veredito com `results.fresh(phase, testPath, extraDeps, targetPath)` nos dois
   sentidos: HIT do tempo + histórico discorda → MISS; MISS do tempo + histórico
@@ -144,12 +144,12 @@ era o sintoma investigado, mas a dessincronia de mtime encontrada no caminho.
   em `results.json` (antes, `utest.js` chamava os dois separadamente, e só chamava
   `results.record` quando `cache.write` também era chamado — uma falha comum, que só
   disparava `cache.bust`, nunca deixava rastro em `results.json`, e a árbitro rebaixava
-  todo HIT por falta de histórico). `utest.js`/`scanner.js` passaram `phase` (default
+  todo HIT por falta de histórico). `utest.js`/`src/scanner.js` passaram `phase` (default
   `'unit'`) nas chamadas de leitura.
 - Removida a verificação de 2º nível antiga em `utest.js` (log passivo em `-v:2`, nunca
-  corrigia nada) — substituída por diagnóstico dentro da própria árbitro (`cache.js`),
+  corrigia nada) — substituída por diagnóstico dentro da própria árbitro (`src/cache.js`),
   que agora explica a decisão real quando rebaixa ou promove.
-- 8 casos novos em `cache.t.js` cobrindo a arbitragem bidirecional (caminho feliz, sem
+- 8 casos novos em `src/cache.t.js` cobrindo a arbitragem bidirecional (caminho feliz, sem
   histórico, histórico divergente, promoção por dessincronia, edição real não promovida,
   falha comum nunca promovida, falha reproduzível sobrevive). Nenhum caso existente foi
   removido — os dois mecanismos continuam cobertos lado a lado.
@@ -163,7 +163,7 @@ era o sintoma investigado, mas a dessincronia de mtime encontrada no caminho.
 
 ## Prova
 
-- `utest cache.t.js`: 85 checks, 0 falhas.
+- `utest src/cache.t.js`: 85 checks, 0 falhas.
 - `utest .` (suíte completa do projeto): 369 checks, 0 falhas, quente em ~0.7s
   (sem regressão de performance — a árbitro só lê dados já em memória).
 - Reproduzido manualmente em ~/sprint-cli: dessincronizei deliberadamente o mtime do

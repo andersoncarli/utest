@@ -1,4 +1,4 @@
-// viewer.t.js — o relatório compacto (sprint 084c): barra por fase, vermelhos numa
+// src/viewer.t.js — o relatório compacto (sprint 084c): barra por fase, vermelhos numa
 // linha, e o par `received: false / expected: true` que some.
 import { phaseLine, phaseMs, progressBar, compactFails, checkView, failInfo, fileReportSpan, fullView, fileLine, displayLen, failLines, failData, hogMs, HOG_MS } from './viewer.js'
 import cl from '../utils/src/cl.js'
@@ -14,7 +14,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
   delete globalThis.utestHogMs
 
   test('checkView omite `received: false` — 1 arg e `check(expr, true)`', ({ check }) => {
-    // `check.js` guarda `a`/`b` já como string (`repr`). Um `check(x, true)` falho chega
+    // `src/check.js` guarda `a`/`b` já como string (`repr`). Um `check(x, true)` falho chega
     // como a:'false' b:'true'; um `check(x)` falho como a:'false' b:undefined. Nos dois, a
     // expressão já está no lineCode e `received: false` não acrescenta nada.
     const comExpected = { state: 'failed', a: 'false', b: 'true', lineCode: "check(x.includes('┌'), true)", address: 'f.js:012' }
@@ -553,7 +553,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
 
   test('checkView — sem `error`, sem `lineCode` e sem `address`: degrada em `check()` mas NÃO some', ({ check }) => {
     // A rede: mesmo no pior caso (o `callstack` devolveu pilha vazia, nada foi persistido),
-    // o vermelho ainda rende — o par que `check.js` gravou não pode sumir.
+    // o vermelho ainda rende — o par que `src/check.js` gravou não pode sumir.
     const bare = { state: 'failed', a: 'true', b: 'false' }
     const out = strip(checkView(bare, { width: 80 }))
     check(out.includes('check()'), true, 'cai no literal `check()`')
@@ -563,7 +563,7 @@ test('viewer — relatório compacto', ({ test, check }) => {
 
   // ── Escopo de UM arquivo: a saída seca (sprint 019) ──────────────────────────
   // O render de arquivo-único mora no bloco de dispatch de `utest.js`, não numa fn de
-  // `viewer.js` — então estes casos spawnam o runner de verdade contra um `.t.js` scratch.
+  // `src/viewer.js` — então estes casos spawnam o runner de verdade contra um `.t.js` scratch.
   test('escopo de arquivo VERDE → uma linha seca `✔N (Wms)`, sem phaseLine nem nome', ({ check }) => {
     const { mkdtempSync, writeFileSync, rmSync } = require('fs')
     const { join } = require('path')

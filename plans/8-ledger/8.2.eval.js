@@ -16,7 +16,7 @@ export default (t) => {
       `const state = await openState(root)\n` +
       `console.log("CONFIG_CHANGED_FIRST=" + state.configChanged)\n` +
       `state.recordScan({ phase: "unit", included: ["a.t.js", "b.t.js"], excluded: ["node_modules/**"] })\n`)
-    const r = await sh(`cd r1 && bun probe.js`)
+    const r = await sh(`cd r1 && bun src/probe.js`)
     check(r.out.includes("CONFIG_CHANGED_FIRST=false"), true, "sem registro anterior, configChanged fica false")
     check(exists("r1/.utest/STATE.yaml"), true, ".utest/STATE.yaml existe após recordScan")
 
@@ -93,7 +93,7 @@ export default (t) => {
       `const state = await openState(process.cwd(), { enabled: false })\n` +
       `console.log("CONFIG_CHANGED=" + state.configChanged)\n` +
       `state.recordScan({ phase: "unit", included: [], excluded: [] })\n`)
-    const r = await sh(`cd r4 && bun probe.js`)
+    const r = await sh(`cd r4 && bun src/probe.js`)
     check(r.out.includes("CONFIG_CHANGED=false"), true, "enabled:false mantém configChanged false")
     check(exists("r4/.utest/STATE.yaml"), false, "nenhum .utest/STATE.yaml é criado quando desligado")
   })

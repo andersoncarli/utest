@@ -1,8 +1,8 @@
 // utest/console-capture.js — um teste que usa `console.log`/`console.error` direto (não o
 // `log()`/`debug()` injetado no contexto) vaza pro stdout de VERDADE, mesmo com o arquivo
 // inteiro verde — só devia aparecer de novo com `-v:3`. Compartilhado porque `utest.js` e
-// `runner.js` têm CADA UM o próprio `runTest` (a fase `eval`, via `apps/eval/engine.js`,
-// roda sobre o de `runner.js`) — sem isto num só lugar, o vazamento voltaria pela porta que
+// `src/runner.js` têm CADA UM o próprio `runTest` (a fase `eval`, via `apps/eval/engine.js`,
+// roda sobre o de `src/runner.js`) — sem isto num só lugar, o vazamento voltaria pela porta que
 // não foi tapada.
 //
 // `console.*` é global; salvar/restaurar em volta de UM `fn` só é seguro porque o runner é

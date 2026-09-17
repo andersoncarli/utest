@@ -16,28 +16,28 @@ estático, não o board.
 |---|---|---|---|
 | 1 | **core** | o par mínimo que um arquivo toca: `test()` coleta, `check()` afirma, `sealed` protege o veredito | 1.1–1.4 |
 | 2 | **cache** | `TestCache(root)` — a regra do mtime sem furo, o grafo de deps, `cacheFailure`, o `results.json` (índice + cross-check) | 2.1–2.5 |
-| 3 | **scan** | `scanner.js` + `kinds.js` — walk por glob, `findTarget`, vocabulário de sufixos, os ganchos de extensão | 3.1–3.5 |
-| 4 | **report** | `viewer.js` + o render de `utest.js` — compacto por desenho, `🐢N` = segundos, verbosidade derivada do escopo, `--json` | 4.1–4.5 |
-| 5 | **profiling** | `probe.js` (que função custou) + `trace.js`/`trace-preload.mjs` (que região custou), ligados pelo `--trace` | 5.1–5.5 |
-| 6 | **compat** | `shims.js` (bun:test/jest), o plugin `onLoad`, `migrate.js` (codemod de saída), `tuit.js` (snapshot ASCII) | 6.1–6.4 |
-| 7 | **isolation** | o alvo arquitetural: worker por arquivo. Hoje in-process; `runner.js`/`worker.js` são a base | 7.1–7.3 |
+| 3 | **scan** | `src/scanner.js` + `src/kinds.js` — walk por glob, `findTarget`, vocabulário de sufixos, os ganchos de extensão | 3.1–3.5 |
+| 4 | **report** | `src/viewer.js` + o render de `utest.js` — compacto por desenho, `🐢N` = segundos, verbosidade derivada do escopo, `--json` | 4.1–4.5 |
+| 5 | **profiling** | `src/probe.js` (que função custou) + `src/trace.js`/`src/trace-preload.mjs` (que região custou), ligados pelo `--trace` | 5.1–5.5 |
+| 6 | **compat** | `src/shims.js` (bun:test/jest), o plugin `onLoad`, `src/migrate.js` (codemod de saída), `src/tuit.js` (snapshot ASCII) | 6.1–6.4 |
+| 7 | **isolation** | o alvo arquitetural: worker por arquivo. Hoje in-process; `src/runner.js`/`src/worker.js` são a base | 7.1–7.3 |
 
 ## O grafo de módulos
 
 ```
-                       index.js ──▶ utest.js  (o CLI, ←19 dependentes)
+                       src/index.js ──▶ utest.js  (o CLI, ←19 dependentes)
                                        │
         ┌──────────────┬───────────────┼───────────────┬──────────────┐
         ▼              ▼               ▼               ▼              ▼
-   scanner.js      viewer.js       kinds.js        test.js       check.js
+   src/scanner.js      src/viewer.js       src/kinds.js        src/test.js       src/check.js
         │                             │               │              │
-        ▼                             │               └──── console-capture.js
-    cache.js ◀────────────────────────┘
+        ▼                             │               └──── src/console-capture.js
+    src/cache.js ◀────────────────────────┘
    (results.json)
 
-   probe.js   trace.js + trace-preload.mjs        ← só sob --trace
-   shims.js ◀── setup.js ◀── worker.js ── runner.js   ← caminho de subprocesso
-   tuit.js    migrate.js    shimmer.js    paths.js     ← periféricos / ferramentas
+   src/probe.js   src/trace.js + src/trace-preload.mjs        ← só sob --trace
+   src/shims.js ◀── src/setup.js ◀── src/worker.js ── src/runner.js   ← caminho de subprocesso
+   src/tuit.js    src/migrate.js    src/shimmer.js    src/paths.js     ← periféricos / ferramentas
 ```
 
 `utest.js` faz `import { G } from '../utils/globals.d.js'; await G._ready` — **acoplamento
@@ -49,26 +49,26 @@ externo duro** ao submódulo irmão `../utils/` (`bus`, `is`, `toSource`, `calls
 | arquivo | papel | teste | frente.feature |
 |---|---|---|---|
 | `utest.js` | CLI in-process: args → scan → import alvo → `runTest` → cache → render; orquestra as fases | — (leak) | toca 1.3, 3.4, 4.x, 5.x, 7.2 |
-| `test.js` | coletor: `test()` monta a árvore; `begin/end` isola por arquivo; `oncheck`/`sealed` | `test.t.js` | 1.1, 1.3 |
-| `check.js` | `check`/`checkFail`/`checkException`, comparação por `repr()` | `check.t.js` | 1.2 |
-| `console-capture.js` | captura `console.*` durante um `fn` | — | 1.4 |
-| `cache.js` | `TestCache(root)`: regra do mtime, grafo de deps, `cacheFailure`, `results` | `cache.t.js` | 2.1–2.5 |
-| `scanner.js` | walk por glob, `findTarget`, `scan()` → `{entries, uncovered, cache}` | `scanner.t.js` | 3.1, 3.2, 3.5 |
-| `kinds.js` | vocabulário de sufixos; `register`/`registerExecutor`/`registerEntries`/`registerPhaseSetup` | `kinds.t.js` | 3.3, 3.4, 6.4 |
-| `viewer.js` | `phaseLine`, `compactFails`, `progressBar`, `deltaTag`, `view`/`fullView`, `hogReport` | `viewer.t.js` (parcial) | 4.1, 4.2, 4.4, 4.5 |
-| `probe.js` | instrumenta chamadas p/ hogs: flat (`report`) + grafo (`tree`/`callers`/`edges`) | `probe.t.js` | 5.1 |
-| `trace.js` | cronômetro de regiões de wall-time: `install/mark/end/region`, `wrapSpawns`, `chromeTrace` | `trace.t.js` | 5.2, 5.4 |
-| `trace-preload.mjs` | `bun --import` que marca regiões dentro do subprocesso e despeja o fragmento | `trace.t.js` (de lado) | 5.3 |
-| `shims.js` | `describe`/`it`/`expect` (~40 matchers), lifecycle hooks, `spyOn` | — | 6.1 |
-| `setup.js` | instala shims + globais de `../utils/src` + plugin de load (caminho de subprocesso) | — | 6.2 |
-| `shimmer.js` | shim por reescrita de string — **zero refs, candidato a DELETE** | — | 6.2 |
-| `migrate.js` | codemod `expect()` → `check()` (transforms determinísticos, pula lifecycle) | — | 6.3 |
-| `tuit.js` | parser + executor `.tuit` (JSON + arte ASCII, blocos acumulam via `_assign`/`soml`) | — | 6.4 |
-| `runner.js` | `runTest`/`run`/`loadFile`/`serialize` — execução modular; a fase `eval` do soml usa este | — | 7.3, 1.3 |
-| `worker.js` | base p/ execução isolada por arquivo (1 arquivo = 1 processo) | — | 7.1 |
-| `index.js` | `import './utest.js'` (bin) — INFRA | — | — |
-| `paths.js` | `ROOT`/`TEST_DIR`/`SRC_DIR` — INFRA | — | — |
-| `leak.t.js` | prende a mecânica do check tardio / `clearTimeout` — não tem alvo pareado | (é teste) | 1.3, 7.2 |
+| `src/test.js` | coletor: `test()` monta a árvore; `begin/end` isola por arquivo; `oncheck`/`sealed` | `src/test.t.js` | 1.1, 1.3 |
+| `src/check.js` | `check`/`checkFail`/`checkException`, comparação por `repr()` | `src/check.t.js` | 1.2 |
+| `src/console-capture.js` | captura `console.*` durante um `fn` | — | 1.4 |
+| `src/cache.js` | `TestCache(root)`: regra do mtime, grafo de deps, `cacheFailure`, `results` | `src/cache.t.js` | 2.1–2.5 |
+| `src/scanner.js` | walk por glob, `findTarget`, `scan()` → `{entries, uncovered, cache}` | `src/scanner.t.js` | 3.1, 3.2, 3.5 |
+| `src/kinds.js` | vocabulário de sufixos; `register`/`registerExecutor`/`registerEntries`/`registerPhaseSetup` | `src/kinds.t.js` | 3.3, 3.4, 6.4 |
+| `src/viewer.js` | `phaseLine`, `compactFails`, `progressBar`, `deltaTag`, `view`/`fullView`, `hogReport` | `src/viewer.t.js` (parcial) | 4.1, 4.2, 4.4, 4.5 |
+| `src/probe.js` | instrumenta chamadas p/ hogs: flat (`report`) + grafo (`tree`/`callers`/`edges`) | `src/probe.t.js` | 5.1 |
+| `src/trace.js` | cronômetro de regiões de wall-time: `install/mark/end/region`, `wrapSpawns`, `chromeTrace` | `src/trace.t.js` | 5.2, 5.4 |
+| `src/trace-preload.mjs` | `bun --import` que marca regiões dentro do subprocesso e despeja o fragmento | `src/trace.t.js` (de lado) | 5.3 |
+| `src/shims.js` | `describe`/`it`/`expect` (~40 matchers), lifecycle hooks, `spyOn` | — | 6.1 |
+| `src/setup.js` | instala shims + globais de `../utils/src` + plugin de load (caminho de subprocesso) | — | 6.2 |
+| `src/shimmer.js` | shim por reescrita de string — **zero refs, candidato a DELETE** | — | 6.2 |
+| `src/migrate.js` | codemod `expect()` → `check()` (transforms determinísticos, pula lifecycle) | — | 6.3 |
+| `src/tuit.js` | parser + executor `.tuit` (JSON + arte ASCII, blocos acumulam via `_assign`/`soml`) | — | 6.4 |
+| `src/runner.js` | `runTest`/`run`/`loadFile`/`serialize` — execução modular; a fase `eval` do soml usa este | — | 7.3, 1.3 |
+| `src/worker.js` | base p/ execução isolada por arquivo (1 arquivo = 1 processo) | — | 7.1 |
+| `src/index.js` | `import './utest.js'` (bin) — INFRA | — | — |
+| `src/paths.js` | `ROOT`/`TEST_DIR`/`SRC_DIR` — INFRA | — | — |
+| `src/leak.t.js` | prende a mecânica do check tardio / `clearTimeout` — não tem alvo pareado | (é teste) | 1.3, 7.2 |
 
 ## Accomplishments (o que já está sólido)
 
@@ -76,7 +76,7 @@ externo duro** ao submódulo irmão `../utils/` (`bus`, `is`, `toSource`, `calls
   byte (frente 2). Duas regressões reais que a regra antiga deixava passar estão
   documentadas e cobertas.
 - **`sealed` + `clearTimeout`** (1.3) — o check tardio não some, e a fuga de event-loop de
-  10s por passo de eval foi consertada nos dois runners. Coberto por `leak.t.js`.
+  10s por passo de eval foi consertada nos dois runners. Coberto por `src/leak.t.js`.
 - **Um relatório, todo kind igual** (4.1) — `unit`/`eval`/`int`/`tui` renderizam idêntico;
   `🐢` sempre significa segundos. Sprints 084c/084d do soml (staged) são a história.
 - **Os ganchos de extensão** (3.4) — `sprint eval --sweep` do soml reusa este runner sem
@@ -87,19 +87,19 @@ externo duro** ao submódulo irmão `../utils/` (`bus`, `is`, `toSource`, `calls
 ## Debts (o backlog, em ordem de peso)
 
 1. **Cobertura: 12 features 🟠 sem `.t.js` próprio** (3.4, 3.5, 4.3–4.5, 5.5, toda a
-   frente 6, 7.1, 7.3). `shims.js` (~40 matchers) e `migrate.js` (um codemod que reescreve
+   frente 6, 7.1, 7.3). `src/shims.js` (~40 matchers) e `src/migrate.js` (um codemod que reescreve
    arquivos) são os mais perigosos sem teste. Ver `plans/3-scan/3.5`.
 2. **Isolamento por worker não está no caminho principal** (7.1) — a doc antiga
    (`TEST-MASTER-PLAN.md`, `HANDOFF.md`) descreve `orchestrator.js`/`child-worker.js` que
    **não existem neste repo**. O `utest.js` ativo é in-process, e o vazamento de exceção
    assíncrona cross-arquivo (7.2) só fecha de vez com isso.
-3. **Dois `runTest`** (`utest.js` e `runner.js`) mantidos em sincronia à mão — `console-capture.js`
+3. **Dois `runTest`** (`utest.js` e `src/runner.js`) mantidos em sincronia à mão — `src/console-capture.js`
    existe justamente porque um fix voltou pela cópia não-consertada.
-4. **Dois `plugin()` de load** (`utest.js` e `setup.js`) — divergência esperando acontecer.
+4. **Dois `plugin()` de load** (`utest.js` e `src/setup.js`) — divergência esperando acontecer.
 5. ~~**`TEST.yaml`**: a fase `integration` vazia distorce `coverage: N%`;
    `--uncovered`/`-u` é inerte.~~ FECHADO — fase sem entries fora do denominador,
-   `index.js`/`paths.js` no exclude de infra, `--uncovered` imprime a lista.
-6. **Código morto**: `shimmer.js` (0 refs). Decidir DELETE.
+   `src/index.js`/`src/paths.js` no exclude de infra, `--uncovered` imprime a lista.
+6. **Código morto**: `src/shimmer.js` (0 refs). Decidir DELETE.
 7. **Doc velha apontando para código que mudou de casa**: `STATUS.md` diz "o destino é
    `cmds/testio/testio.js`" (fora deste repo); `HANDOFF.md`/`TEST-MASTER-PLAN.md` falam de
    `~/bot/utest`. Decidir se o utest ABSORVE o isolamento ou é a referência de contrato.
@@ -121,9 +121,9 @@ padrões; a razão de cada um:
 | `docs/SPRINT-EXPERIENCE.md` | log de bugs/atritos da ferramenta `sprint` em si — não afirma nada sobre o utest, não envelhece |
 
 **Não ignorado, mas sem `.t.js` próprio** (isso é dívida de TESTE, rastreada na feature
-[3.5], não "ignorado"): `utest.js`, `runner.js`, `shims.js`, `setup.js`, `tuit.js`,
-`migrate.js`, `console-capture.js`, `worker.js`, `shimmer.js`,
-`trace-preload.mjs`, `paths.js`, `index.js`.
+[3.5], não "ignorado"): `utest.js`, `src/runner.js`, `src/shims.js`, `src/setup.js`, `src/tuit.js`,
+`src/migrate.js`, `src/console-capture.js`, `src/worker.js`, `src/shimmer.js`,
+`src/trace-preload.mjs`, `src/paths.js`, `src/index.js`.
 
 **A diferença**: um arquivo *ignorado* nunca vai ter feature nem teste (é doc, é gerado, é
 infra de 3 linhas). Um arquivo *sem `.t.js`* está no mapa (ligado a uma feature) e a falta

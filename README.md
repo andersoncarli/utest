@@ -4,7 +4,7 @@ Runner de testes Universal
 
 ## Peer siblings
 
-O `utest` espera `../utils` ao lado. Com o ledger (`ledger.js`), passa a esperar também
+O `utest` espera `../utils` ao lado. Com o ledger (`src/ledger.js`), passa a esperar também
 `../iodb` — os três (`utils`, `utest`, `iodb`) lado a lado, importados por CAMINHO
 RELATIVO (`../iodb/io-engine.js`), sem `node_modules`, sem submodule. Sem `../iodb`
 presente o `utest .` roda exatamente como hoje: `openLedger` degrada para no-op — um
@@ -33,7 +33,7 @@ bot testio unit -v:2
 | `--json` | uma linha JSON por arquivo (`{phase,file,feature,state,cached,tests,checks,failCount,fails,ms}`), nada mais no stdout. `fails[]` = `[{line,code}]` dos checks vermelhos (só nos NÃO cacheados — o cache não guarda `checks[]`). Para consumidor de máquina — `sprint eval --sweep` usa isto. Exit 1 se há falha. |
 | `--hogs` \| `-H` | só a lista de arquivos >1000ms, cega a passou/falhou |
 | `--help` \| `-h` | imprime esta tabela (resumida) e sai |
-| `--trace` \| `--trace=<path>` | **apêndice ao relatório normal: a árvore de PARA-ONDE-FOI-A-PAREDE.** Camada auto por fase: fase com provider (`eval`/`int`) → regiões de wall-time (`(bun+imports startup)`, `boot`, `provider`, `entry`, `sweepFeature`, cada `sh:`) + o INTERIOR do subprocesso (o `.eval.js` splica `bun --import trace-preload.mjs`; `input.check.mjs` marca `chromium`/`serve`/`bundle`/`open`/`gestos`/`teardown`); fase de motor in-process → `probe.tree()` sobre `pixel._registry` + `soml.__internals`. Tempos **alinhados à direita**; o `(untracked)` de cada nó é explícito e **a soma bate com o `time` real**. Com `=<path>` grava `trace.json` no formato **Chrome Trace Event** (chrome://tracing, perfetto.dev) — escrito no `process.on('exit')`, então inclui o `(runtime teardown)` do bun (~10s num processo que importou soml+sprint-cli+playwright). Só escopo filtrado; ignorado com `--hogs`/`--json`. Sob `--trace` o teto do `sh()` sobe de 10s p/ 60s (o kill mataria o filho antes do fragmento). |
+| `--trace` \| `--trace=<path>` | **apêndice ao relatório normal: a árvore de PARA-ONDE-FOI-A-PAREDE.** Camada auto por fase: fase com provider (`eval`/`int`) → regiões de wall-time (`(bun+imports startup)`, `boot`, `provider`, `entry`, `sweepFeature`, cada `sh:`) + o INTERIOR do subprocesso (o `.eval.js` splica `bun --import src/trace-preload.mjs`; `input.check.mjs` marca `chromium`/`serve`/`bundle`/`open`/`gestos`/`teardown`); fase de motor in-process → `probe.tree()` sobre `pixel._registry` + `soml.__internals`. Tempos **alinhados à direita**; o `(untracked)` de cada nó é explícito e **a soma bate com o `time` real**. Com `=<path>` grava `trace.json` no formato **Chrome Trace Event** (chrome://tracing, perfetto.dev) — escrito no `process.on('exit')`, então inclui o `(runtime teardown)` do bun (~10s num processo que importou soml+sprint-cli+playwright). Só escopo filtrado; ignorado com `--hogs`/`--json`. Sob `--trace` o teto do `sh()` sobe de 10s p/ 60s (o kill mataria o filho antes do fragmento). |
 | `--uncovered` \| `-u` | lista arquivos-alvo sem `.t.js` pareado |
 | `--watch` \| `-w` | re-roda ao salvar, em SILÊNCIO (sem barra), RESPEITANDO o cache (sem `--force`). **Delta, não varredura**: se UM arquivo de teste mudou, roda só ele (sem scan); se mudou uma fonte, o run cacheado completo (o scan anda a árvore mas o cache pula quem não mudou). O relatório final aparece de uma vez, no log. |
 
@@ -158,8 +158,8 @@ processDict · 21 · self 4.1ms (43%) · total 9.6ms (100%)
 > O `--trace` denunciou um bug antigo: `runTest`/`loadFile` corriam
 > `Promise.race([work, setTimeout(…, eff)])` sem **nunca limpar o timer** — um
 > `setTimeout(10000)` por passo de `eval` segurava o event loop 10s além do relatório.
-> `clearTimeout` no `finally` das corridas (`utest.js`, `runner.js`); coberto em
-> `leak.t.js`.
+> `clearTimeout` no `finally` das corridas (`utest.js`, `src/runner.js`); coberto em
+> `src/leak.t.js`.
 
 **Guarda de RAM nos checks de browser.** `connectOrLaunch` (`apps/eval-mouse/gestures.check.mjs`)
 é a única porta pro Chromium: flags leves (~−26% RSS) e, se `MemAvailable <
@@ -225,10 +225,10 @@ modelo final de isolamento.
 
 ## Regra do Cache
 
-Implementado em `cache.js`, atras da factory `TestCache(root)` — um closure que
+Implementado em `src/cache.js`, atras da factory `TestCache(root)` — um closure que
 memoiza o grafo de imports e esconde de quem chama qual dos dois protocolos vale
-(target pareado ou sidecar). `scanner.js` e o unico consumidor: os runners
-recebem o cache pronto de `scan()` e nunca importam `cache.js`.
+(target pareado ou sidecar). `src/scanner.js` e o unico consumidor: os runners
+recebem o cache pronto de `scan()` e nunca importam `src/cache.js`.
 
 O cache nao tem banco nem hash: ele vive nos timestamps que todo inode ja tem.
 **Seguida a risca, a regra nao tem furo.**
@@ -287,7 +287,7 @@ dentro do repo, e basta uma dep mais nova que o `atime` para re-rodar.
 
 **Raizes extras, para o alvo cujas deps nao sao `import`.** `read`/`write`
 aceitam `{ extraDeps }` — pontos de partida ADICIONAIS do walk. E o caso da fase
-`eval`: um `.eval.js` pareia com o `N.F-*.md` da feature (`scanner.js#findTarget`
+`eval`: um `.eval.js` pareia com o `N.F-*.md` da feature (`src/scanner.js#findTarget`
 estende a regra do `.t.js` para `.eval.js`), o `.md` nao importa nada, e o
 `files:` do frontmatter e o grafo real. `utest.js#runPhase` passa esse `files:`
 como `extraDeps`; o crava do `.md` continua sendo o "segundo comum" do protocolo
@@ -314,7 +314,7 @@ cache esta mentindo. Hoje: 3276 nos dois.
 ## Estender: rodar outro tipo de arquivo
 
 O vocabulario de sufixos (`.t.js`, `.test.js`, `.tuit`, `.it.js`) vive em
-`kinds.js`, declarado uma vez. `register()` abre um tipo novo nas DUAS pontas ao
+`src/kinds.js`, declarado uma vez. `register()` abre um tipo novo nas DUAS pontas ao
 mesmo tempo — o matcher que decide o que entra na suite, e o `filter` do plugin
 do Bun que injeta o shim:
 
@@ -336,23 +336,23 @@ para rodar `.eval.js` em ms em vez de minutos — esta documentado em
 | Arquivo | Função |
 |---------|--------|
 | `utest.js` | CLI atual de compatibilidade, ainda in-process |
-| `runner.js` | Execucao modular legada/experimental |
-| `worker.js` | Base para execucao isolada por arquivo |
-| `scanner.js` | Descoberta de arquivos de teste (e dona do cache) |
-| `cache.js` | `TestCache(root)` — a regra do cache de tempo, o grafo de deps, e `results` (o histórico hierárquico `.utest/results.json` + o cross-check `fresh()`) |
-| `ledger.js` | `openLedger(root, opts)` — a memória permanente: cadeia append-only encadeada (`.utest/ledger/`) sobre `../iodb`, ancorada em sha256 do file set. Responde "o que já aconteceu?" — não substitui o cache, que responde "isto está fresco?". Degrada para no-op sem `../iodb` |
-| `state.js` | `openState(root, opts)` — histórico de rodadas de scan (`.utest/STATE.jsonl` + projeção `.utest/STATE.yaml`) sobre `../iodb`. Detecta mudança em `TEST.yaml` (`configChanged`) e avisa que `--force` é recomendado — não força sozinho. Cada arquivo NOVO ganha um registro individual cuja chave encadeada vira seu `id` (`fileId(path)`). Degrada para no-op sem `../iodb` |
-| `probe.js` | `probe(fn\|obj\|Map)` — instrumenta chamadas para achar hogs: conta, mede self-time (chamada aninhada nao conta duas vezes). DUAS vistas: `probe.report()` é a FLAT (uma linha por função, todos os callers somados — "quem custa"); `probe.tree()` / `probe.callers(name)` / `probe.edges()` é a de GRAFO (mantém a identidade do caller — "de ONDE, e quanto pesa cada contexto"). Complementa `spyOn` (que e para ASSERTAR sobre chamada, nao medir) |
-| `trace.js` | `install`/`mark`/`end`/`region` — cronômetro de REGIÕES de tempo aninhadas (o análogo de wall-time do `probe`: "que região custou", não "que função"). `wrapSpawns()` envolve `Bun.spawn*`; `region(name, fn, { fragPrefix })` enxerta os fragmentos que um subprocesso escreveu. O motor do `--trace` do `utest.js` |
-| `trace-preload.mjs` | carregado por `bun --import` que um `.eval.js` splica quando `UTEST_TRACE_PRELOAD` está no env; instala `globalThis.__uTrace` (region/mark) e despeja `<UTEST_TRACE_OUT>.<pid>` JSON no `exit`. Inerte sem o env |
-| `kinds.js` | Que sufixos o runner reconhece, e o `register()` que abre novos |
-| `viewer.js` | render do relatório: `phaseLine`/`phaseHogSecs` (linha-título `(Σs 🐢N)`, ordem `✘ 📄 🧪 ✔`), `progressBar` (barra viva), `compactFails` (vermelhos + 5 hogs numa linha, badge `🐢N`=segundos), `deltaTag` (só em hog que re-rodou), `checkView`/`fullView` |
-| `check.js` | Assertions e visual diffing |
-| `index.js` | Entry point / exports |
-| `setup.js` | Setup do ambiente de teste |
-| `shims.js` / `shimmer.js` | Shims para compatibilidade |
-| `paths.js` | Resolução de paths |
-| `migrate.js` | Migração de formato de testes |
+| `src/runner.js` | Execucao modular legada/experimental |
+| `src/worker.js` | Base para execucao isolada por arquivo |
+| `src/scanner.js` | Descoberta de arquivos de teste (e dona do cache) |
+| `src/cache.js` | `TestCache(root)` — a regra do cache de tempo, o grafo de deps, e `results` (o histórico hierárquico `.utest/results.json` + o cross-check `fresh()`) |
+| `src/ledger.js` | `openLedger(root, opts)` — a memória permanente: cadeia append-only encadeada (`.utest/ledger/`) sobre `../iodb`, ancorada em sha256 do file set. Responde "o que já aconteceu?" — não substitui o cache, que responde "isto está fresco?". Degrada para no-op sem `../iodb` |
+| `src/state.js` | `openState(root, opts)` — histórico de rodadas de scan (`.utest/STATE.jsonl` + projeção `.utest/STATE.yaml`) sobre `../iodb`. Detecta mudança em `TEST.yaml` (`configChanged`) e avisa que `--force` é recomendado — não força sozinho. Cada arquivo NOVO ganha um registro individual cuja chave encadeada vira seu `id` (`fileId(path)`). Degrada para no-op sem `../iodb` |
+| `src/probe.js` | `probe(fn\|obj\|Map)` — instrumenta chamadas para achar hogs: conta, mede self-time (chamada aninhada nao conta duas vezes). DUAS vistas: `probe.report()` é a FLAT (uma linha por função, todos os callers somados — "quem custa"); `probe.tree()` / `probe.callers(name)` / `probe.edges()` é a de GRAFO (mantém a identidade do caller — "de ONDE, e quanto pesa cada contexto"). Complementa `spyOn` (que e para ASSERTAR sobre chamada, nao medir) |
+| `src/trace.js` | `install`/`mark`/`end`/`region` — cronômetro de REGIÕES de tempo aninhadas (o análogo de wall-time do `probe`: "que região custou", não "que função"). `wrapSpawns()` envolve `Bun.spawn*`; `region(name, fn, { fragPrefix })` enxerta os fragmentos que um subprocesso escreveu. O motor do `--trace` do `utest.js` |
+| `src/trace-preload.mjs` | carregado por `bun --import` que um `.eval.js` splica quando `UTEST_TRACE_PRELOAD` está no env; instala `globalThis.__uTrace` (region/mark) e despeja `<UTEST_TRACE_OUT>.<pid>` JSON no `exit`. Inerte sem o env |
+| `src/kinds.js` | Que sufixos o runner reconhece, e o `register()` que abre novos |
+| `src/viewer.js` | render do relatório: `phaseLine`/`phaseHogSecs` (linha-título `(Σs 🐢N)`, ordem `✘ 📄 🧪 ✔`), `progressBar` (barra viva), `compactFails` (vermelhos + 5 hogs numa linha, badge `🐢N`=segundos), `deltaTag` (só em hog que re-rodou), `checkView`/`fullView` |
+| `src/check.js` | Assertions e visual diffing |
+| `src/index.js` | Entry point / exports |
+| `src/setup.js` | Setup do ambiente de teste |
+| `src/shims.js` / `src/shimmer.js` | Shims para compatibilidade |
+| `src/paths.js` | Resolução de paths |
+| `src/migrate.js` | Migração de formato de testes |
 
 ## Documentação Interna
 

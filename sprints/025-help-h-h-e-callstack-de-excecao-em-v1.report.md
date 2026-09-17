@@ -27,16 +27,16 @@ raiz já fechadas ali:
   flags e sai (`process.exit(0)`) antes de qualquer outro processamento. O antigo alias de
   `--hogs` sobe para `-H` (maiúsculo); nenhum teste testava `-h` como string de CLI isolada
   (só `--hogs` por extenso), então a troca não quebrou nada.
-- **`viewer.js#fileLine`**: os badges (`🐢N ✘M ✔P`) saem do `left` do `dotfill` (antes do
+- **`src/viewer.js#fileLine`**: os badges (`🐢N ✘M ✔P`) saem do `left` do `dotfill` (antes do
   nome) e entram no `right` (depois do tempo) — `nome ······ (38ms) 💥1 ✔21` em vez de
   `nome 💥1 ✔21 ······ (38ms)`.
-- **`viewer.js#compactFails`** (o path de v1 com >1 arquivo vermelho): para cada arquivo
+- **`src/viewer.js#compactFails`** (o path de v1 com >1 arquivo vermelho): para cada arquivo
   vermelho que tem uma exceção (`t._cached ? t.excCount : summary(t).exception`), emite
   também `failLines(t, {width, indent:true})` — mensagem + até 6 frames do stack, mesmo
   mecanismo que v2/v3 já usavam via `errorView`/`callstack.js`, sem alterar nenhum dos dois.
   Falha de `check()` comum continua resumida em v1 (comportamento intencional, documentado).
 - **`README.md`**: tabela de flags atualizada (`--hogs`/`-H`, nova linha `--help`/`-h`).
-- **`viewer.t.js`**: 2 testes que casavam o formato ANTIGO de `fileLine` (regex exigindo
+- **`src/viewer.t.js`**: 2 testes que casavam o formato ANTIGO de `fileLine` (regex exigindo
   espaço logo após o nome do arquivo, antes do dotfill) atualizados para o novo layout.
 - **`plans/4-report/4.1.eval.js`** (novo): 4 passos `t.sandbox` cobrindo os três
   comportamentos acima fim-a-fim via `sh("utest ...")`.

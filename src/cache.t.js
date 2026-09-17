@@ -741,12 +741,12 @@ test('cache: HIT confirmado é ESTÁVEL — nada além de --force real (ou mudan
     cache.write(at('m.t.js'), at('m.js'), { checks: 7 })
     // `cache.read` não tem parâmetro de force: simular a flag é, por definição,
     // o CHAMADOR decidir não perguntar (o que `utest.js` faz quando `--force` está
-    // ativo — pula a leitura do cache inteiramente, nunca invalida via cache.js).
+    // ativo — pula a leitura do cache inteiramente, nunca invalida via src/cache.js).
     const wouldForce = true
     const hit = cache.read(at('m.t.js'), at('m.js'))
     check(hit?.checks, 7, 'o veredito em si continua HIT — force é decisão de FORA')
     const effectiveResult = wouldForce ? null : hit   // é isto que utest.js faz
-    check(effectiveResult, null, 'só ignorar o HIT (fora de cache.js) produz o efeito de --force')
+    check(effectiveResult, null, 'só ignorar o HIT (fora de src/cache.js) produz o efeito de --force')
     cleanup()
   })
 

@@ -30,12 +30,12 @@ O watch deve observar só o domínio declarado no `TEST.yaml` — o mesmo `exclu
 
 ## Plano de materializacao
 
-1. **scanner.js** — expor a maquinaria de filtro:
+1. **src/scanner.js** — expor a maquinaria de filtro:
    - `makeFilter` deixa de ser interno (`export function makeFilter`).
    - novo `export function excludeFilter(configPath, phase = 'unit')`: lê o
      `TEST.yaml`, junta `cfg.exclude` + `cfg[phase].exclude`, devolve
      `makeFilter([], exclude)` — só a face `.excluded(rel)` interessa.
-   verify: `utest scanner.t.js`
+   verify: `utest src/scanner.t.js`
 
 2. **utest.js** — reescrever o bloco `fs.watch` do watch mode:
    - importar `excludeFilter` de `./scanner.js`.
@@ -49,10 +49,10 @@ O watch deve observar só o domínio declarado no `TEST.yaml` — o mesmo `exclu
      tocar `node_modules/**` e `archive/**` não dispara rerun, tocar o `.t.js`
      dispara.
 
-3. **scanner.t.js** — cobrir `excludeFilter`:
+3. **src/scanner.t.js** — cobrir `excludeFilter`:
    - exclui pelo glob global; soma o exclude da fase; `TEST.yaml` sem `exclude`
      não exclui nada.
-   verify: `utest scanner.t.js` (28 → 35 checks)
+   verify: `utest src/scanner.t.js` (28 → 35 checks)
 
 ## Criterio de pronto
 
@@ -76,7 +76,7 @@ raiz e filtrar o callback depois do fato.
 **O que mudou além do plano**
 
 - **plans/3-scan/3.1.eval.js** — roteiro novo da feature:
-  - `sandbox`: `excludeFilter("TEST.yaml", "unit")` contra o `scanner.js` real —
+  - `sandbox`: `excludeFilter("TEST.yaml", "unit")` contra o `src/scanner.js` real —
     `node_modules/**`, `archive/**` e o `dist/**` da fase casam; `src/scanner.js`
     não.
   - `real`: sobe `utest . -w` numa fixture com `node_modules/` e `archive/`;
@@ -85,7 +85,7 @@ raiz e filtrar o callback depois do fato.
 
 ## Prova
 
-- `sprint test 3.1` — verde (`utest scanner.t.js`, 35 checks).
+- `sprint test 3.1` — verde (`utest src/scanner.t.js`, 35 checks).
 - `sprint test` — suíte inteira verde (📄9 🧪168 ✔469).
 - `sprint eval 3.1 --yes` — sandbox + real verdes → 🟡 → 🟢 avaliada.
 - `sprint docs` — ok.

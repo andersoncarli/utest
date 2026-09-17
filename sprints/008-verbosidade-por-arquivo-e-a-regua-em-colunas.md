@@ -46,7 +46,7 @@ em `view()` e só o `-v:3` alcançava (`fileLine`, a barra de título por arquiv
 
 Cópia anterior do runner, sem `kinds`/`results`/`--trace`, 2º `bin`, zero refs de código;
 já marcado DELETE em `docs/ONTOLOGY.md` e no plano de [3.5]. → deletar, e limpar as
-menções em `viewer.js` (`/utest2?\.js/`), `kinds.js`, `package.json`, docs.
+menções em `src/viewer.js` (`/utest2?\.js/`), `src/kinds.js`, `package.json`, docs.
 
 **verify**: `grep -rn utest2` volta vazio; a suíte segue verde.
 
@@ -62,7 +62,7 @@ b. `walk()` mandava para `tests` tudo que o `include` casava. Com `include: '**/
    `sourceFiles` vazio, `uncovered` sempre zero, **cobertura sempre 100%**. → quem decide
    se é teste é o KIND (`testRe()`), não o include.
 
-Mais: `index.js`/`paths.js` viram exclude de infra, e `--uncovered` (lido em `utest.js`,
+Mais: `src/index.js`/`src/paths.js` viram exclude de infra, e `--uncovered` (lido em `utest.js`,
 nunca impresso) passa a imprimir a lista.
 
 **verify**: `./utest.js . -u` — 50%, e os 9 arquivos batendo com a tabela de leaks de [3.5].
@@ -110,7 +110,7 @@ Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão po
 
 ## O que aconteceu
 
-- **`viewer.js`** (+163/−~40) — `displayLen()` (conta por codepoint, cobra 2 nos
+- **`src/viewer.js`** (+163/−~40) — `displayLen()` (conta por codepoint, cobra 2 nos
   intervalos largos: emoji, CJK); `dotfill` medindo por ele e TRUNCANDO em vez de
   estourar (`truncEnd` no código, `truncStart` no endereço — `…nome.eval.js:110` é o que
   identifica); `fileLine()` (a barra de título por arquivo, derivada do REGISTRO e não da
@@ -121,13 +121,13 @@ Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão po
   bypass que tornava v1/v2/v3 idênticos em rodada verde); `-v:3` sem nada a rodar cai no
   `-v:2` em vez da linha seca; a fase sem entries fora do denominador do `coverage`;
   `--uncovered` imprimindo a lista; o `--trace` largo agregando por frente/feature.
-- **`scanner.js`** (+9/−2) — `walk()` classificando por KIND (`testRe()`), não pelo
+- **`src/scanner.js`** (+9/−2) — `walk()` classificando por KIND (`testRe()`), não pelo
   include. Era o bug que fazia `sourceFiles` ficar vazio sob `include: '**/*.js'`.
-- **`cache.js`** (+6/−2) — `failLines` no `record()` do `results.json`.
-- **`TEST.yaml`** — `index.js`/`paths.js` no exclude de infra da fase `unit`.
+- **`src/cache.js`** (+6/−2) — `failLines` no `record()` do `results.json`.
+- **`TEST.yaml`** — `src/index.js`/`src/paths.js` no exclude de infra da fase `unit`.
 - **`utest2.js` DELETADO** (−359) — cópia anterior do runner, 2º `bin`, zero refs; as
-  menções em `viewer.js`/`kinds.js`/`package.json`/`docs/ONTOLOGY.md`/[3.5] foram junto.
-- **7 testes novos** (`viewer.t.js` +6, `scanner.t.js` +1) — 320 → 347 checks. Cada um
+  menções em `src/viewer.js`/`src/kinds.js`/`package.json`/`docs/ONTOLOGY.md`/[3.5] foram junto.
+- **7 testes novos** (`src/viewer.t.js` +6, `src/scanner.t.js` +1) — 320 → 347 checks. Cada um
   verificado FALHANDO contra o código velho antes de entrar.
 
 ### Frentes / features tocadas
@@ -156,7 +156,7 @@ Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão po
   por dois motivos que se cancelavam em direções diferentes.
 - **A dívida de teste do consumo no `utest.js` continua** (a mesma ressalva do sprint
   007, feature 5.5 🟠): `displayLen`/`fileLine`/`failLines` estão cobertos em
-  `viewer.t.js`, mas o roteamento de verbosidade no `utest.js` — qual ramo de render
+  `src/viewer.t.js`, mas o roteamento de verbosidade no `utest.js` — qual ramo de render
   roda, quando o `-v:3` cai no `-v:2` — só é exercitado rodando o soml à mão.
 - **`--trace` largo é agregação, não instrumentação.** Ele lê o `lastMs` que o relatório
   já tem: não re-roda, não fura o cache, e por isso é o único trace que escopo largo pode
@@ -166,9 +166,9 @@ Os quatro retoques de `docs/NOTES.md` antes do deploy. O `-v:2` vira a visão po
 
 ### Achados fora do escopo (NÃO consertados — reportados)
 
-- **`trace.t.js` é flaky sob carga**: `check(outer.selfMs < 22, …)` mede um sleep de
+- **`src/trace.t.js` é flaky sob carga**: `check(outer.selfMs < 22, …)` mede um sleep de
   ~12ms e estoura quando a suíte inteira roda junta (verde isolado, 3/3). Limiar de
   wall-clock num teste que divide CPU — merece sprint próprio, não um número ajustado.
 - **No soml, 3 `.eval.js` divergem entre rodada forçada e cacheada** (45 vs 48
   vermelhos). Mesma categoria: falham sob carga/cache, passam limpos.
-- **`shimmer.js`**: 0 refs, o irmão do `utest2.js` que sobrou — candidato a DELETE.
+- **`src/shimmer.js`**: 0 refs, o irmão do `utest2.js` que sobrou — candidato a DELETE.

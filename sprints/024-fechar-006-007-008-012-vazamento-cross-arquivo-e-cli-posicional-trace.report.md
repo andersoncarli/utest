@@ -20,12 +20,12 @@ posicional descartado em silêncio), 012 (watch/cache mostrando resultado desenc
 
 ## O que mudou
 
-- **007** — `check.test` (fallback global usado pelo shim `expect()` de `shims.js`) só é
+- **007** — `check.test` (fallback global usado pelo shim `expect()` de `src/shims.js`) só é
   restaurado ao valor salvo em `runTest`/`finally` se ainda apontar para o `t` que está
   selando; um straggler tardio (setTimeout, promise solta, ou o `Promise.race` do timeout
   vencendo) que dispare depois encontra `null` em vez do `check.test` de outro arquivo.
-  Aplicado em `utest.js` (o `runTest` real, usado pela CLI) e `runner.js` (a variante de
-  biblioteca). `leak.t.js` já documentava a mecânica; segue verde.
+  Aplicado em `utest.js` (o `runTest` real, usado pela CLI) e `src/runner.js` (a variante de
+  biblioteca). `src/leak.t.js` já documentava a mecânica; segue verde.
 - **012** — `rerun()` do modo `--watch` agora aguarda `child.exited` depois do `kill()`
   antes de disparar o próximo `Bun.spawn`, com uma trava (`rerunning`) contra dois reruns
   sobrepostos quando um arquivo muda no meio da espera. Testado manualmente: edição durante
@@ -59,7 +59,7 @@ posicional descartado em silêncio), 012 (watch/cache mostrando resultado desenc
   5.4, 7.2) — todas verdes.
 - Watch mode smoke-testado manualmente (edição durante `--watch`, sem saída misturada).
 - `--trace` num arquivo fora de fase, testado num projeto sintético em `/tmp`.
-- `utest cache.t.js check.t.js` avisa sobre o caminho extra em vez de descartá-lo em
+- `utest src/cache.t.js src/check.t.js` avisa sobre o caminho extra em vez de descartá-lo em
   silêncio.
 
 ## Fora do escopo

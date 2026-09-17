@@ -1,6 +1,6 @@
-// Eval do fix em cache.js (ISSUES/014, sprint 026): `.t.js` "cru" (sem test()/check(),
+// Eval do fix em src/cache.js (ISSUES/014, sprint 026): `.t.js` "cru" (sem test()/check(),
 // só console.assert/console.log) passa isolado mas dentro de `utest .` o cache gravava
-// state:'failed' para ele — a causa era `cache.js` tratando `!result.checks` (zero
+// state:'failed' para ele — a causa era `src/cache.js` tratando `!result.checks` (zero
 // checks, legítimo pra um arquivo cru) como sinônimo de falha, ignorando `result.failed`
 // (o veredito real). Fix: as duas gravações (sidecar e `results.json`) passam a usar só
 // `result.failed`/`result.exception`.

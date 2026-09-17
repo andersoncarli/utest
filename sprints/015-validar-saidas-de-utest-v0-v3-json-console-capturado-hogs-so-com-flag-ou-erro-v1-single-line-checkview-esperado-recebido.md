@@ -12,7 +12,7 @@ migrated: "0.2"
 
 # 015 — validar saidas de utest: v0-v3, --json, console capturado, hogs so com flag ou erro, v1 single-line, checkView esperado/recebido
 
-Sprint 015 · feature 4.1 (`viewer.js` + bloco de render de `utest.js`).
+Sprint 015 · feature 4.1 (`src/viewer.js` + bloco de render de `utest.js`).
 
 # PLAN
 
@@ -34,7 +34,7 @@ Duas coisas de uma vez:
      extraível do stack (regex `INTERNAL` mudou em 7f0f6d1 / 7d2c488 e passou a casar o
      frame errado), o `checkView` cai em `'check()'` literal e o endereço fica vazio.
      Corrigir a extração e garantir que `received:`/`expected:` sempre saem para um
-     `check` de 2 args que falhou (mesmo com `undefined` — `check.js` já grava `'undefined'`
+     `check` de 2 args que falhou (mesmo com `undefined` — `src/check.js` já grava `'undefined'`
      como string, então nunca deve sumir).
    - **B. Badge de hog por arquivo só com `--hogs` ou sob erro**
      Hoje `compactFails` (v0/v1) lista `nome 🐢N` para todo arquivo hog, sem flag.
@@ -48,9 +48,9 @@ Duas coisas de uma vez:
 
 ## Plano de materializacao
 
-1. **Ler `viewer.t.js` atual** — ver o que já cobre, não duplicar.
+1. **Ler `src/viewer.t.js` atual** — ver o que já cobre, não duplicar.
 2. **A — checkView**: corrigir `extractLineCode`/`extractAddr` (regex `INTERNAL` casa
-   `ledger.t.js`? não deveria — só arquivos do framework). Teste: um `check(1, 2)` sintético
+   `src/ledger.t.js`? não deveria — só arquivos do framework). Teste: um `check(1, 2)` sintético
    → `checkView` devolve `✘ ... `, `received: 1`, `expected: 2`, e um endereço `*.t.js:NNN`.
    Teste com `undefined`: `check(undefined, 3)` → `received: undefined` presente.
 3. **B — compactFails**: assinatura ganha `{ hogs = false }`. Sem `hogs`, o grupo de hogs
@@ -59,7 +59,7 @@ Duas coisas de uma vez:
 4. **C — fullView v1**: quando `compactFails` volta vazio (verde, ou só-hog sem flag),
    devolver só a linha do `phaseLine` — já é o comportamento se `cf` for `''`; garantir
    com B que `cf` fica `''` no caso só-hog.
-5. **Cobertura ampla (objetivo 1)**: `viewer.t.js` — uma árvore-fixture com: 1 arquivo
+5. **Cobertura ampla (objetivo 1)**: `src/viewer.t.js` — uma árvore-fixture com: 1 arquivo
    verde, 1 vermelho (check 2-arg), 1 exceção, 1 hog verde, 1 hog+vermelho, `output` no
    vermelho e no verde. Rodar `fullView` nos 4 níveis + `--json` (`failData`/`failInfo`) e
    afirmar linha a linha o que aparece/some.
@@ -69,14 +69,14 @@ Duas coisas de uma vez:
 
 ### Arquivos
 
-- `viewer.js` — `checkView` (A), `compactFails` (B), `fullView` v1 (C)
+- `src/viewer.js` — `checkView` (A), `compactFails` (B), `fullView` v1 (C)
 - `utest.js` — o bloco de render (linhas ~795–911): passar o flag `hogs` ao `compactFails`/`fullView`
-- `viewer.t.js` — cobertura nova (1) + regressão de A/B/C
-- `cache.js` — só se o formato gravado (`failData`) precisar de campo novo
+- `src/viewer.t.js` — cobertura nova (1) + regressão de A/B/C
+- `src/cache.js` — só se o formato gravado (`failData`) precisar de campo novo
 
 ## Criterio de pronto
 
-- `viewer.t.js` cobre v0–v3 + json + console capturado, todos verdes
+- `src/viewer.t.js` cobre v0–v3 + json + console capturado, todos verdes
 - `utest .` (largo, sem flag, suíte verde) = uma linha por fase, `🐢N` só no título
 - `utest . --hogs` = o detalhe por arquivo volta
 - `utest ~/tui` com um vermelho = o vermelho traz `received:`/`expected:` e endereço
@@ -84,7 +84,7 @@ Duas coisas de uma vez:
 
 ### O que mudou (execução)
 
-**`viewer.js`**
+**`src/viewer.js`**
 - `import fs from 'fs'` novo — para a rede de `extractLineCode`/`extractAddr`.
 - `parseStack`/`callerLineOf` novos: fallback de parse de `err.stack` para quando
   `callstack()` devolve pilha vazia (captura interna dele quando `globalThis.G` falta —
@@ -103,15 +103,15 @@ Duas coisas de uma vez:
 - Bloco tight (v<2 verde) e linha-resumo do v3: o parén ganha ` 🐢M` (`phaseHogSecs`)
   quando a fase tem hog — o TOTAL sempre aparece, o detalhe é do `--hogs`.
 
-**`viewer.t.js`**
+**`src/viewer.t.js`**
 - 3 testes reescritos para o novo contrato (hog verde só com `hogs:true`).
 - 9 testes novos: matriz v0/v1/v1--hogs/v2/v3, `failData`/`failInfo` (--json), re-render
   frio de `checkView`, degradação sem `error`/`lineCode`/`address`.
-- 163 asserts verdes em `viewer.t.js`; suíte cheia 559 ✔.
+- 163 asserts verdes em `src/viewer.t.js`; suíte cheia 559 ✔.
 
 # REPORT
 
-As quatro verbosidades de `utest` viram teste: v0-v3, `--json` e console capturado passam a ser cobertos por `viewer.t.js` em vez do olho do usuario, e com eles tres correcoes de report — `checkView` sempre com `received:`/`expected:` e endereco, badge de hog por arquivo so com `--hogs` ou sob vermelho, e `-v:1` verde de volta a uma linha por fase.
+As quatro verbosidades de `utest` viram teste: v0-v3, `--json` e console capturado passam a ser cobertos por `src/viewer.t.js` em vez do olho do usuario, e com eles tres correcoes de report — `checkView` sempre com `received:`/`expected:` e endereco, badge de hog por arquivo so com `--hogs` ou sob vermelho, e `-v:1` verde de volta a uma linha por fase.
 
 ## O que aconteceu
 
@@ -124,7 +124,7 @@ lugar, corrige o que ela expos.
 
 **O que foi entregue**
 
-**Cobertura das saidas** — `viewer.t.js` passa a afirmar linha a linha a matriz
+**Cobertura das saidas** — `src/viewer.t.js` passa a afirmar linha a linha a matriz
 v0/v1/v1--hogs/v2/v3, `--json` (`failData`/`failInfo`), o console capturado do teste
 (aparece em v3 e sob vermelho, some no verde v1/v2), o re-render frio do `checkView` e a
 degradacao sem `error`/`lineCode`/`address`. 163 asserts no arquivo; suite cheia 559 ✔.
@@ -145,9 +145,9 @@ devolve vazio e sobra so o `phaseLine`, que ja carrega o total.
 
 ### Arquivos
 
-- `viewer.js` — `parseStack`/`callerLineOf` (A), `compactFails({hogs})` (B), `fullView` v1 (C)
+- `src/viewer.js` — `parseStack`/`callerLineOf` (A), `compactFails({hogs})` (B), `fullView` v1 (C)
 - `utest.js` — bloco de render: `framed = anyRed`, `🐢M` no paren do tight e do resumo v3
-- `viewer.t.js` — 9 testes novos, 3 reescritos para o novo contrato de hog
+- `src/viewer.t.js` — 9 testes novos, 3 reescritos para o novo contrato de hog
 
 ## O que fica aberto
 

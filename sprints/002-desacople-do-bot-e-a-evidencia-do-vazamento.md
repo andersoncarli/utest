@@ -32,23 +32,23 @@ mesmo dia, a suíte inteira rodando in-process expôs um comportamento instável
 
 1. **Desacoplar de `bot/lib`** — passar a importar de `utils/src/` (o submódulo neutro):
    `bus.js`, `withTempDir.js`, e o boot do `G` antes de qualquer módulo que dependa dele.
-2. **Self-tests** para `check.js` e `test.js` — o runner testando a si mesmo.
+2. **Self-tests** para `src/check.js` e `src/test.js` — o runner testando a si mesmo.
 3. **Documentar** a evidência do vazamento assíncrono cross-arquivo.
 
 ## Features que este sprint toca
 
-- **1 core** — `check.t.js`, `test.t.js` (os primeiros self-tests); `test.js` ganha
+- **1 core** — `src/check.t.js`, `src/test.t.js` (os primeiros self-tests); `src/test.js` ganha
   `_loadingFile` → `address`.
 - **7 isolation** — a evidência de `063f1d5`: rodando `~/bot` inteiro in-process, o
   arquivo 💥 muda entre execuções e a contagem varia. Diagnóstico: exceção assíncrona
   tardia atribuída ao arquivo errado.
-- **4 report** — `viewer.js` colapsa o glyph-run do header de arquivo em contagens
+- **4 report** — `src/viewer.js` colapsa o glyph-run do header de arquivo em contagens
   (`shell.t.js ✔97 ✘3`).
 
 ## Criterio de pronto
 
 - `utest.js` não importa nada de `bot/lib` — só `utils/src/`.
-- `check.t.js` e `test.t.js` verdes.
+- `src/check.t.js` e `src/test.t.js` verdes.
 - `STATUS.md` documenta a reprodução do vazamento (data, arquivos, sintoma).
 
 # REPORT
@@ -57,11 +57,11 @@ Sprint retroativo. Desacople de bot/lib para utils/src, primeiros self-tests, e 
 
 ## O que aconteceu
 
-- **Desacople de `bot/lib`** (`263ae23`, `789d99f`) — `utest.js`/`utest2.js`/`shims.js`
+- **Desacople de `bot/lib`** (`263ae23`, `789d99f`) — `utest.js`/`utest2.js`/`src/shims.js`
   passam a `utils/src/bus.js` + `withTempDir.js`; `G` é bootado antes dos módulos que
   dependem dele como global.
-- **`check.t.js` (20 checks) + `test.t.js` (14 checks)** (`71f1ad5`) — os primeiros
-  self-tests. `viewer.js` colapsa o glyph-run em contagem.
+- **`src/check.t.js` (20 checks) + `src/test.t.js` (14 checks)** (`71f1ad5`) — os primeiros
+  self-tests. `src/viewer.js` colapsa o glyph-run em contagem.
 - **Evidência do vazamento** (`063f1d5`) — 12 linhas em `STATUS.md`: `io-nutshell.t.js` →
   `config.t.js`, "test.todo is not a function", total 433 vs 124 entre execuções da mesma
   suíte. Isolar cada suite estabiliza → é vazamento de processo compartilhado.
@@ -82,6 +82,6 @@ Sprint retroativo. Desacople de bot/lib para utils/src, primeiros self-tests, e 
 
 | frente | estado |
 |---|---|
-| 1 core | 🟡 — `check.t.js`/`test.t.js` verdes |
+| 1 core | 🟡 — `src/check.t.js`/`src/test.t.js` verdes |
 | 7 isolation | 🟠 — evidência documentada, fix adiado |
 | 4 report | 🟠 — header de arquivo em contagens |

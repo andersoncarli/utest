@@ -1,4 +1,4 @@
-// `state.js` guarda o histórico de rodadas de scan (`.utest/STATE.jsonl` +
+// `src/state.js` guarda o histórico de rodadas de scan (`.utest/STATE.jsonl` +
 // projeção `.utest/STATE.yaml`) e detecta quando `TEST.yaml` mudou desde o último
 // registro — o sinal que diz "o domínio mudou, considere `--force`".
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs'

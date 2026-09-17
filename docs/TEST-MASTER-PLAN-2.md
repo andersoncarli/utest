@@ -5,7 +5,7 @@ documented input and output contract. No logic leaks between phases.
 
 ---
 
-## Phase 1 — Scan (`scanner.js`)
+## Phase 1 — Scan (`src/scanner.js`)
 
 **Input:** target paths, options (`{ filter, force, phase }`)
 **Output:** Manifest POJO
@@ -55,12 +55,12 @@ testFile.mtime (minute) == sourceFile.mtime (minute)
 testFile.mtime.ms  →  check count  (0–999)
 ```
 
-`scanner.js` calls `cacheCount(testPath, srcPath)` which returns the check count if fresh,
+`src/scanner.js` calls `cacheCount(testPath, srcPath)` which returns the check count if fresh,
 or `null` if stale/missing.
 
 ---
 
-## Phase 2 — Run (`runner.js`)
+## Phase 2 — Run (`src/runner.js`)
 
 **Input:** Manifest POJO + options (`{ force, stopOnException }`)
 **Output:** Report POJO
@@ -112,7 +112,7 @@ This keeps the cache timestamp encoding non-zero for tests that pass without exp
 
 ---
 
-## Phase 3 — View (`viewer.js`)
+## Phase 3 — View (`src/viewer.js`)
 
 **Input:** Report POJO
 **Output:** formatted string (or `''` for silent mode)
@@ -181,19 +181,19 @@ for (const [abs, checks] of fileCache) {
 ```
 utest.js (CLI orchestrator)
   │
-  ├─ scanner.js                    Phase 1: zero deps
+  ├─ src/scanner.js                    Phase 1: zero deps
   │   walk files, check mtimes         ↓
   │                               Manifest POJO (file-keyed, cache info)
   │                                    │
   ├─ [G boot: globals.d.js]        G atmosphere
   │                                    │
-  ├─ runner.js                     Phase 2: G-dependent
+  ├─ src/runner.js                     Phase 2: G-dependent
   │   import() uncached files          ↓ raw tree
   │   execute fn(context)          prepareReport()
   │   collect checks/errors            ↓
   │                               Report POJO (flat, pre-aggregated)
   │                                    │
-  ├─ viewer.js                     Phase 3: rendering only
+  ├─ src/viewer.js                     Phase 3: rendering only
   │   render(report, options)          ↓
   │                               formatted string → stdout
   │

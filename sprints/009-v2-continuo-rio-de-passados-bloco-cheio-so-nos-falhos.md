@@ -45,7 +45,7 @@ espaco" que `compactFails` ja aplica em `-v:1`.
 
 # REPORT
 
-`-v:2` (`fullView`, `viewer.js`) trocou uma linha (dotfill + tempo) por ARQUIVO
+`-v:2` (`fullView`, `src/viewer.js`) trocou uma linha (dotfill + tempo) por ARQUIVO
 verde por um rio continuo — nome + contagem, dois espacos, soft-wrap — e
 manteve o bloco cheio (dotfill, `received`/`expected`, caller line) so nos
 arquivos falhos.
@@ -59,7 +59,7 @@ arquivos falhos.
   passados viram UMA linha-rio (`nome ✔N`, sem dotfill nem tempo individual —
   o tempo agregado ja esta na linha-titulo da fase); os falhos continuam no
   formato antigo inteiro, `fileLine` + `failLines`.
-- `viewer.t.js`: teste que fixava o formato antigo (tempo por arquivo verde)
+- `src/viewer.t.js`: teste que fixava o formato antigo (tempo por arquivo verde)
   reescrito para o rio; dois testes novos cobrem a mistura passado+falho e o
   caso so-vermelho (sem rio).
 

@@ -1,11 +1,11 @@
-# 005 — `ledger.t.js` e `state.t.js` vermelhos: `.dash` nao nasce
+# 005 — `src/ledger.t.js` e `src/state.t.js` vermelhos: `.dash` nao nasce
 
 **Sistema**: `utest` (via `iodb`) · **Achado em**: 2026-09-11 · **Severidade**: media
 **Status**: RESOLVIDO no sprint 021 (feature 8.1), 2026-09-12.
 
 ## A causa — um caminho de import errado
 
-`ledger.js:33` e `state.js:31` pediam `'../iodb/io-engine.js'`; o modulo mora em
+`src/ledger.js:33` e `src/state.js:31` pediam `'../iodb/io-engine.js'`; o modulo mora em
 `'../iodb/src/io-engine.js'`. O `try/catch` do degrade engoliu o `ERR_MODULE_NOT_FOUND` em
 silencio, e o `noop()` resultante devolvia `runId: null` / `configChanged: false` — dai o
 `received: object` e os `ENOENT`. **Os testes sempre estiveram certos; a fonte e que estava
@@ -26,7 +26,7 @@ Resultado: `utest .` verde, 630 checks, `.utest/ledger.dash` nasce.
 `utest .` fecha com `✘7 💥2`, sempre nos mesmos dois arquivos:
 
 ```
-ledger.t.js 💥1 ✘2   state.t.js 💥1 ✘5
+src/ledger.t.js 💥1 ✘2   src/state.t.js 💥1 ✘5
   💥 ENOENT: no such file or directory, open '/tmp/utest-ledger-XXXX/.utest/ledger.dash'
   ✘ check(typeof ledger.runId, 'string')   received: object   expected: string
   ✘ check(existsSync(dashPath), true)

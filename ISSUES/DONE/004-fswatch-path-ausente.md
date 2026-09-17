@@ -29,7 +29,7 @@ entries: 3 | com path: 0
 
 ## Contorno adotado no `utest`
 
-`fswatchSource.js` reconstroi o caminho subindo a cadeia de `parent`, que sempre existe e e
+`src/fswatchSource.js` reconstroi o caminho subindo a cadeia de `parent`, que sempre existe e e
 bem formada. A raiz do target tem `parent: null` e da o prefixo a descartar. Funciona, mas e
 trabalho que o consumidor nao deveria ter — e qualquer outro consumidor que siga o doc
 literalmente vai receber `undefined` sem perceber.

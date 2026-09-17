@@ -160,7 +160,7 @@ test('trace', ({ test }) => {
     check(names.includes('import a/b.js'), true)
   })
 
-  test('trace-preload.mjs num subprocesso real escreve o fragmento', ({ check }) => {
+  test('src/trace-preload.mjs num subprocesso real escreve o fragmento', ({ check }) => {
     const dir = mkdtempSync(join(tmpdir(), 'utrace-t-'))
     const prefix = join(dir, 'live')
     const preload = join(import.meta.dir, 'trace-preload.mjs')

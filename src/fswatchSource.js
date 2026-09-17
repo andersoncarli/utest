@@ -1,8 +1,8 @@
 // ─── fswatch como fonte da arvore ──────────────────────────────
-// `scanner.js#walk()` levanta a arvore do zero a cada `scan()`, via `readdirSync`
+// `src/scanner.js#walk()` levanta a arvore do zero a cada `scan()`, via `readdirSync`
 // recursivo, sem estado entre execucoes. O sibling `iodb/fswatch` mantem esse ultimo
 // estado conhecido — identidade por `(dev, ino)`, baseline persistente sobre o mesmo
-// ledger iodb que `ledger.js` e `state.js` ja consomem.
+// ledger iodb que `src/ledger.js` e `src/state.js` ja consomem.
 //
 // O contrato da entidade `.fswatch/PROJECT` e EXTERNO e nao se reescreve aqui:
 // `iodb/fswatch/docs/utest-sprint-prep.md`, feature `iodb/plans/6-fswatch/6.4`.

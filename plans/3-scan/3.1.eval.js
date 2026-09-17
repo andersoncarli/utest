@@ -12,17 +12,17 @@ export default (t) => {
   // Nível sandbox: a peça unitária — `excludeFilter(configPath)` lê o `exclude`
   // (global + fase) do TEST.yaml e devolve um `.excluded(rel)` que casa os globs.
   // É o predicado que o watch usa para podar diretórios; provado aqui contra o
-  // `scanner.js` real, sem subir o watcher.
+  // `src/scanner.js` real, sem subir o watcher.
   t.sandbox("excludeFilter: o predicado de poda vem do exclude do TEST.yaml", async ({ sh, check, write }) => {
     const U = process.cwd(); // o ROOT do utest (a fase real roda daqui)
     write("TEST.yaml", 'exclude:\n  - "node_modules/**"\n  - "archive/**"\nunit:\n  exclude:\n    - "dist/**"\n');
-    write("probe.js",
+    write("src/probe.js",
       `import { excludeFilter } from ${JSON.stringify(U + "/scanner.js")}\n` +
       `const f = excludeFilter("TEST.yaml", "unit")\n` +
       `const say = (rel) => console.log(rel + " " + f.excluded(rel))\n` +
       `say("node_modules"); say("node_modules/foo/x.js"); say("archive")\n` +
       `say("dist/bundle.js"); say("src/scanner.js")\n`);
-    const r = await sh(`bun probe.js`);
+    const r = await sh(`bun src/probe.js`);
     check(r.out.includes("node_modules true"), true, "diretório do glob global casa");
     check(r.out.includes("node_modules/foo/x.js true"), true, "arquivo fundo no glob global casa");
     check(r.out.includes("archive true"), true, "segundo glob global casa");

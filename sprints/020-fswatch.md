@@ -18,9 +18,9 @@ Plano do sprint 020 (feature 8.3). A arvore do projeto passa a poder vir do base
 
 ## Por que este sprint existe agora
 
-`scanner.js#walk()` levanta a arvore do zero a cada `scan()`, sem estado entre execucoes.
+`src/scanner.js#walk()` levanta a arvore do zero a cada `scan()`, sem estado entre execucoes.
 O `iodb/fswatch` mantem esse ultimo estado conhecido, com identidade por `(dev, ino)` sobre
-o mesmo ledger iodb que `ledger.js` (8.1) e `state.js` (8.2) ja consomem — por isso a
+o mesmo ledger iodb que `src/ledger.js` (8.1) e `src/state.js` (8.2) ja consomem — por isso a
 feature saiu da frente 9 e virou 8.3.
 
 O compartilhamento e do arquivo de baseline no root de cada projeto, lido por `utest` e por
@@ -28,13 +28,13 @@ O compartilhamento e do arquivo de baseline no root de cada projeto, lido por `u
 
 ## Plano de materializacao
 
-1. `fswatchSource.js` (novo) — import dinamico do sibling em `try/catch`, degradando para
+1. `src/fswatchSource.js` (novo) — import dinamico do sibling em `try/catch`, degradando para
    `null`; produz `{ tests, sources }`, a mesma forma que `walk()`.
-2. `scanner.js` — `scan()` vira `async`, escolhe a fonte numa linha, e `sourceFiles` ganha
+2. `src/scanner.js` — `scan()` vira `async`, escolhe a fonte numa linha, e `sourceFiles` ganha
    `NON_TARGET_RE` (a absorcao da 4.7).
 3. `utest.js` — um `await` no unico call site de producao.
-4. `scanner.t.js` — o helper `run()` acompanha o `scan()` async.
-5. `fswatchSource.t.js` (novo) — a prova de equivalencia entre os dois caminhos.
+4. `src/scanner.t.js` — o helper `run()` acompanha o `scan()` async.
+5. `src/fswatchSource.t.js` (novo) — a prova de equivalencia entre os dois caminhos.
 
 ## Criterio de pronto
 
@@ -58,29 +58,29 @@ permanente sobre iodb que 8.1 e 8.2 ja consomem.
 
 **O que foi feito**
 
-- **`fswatchSource.js`** (novo) — le o baseline e devolve `{ tests, sources }`, a mesma
+- **`src/fswatchSource.js`** (novo) — le o baseline e devolve `{ tests, sources }`, a mesma
   forma que `walk()`. Import dinamico do sibling em `try/catch`, degradando para `null`,
-  o padrao ja repetido em `ledger.js`, `state.js` e `cacheLedger.js`.
-- **`scanner.js`** — `scan()` virou `async` e escolhe a fonte numa linha, a mesma figura
-  que `cache.js` usa para eleger o `judge`. A classificacao (`makeFilter`, `testRe()`,
+  o padrao ja repetido em `src/ledger.js`, `src/state.js` e `src/cacheLedger.js`.
+- **`src/scanner.js`** — `scan()` virou `async` e escolhe a fonte numa linha, a mesma figura
+  que `src/cache.js` usa para eleger o `judge`. A classificacao (`makeFilter`, `testRe()`,
   `SOURCE_RE`) e compartilhada pelos dois caminhos, nao reimplementada — e o que garante
   listas identicas.
 - **`utest.js`** — um `await` no unico call site de producao.
-- **`scanner.t.js`** — o helper `run()` acompanha o `scan()` async; 44 checks verdes.
-- **`fswatchSource.t.js`** (novo) — 7 checks: equivalencia entre os caminhos, poda pelo
+- **`src/scanner.t.js`** — o helper `run()` acompanha o `scan()` async; 44 checks verdes.
+- **`src/fswatchSource.t.js`** (novo) — 7 checks: equivalencia entre os caminhos, poda pelo
   exclude, o `.fswatch` fora da arvore que indexa, baseline ilegivel caindo no fallback.
 
 ### A revisao de 2.8 e 4.7 a luz do fswatch
 
 Ambas eram stubs do `sprint new`, sem um requisito escrito. Foram absorvidas:
 
-- **4.7** virou `NON_TARGET_RE` em `scanner.js`, aplicado nos dois caminhos. O filtro e
-  independente da fase de proposito: `testRe()` le o registry mutavel de `kinds.js`, que
+- **4.7** virou `NON_TARGET_RE` em `src/scanner.js`, aplicado nos dois caminhos. O filtro e
+  independente da fase de proposito: `testRe()` le o registry mutavel de `src/kinds.js`, que
   `resetRegistry()` zera entre fases, entao rodando `unit` o `.eval.js` nao estava
   registrado e escapava para `sourceFiles` — um roteiro de avaliacao cobrando um teste que
   nunca vai existir. A cobertura foi de 40% para 58%, e a lista de `--uncovered` agora so
   tem fonte de verdade.
-- **2.8** foi revista e NAO e absorvida por esta feature. Rever o `cache.js` a luz do
+- **2.8** foi revista e NAO e absorvida por esta feature. Rever o `src/cache.js` a luz do
   fswatch mostrou que o caso ja estava resolvido pela 2.6: a arbitragem cruzada do
   `results.json` promove a HIT o MISS cuja dessincronia e de relogio e nao de conteudo, e
   resolve rodando uma vez. Creditar a correcao ao `(dev, ino)` seria apoiar um degrau num
@@ -185,10 +185,10 @@ identidade certa, e a costura fica pronta para o dia em que escrever custar o qu
 
 ## Prova
 
-- `utest fswatchSource.t.js` — 7 checks verdes.
-- `utest scanner.t.js` — 44 checks verdes.
-- `utest .` — suite verde, salvo as 7 falhas pre-existentes em `state.t.js` e
-  `ledger.t.js`, identicas antes e depois (conferido com `git stash`).
+- `utest src/fswatchSource.t.js` — 7 checks verdes.
+- `utest src/scanner.t.js` — 44 checks verdes.
+- `utest .` — suite verde, salvo as 7 falhas pre-existentes em `src/state.t.js` e
+  `src/ledger.t.js`, identicas antes e depois (conferido com `git stash`).
 - Apagar o baseline e rodar de novo: recria sem erro.
 
 ## O que fica aberto

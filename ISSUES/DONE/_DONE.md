@@ -7,7 +7,7 @@ Itens resolvidos, movidos para ca no proximo "pente" depois de fechados (ver
 
 - [utest] `.t.js` cru (sem `test()`, so `console.assert`/`console.log`) passava isolado mas
   reportava falso-vermelho dentro de `utest .` — **resolvido** (sprint 026):
-  causa raiz era `cache.js` tratando `!result.checks` (zero checks) como sinonimo de
+  causa raiz era `src/cache.js` tratando `!result.checks` (zero checks) como sinonimo de
   falha em duas gravacoes (`write`, linha ~560, e o record de `results.json`, linha
   ~587) — um arquivo cru sem `check()` tem `checks:0` legitimamente quando passa, e
   isso e diferente de `result.failed`, que ja e o veredito correto
@@ -28,14 +28,14 @@ Itens resolvidos, movidos para ca no proximo "pente" depois de fechados (ver
   "minor reorg docs") — item estava desatualizado, nao havia mais `HANDOFF.md` na raiz —
   [ISSUES/010](010-handoff-md-avulso-sem-dono.md)
 - [utest] `check.test` (fallback global de `check()` sem bind, usado pelo shim `expect()`
-  de `shims.js`) apontava para o `t` errado quando um `check`/exceção tardia (trabalho
+  de `src/shims.js`) apontava para o `t` errado quando um `check`/exceção tardia (trabalho
   solto de `setTimeout`/promise não esperada, ou o `Promise.race` do timeout vencendo)
   disparava depois que `runTest` já tinha selado o nó e restaurado o global — a contagem
   de `checks` de um arquivo podia vazar para outro que rodasse "ao lado" na mesma
   invocação — **resolvido**: `check.test` só é restaurado ao valor salvo se
   ainda apontar para o `t` que está selando; senão zera, e um check tardio sem bind fica
-  sem dono (comportamento já aceito por `leak.t.js`) em vez de contaminar o próximo global
-  — `utest.js` (`runTest`) e `runner.js` (mesma regra) —
+  sem dono (comportamento já aceito por `src/leak.t.js`) em vez de contaminar o próximo global
+  — `utest.js` (`runTest`) e `src/runner.js` (mesma regra) —
   [ISSUES/007](007-grand-failcount-cross-file.md). Mesma sessão achou uma segunda
   fresta da mesma família: o `state` de uma linha do `--json` era um snapshot gravado uma
   vez logo após o loop de `runTest` do arquivo, e não se atualizava se um straggler reabrisse
@@ -64,7 +64,7 @@ Itens resolvidos, movidos para ca no proximo "pente" depois de fechados (ver
   `rawTarget`, com aviso; um filtro que parece caminho (`/` ou `.js`) mas não existe no
   disco também avisa — `utest.js` (parsing de positional) —
   [ISSUES/008](008-dois-caminhos-posicionais-segundo-ignorado.md)
-- [utest] `ledger.t.js` e `state.t.js` falhavam (7 checks, 2 excecoes) — **resolvido**
+- [utest] `src/ledger.t.js` e `src/state.t.js` falhavam (7 checks, 2 excecoes) — **resolvido**
   (sprint 021): o import pedia `../iodb/io-engine.js` e o modulo mora em
   `../iodb/src/io-engine.js`; o `catch` do degrade engolia o `ERR_MODULE_NOT_FOUND` em
   silencio. Caminho corrigido, degrade agora fala sob `UTEST_DEBUG`, e o falso-verde do

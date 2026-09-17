@@ -18,6 +18,6 @@ contagem total varia — uma exceção assíncrona tardia (provável `process.ex
 subprocesso) é atribuída ao arquivo errado. `sealed` ([[1.3]]) tapa o caso do `check`
 tardio; a exceção tardia continua aberta.
 
-`worker.js` + `runner.js` + `index.js` são a base do caminho de subprocesso; hoje só
-`index.js`/`worker.js` o usam, e a fase `eval` do soml roda sobre o `runTest` de
-`runner.js`.
+`src/worker.js` + `src/runner.js` + `src/index.js` são a base do caminho de subprocesso; hoje só
+`src/index.js`/`src/worker.js` o usam, e a fase `eval` do soml roda sobre o `runTest` de
+`src/runner.js`.

@@ -1,7 +1,7 @@
 /**
- * probe.js — instrumentar chamadas de função para achar hogs.
+ * src/probe.js — instrumentar chamadas de função para achar hogs.
  *
- * `spyOn` (shims.js) existe para ASSERTAR sobre uma chamada — recebeu os args
+ * `spyOn` (src/shims.js) existe para ASSERTAR sobre uma chamada — recebeu os args
  * certos, foi chamada N vezes. `probe` é o outro uso: MEDIR onde o tempo mora,
  * quando um render de 4ms deveria ser sub-1ms (docs/PERF-render.md). Conta
  * chamadas, self-time (relógio menos o tempo gasto DENTRO de outras funções

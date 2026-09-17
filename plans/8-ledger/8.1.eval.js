@@ -7,7 +7,7 @@ export default (t) => {
   t.sandbox("ledger: rodada completa grava run:start+test:result+run:end e verify() fecha valida", async ({ sh, check, write, exists }) => {
     const U = process.cwd() // ROOT do utest — de onde ../iodb é visível
     write("a.t.js", "// fixture exercitada pelo ledger\n")
-    write("probe.js",
+    write("src/probe.js",
       `import { openLedger } from ${JSON.stringify(U + "/ledger.js")}\n` +
       `const root = process.cwd()\n` +
       `const ledger = await openLedger(root, { phase: "eval" })\n` +
@@ -18,7 +18,7 @@ export default (t) => {
       `const v = ledger.verify()\n` +
       `console.log("RUN_ID_TYPE=" + typeof ledger.runId)\n` +
       `console.log("VERIFY_VALID=" + v.valid)\n`)
-    const r = await sh(`bun probe.js`)
+    const r = await sh(`bun src/probe.js`)
     check(r.out.includes("RUN_ID_TYPE=string"), true, "runId gerado")
     check(r.out.includes("VERIFY_VALID=true"), true, "cadeia fecha válida com start+test+plugin+end")
 

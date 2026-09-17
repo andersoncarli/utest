@@ -61,7 +61,7 @@ e deste sprint e o **momento**:
 - **[8.4] storage-contract** — `plans/8-ledger/8.4-storage-contract.md` — dona da spec:
   shape do no, projecao + log, formato plugavel, o contrato do `treeEngine.js`, o irmao de
   resultados, a prova de igualdade. O que dirige a execucao: **um `walk(filter, exclude)`
-  de assinatura identica a de `openFswatchSource`** (`fswatchSource.js:111`), tres engines
+  de assinatura identica a de `openFswatchSource`** (`src/fswatchSource.js:111`), tres engines
   atras dele, e um bench que falha se discordarem.
 - **[8.3]** nao e tocada. Este sprint e a regua que a destrava, nao a sua implementacao.
 
@@ -70,10 +70,10 @@ e deste sprint e o **momento**:
 Nove passos. Cada um traz o comando que o prova.
 
 **1. Extrair a classificacao compartilhada.** Novo `classify.js` recebendo `SOURCE_RE` e
-`classify()` de `fswatchSource.js:19,80`; `scanner.js` e `fswatchSource.js` importam.
+`classify()` de `src/fswatchSource.js:19,80`; `src/scanner.js` e `src/fswatchSource.js` importam.
 Refactor puro — se algum teste precisar mudar, algo vazou. Vem primeiro porque a terceira
 copia da regex e o que mataria a premissa de igualdade.
-`utest scanner.t.js fswatchSource.t.js --force`
+`utest src/scanner.t.js src/fswatchSource.t.js --force`
 
 **2. A arvore como estrutura, sem I/O.** Novo `tree.js`: `emptyTree`, `setNode`, `delNode`,
 `getNode`, `paths`, `totalSize`, `canonical`, `diff`. Novo `tree.t.js` cobrindo no folha vs
@@ -93,46 +93,46 @@ premissa inteira do shape.
 log reconciliando; entradas com `seq` antigo ignoradas; **tail truncado no meio de uma
 linha** parando a aplicacao sem corromper; compactacao preservando estado e truncando o
 log; `_v` e `_root` errados devolvendo arvore vazia. Fixtures com
-`mkdtempSync(join(tmpdir(),'utest-tree-'))`, como `fswatchSource.t.js`.
+`mkdtempSync(join(tmpdir(),'utest-tree-'))`, como `src/fswatchSource.t.js`.
 `utest treeStore.t.js --force`
 
 **5. A engine raw atras do contrato.** Novos `treeEngine.js` e `rawEngine.js`, mais
 `rawEngine.t.js`: primeiro `refresh()` numa fixture nova produz tudo como `add`; **segundo
 `refresh()` sem mudancas produz zero mutacoes** (o teste que prova que o baseline serve
 para algo); tocar um arquivo produz exatamente um `upd`; apagar produz um `del`; `walk()`
-devolve as mesmas listas que `walk()` de `scanner.js`.
+devolve as mesmas listas que `walk()` de `src/scanner.js`.
 `utest rawEngine.t.js --force`
 
 **6. O adapter iodb.** Novo `iodbEngine.js` envolvendo `openFswatchSource` e acrescentando
-`tree()`, mais `iodbEngine.t.js` guardado por `haveFswatch` (`fswatchSource.t.js:27`) com
+`tree()`, mais `iodbEngine.t.js` guardado por `haveFswatch` (`src/fswatchSource.t.js:27`) com
 skip limpo sem o sibling, asserindo `tree()` da iodb igual a da raw na mesma fixture.
 `utest iodbEngine.t.js --force`
 
-**7. Plugar em `scan()`.** Modificados `scanner.js:139-151`, `utest.js:502` (repassa
-`cfg.storage`/`UTEST_STORAGE`) e `TEST.yaml`. Em `scanner.t.js`, estender o assert de
-`fswatchSource.t.js:44`: `scan()` com `'walk'`, `'raw'` e `'iodb'` devolve `entries` e
-`uncovered` identicos. **Um diff maior que ~5 linhas em `scanner.js` significa que o
+**7. Plugar em `scan()`.** Modificados `src/scanner.js:139-151`, `utest.js:502` (repassa
+`cfg.storage`/`UTEST_STORAGE`) e `TEST.yaml`. Em `src/scanner.t.js`, estender o assert de
+`src/fswatchSource.t.js:44`: `scan()` com `'walk'`, `'raw'` e `'iodb'` devolve `entries` e
+`uncovered` identicos. **Um diff maior que ~5 linhas em `src/scanner.js` significa que o
 contrato esta errado.**
 `utest .`
 
-**8. O irmao de resultados.** `results.flush()` (`cache.js:219`) passa a escrever
+**8. O irmao de resultados.** `results.flush()` (`src/cache.js:219`) passa a escrever
 `results.tree.json` tambem. Novo `results-tree.t.js`: cada chave de `results.json` tem
 endereco correspondente com os mesmos `_ms`/`_checks`/`_state`. Escrita espelhada, leitura
 nao migrada.
-`utest results-tree.t.js cache.t.js --force`
+`utest results-tree.t.js src/cache.t.js --force`
 
-**9. O bench de tres.** `scanner.bench.js` com `ENGINES`, cold/warm/bytes e a prova de
+**9. O bench de tres.** `src/scanner.bench.js` com `ENGINES`, cold/warm/bytes e a prova de
 igualdade com exit diferente de 0.
-`bun scanner.bench.js`
+`bun src/scanner.bench.js`
 
 ## Riscos de execucao
 
 Os riscos **permanentes do design** estao na ficha da 8.4. Aqui so os que sao deste
 sprint:
 
-- **`findProjectRoot` duplicado** (`cache.js:124` e `cacheLedger.js:44`). `treeStore.js`
-  precisa dele. Nao fazer a terceira copia: extrair para `paths.js`, que ja existe e e o
-  lugar. Se a extracao parecer arriscada no meio do trabalho, importar de `cache.js`,
+- **`findProjectRoot` duplicado** (`src/cache.js:124` e `src/cacheLedger.js:44`). `treeStore.js`
+  precisa dele. Nao fazer a terceira copia: extrair para `src/paths.js`, que ja existe e e o
+  lugar. Se a extracao parecer arriscada no meio do trabalho, importar de `src/cache.js`,
   nunca copiar.
 - **`.utest/` e gitignorado** (`.gitignore:3`). A projecao nunca viaja entre maquinas, o
   que torna o cold-start obrigatoriamente correto, mas significa que um bug que so aparece
@@ -147,7 +147,7 @@ sprint:
 
 **80k-150k tokens.**
 
-Base do palpite: o sprint 021 (dois modulos novos, um bench, integracao em `scanner.js`)
+Base do palpite: o sprint 021 (dois modulos novos, um bench, integracao em `src/scanner.js`)
 e o vizinho mais proximo em forma. Este tem mais arquivos novos (sete) mas menos
 descoberta — a spec ja esta fechada na ficha da 8.4, e os passos 1 a 4 sao autocontidos e
 testaveis sem tocar producao. A faixa alarga para cima se o passo 3 revelar que o append
@@ -157,7 +157,7 @@ no formato `js` e inviavel, ou se o passo 7 esbarrar na divergencia de symlink.
 
 - `utest .` verde com o default (`walk`) inalterado — a prova de que nada quebrou.
 - `UTEST_STORAGE=raw utest .` produz **a mesma saida** que o default.
-- `bun scanner.bench.js` imprime a tabela das tres engines com cold, warm, ms/entry e
+- `bun src/scanner.bench.js` imprime a tabela das tres engines com cold, warm, ms/entry e
   bytes, e sai com codigo 0 — qualquer divergencia entre engines derruba o bench.
 - A mesma arvore gravada em `json` e em `js` rele profundamente igual.
 

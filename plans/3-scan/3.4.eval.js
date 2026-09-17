@@ -5,7 +5,7 @@
 // `.eval.js` exporta `(t) => {}`), e uma fase pode ter arquivos fora da árvore que
 // `scan()` varre. Os três ganchos irmãos de `register()` deixam um consumidor
 // externo (o `sprint eval --sweep` do soml) plugar executor, provedor de entries
-// e setup de fase. Este roteiro prova o registro dos três contra o `kinds.js`
+// e setup de fase. Este roteiro prova o registro dos três contra o `src/kinds.js`
 // real, que uma fase com provider ignora `include`/`exclude` do TEST.yaml, e —
 // a prova de campo do sprint 017 — que um `.t.js` da fase `unit` que chama
 // `register*` por conta própria NÃO faz a fase seguinte partir de um registry
@@ -14,7 +14,7 @@ export default (t) => {
 
   t.sandbox("3.4: os três ganchos registram e os *For devolvem a fn; resetRegistry zera", async ({ sh, check, write }) => {
     const U = process.cwd()
-    write("probe.js",
+    write("src/probe.js",
       `import { register, kinds, registerExecutor, executorFor, registerEntries, entriesFor, ` +
       `registerPhaseSetup, phaseSetupFor, resetRegistry } from ${JSON.stringify(U + "/kinds.js")}\n` +
       `register('demo')\n` +
@@ -30,7 +30,7 @@ export default (t) => {
       `console.log('AFTER_EXEC=' + executorFor('demo'))\n` +
       `console.log('AFTER_ENTRIES=' + entriesFor('demo'))\n` +
       `console.log('AFTER_SETUP=' + phaseSetupFor('demo'))\n`)
-    const r = await sh(`bun probe.js`)
+    const r = await sh(`bun src/probe.js`)
     check(r.out.includes("KIND=true"), true, "register() abre o tipo")
     check(r.out.includes("EXEC=function"), true, "executorFor devolve a fn registrada")
     check(r.out.includes("ENTRIES=function"), true, "entriesFor idem")

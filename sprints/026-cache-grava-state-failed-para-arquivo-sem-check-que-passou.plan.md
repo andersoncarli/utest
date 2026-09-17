@@ -9,13 +9,13 @@ Plano do sprint 026 (feature 2.4).
 rodado isolado, mas dentro de `utest .` (agregado) aparece como falha — mesmo com o
 sub-ledger local do arquivo só tendo `passed` em todas as entradas.
 
-Investigado via Explore: a causa raiz mora em `cache.js`, não no sub-ledger (que usa
-`suite.state` direto e por isso nunca erra). `cache.js` tem duas gravações que tratam
+Investigado via Explore: a causa raiz mora em `src/cache.js`, não no sub-ledger (que usa
+`suite.state` direto e por isso nunca erra). `src/cache.js` tem duas gravações que tratam
 `!result.checks` (zero checks) como sinônimo de falha:
 
-1. `cache.js` (`write`, ramo do sidecar) — `result.failed || !result.checks` decide se
+1. `src/cache.js` (`write`, ramo do sidecar) — `result.failed || !result.checks` decide se
    grava um sidecar "vermelho".
-2. `cache.js` (record de `results.json`) —
+2. `src/cache.js` (record de `results.json`) —
    `(result.exception || result.failed || !result.checks) ? 'failed' : 'passed'`.
 
 Um arquivo cru sem `check()` tem `checks:0` legitimamente quando passa — isso é
@@ -31,11 +31,11 @@ ISSUES/008, mas que aqui descarta o segundo arquivo real. **Fora deste sprint.**
 
 ## Passos
 
-1. `cache.js` — remover `!result.checks` das duas condições (`write`/sidecar e o
+1. `src/cache.js` — remover `!result.checks` das duas condições (`write`/sidecar e o
    record de `results.json`), deixando `result.failed`/`result.exception` como única
    fonte de verdade.
 2. `plans/2-cache/2.4.eval.js` (novo — 2.4 nunca teve um eval de feature, só
-   `cache.t.js` unitário) — 2 passos `t.sandbox` (regra dos 3: 2 arquivos bastam)
+   `src/cache.t.js` unitário) — 2 passos `t.sandbox` (regra dos 3: 2 arquivos bastam)
    provando isolado-vs-agregado e a leitura de cache quente.
 3. `ISSUES.md` — mover ISSUES/014 pra DONE, com o mecanismo exato do fix.
 

@@ -142,7 +142,7 @@ function checkView(c, { width = 80 } = {}) {
   let out = dotfill(left, '.', ' ' + gray(truncStart(addr, Math.max(16, Math.floor(width * 0.45)))), width)
   // Um `check` que falhou com `received: false` não acrescenta nada — a expressão já está
   // no `lineCode` acima, e um check de 1 arg que falha é sempre falsy. Cobre `check(expr)`
-  // (sem esperado) e `check(expr, true)` (esperado explícito, que também some). `check.js`
+  // (sem esperado) e `check(expr, true)` (esperado explícito, que também some). `src/check.js`
   // guarda `a`/`b` já como string (`repr()`), então a comparação é contra `'false'`/`'true'`.
   // Qualquer outro par (`check(x, 40)`, strings, `received: 0`/`null`) carrega informação
   // real e continua aparecendo.
@@ -389,7 +389,7 @@ export function summary(t) {
   if (t._cached) {
     const n = t.checkCount || 1
     if (t.state === 'exception') { s.exception++; s.total++; s.tests++ }
-    // Vermelho REPRODUZÍVEL cacheado (`cache.js#cacheFailure`): pulado como o
+    // Vermelho REPRODUZÍVEL cacheado (`src/cache.js#cacheFailure`): pulado como o
     // verde, mas conta como falha — senão hot e cold divergem, que é o furo que
     // o critério de aceite proíbe (`.sprint/TEST-EVAL.md`). `checkCount` guardou
     // os checks que PASSARAM; `failCount` os que não.

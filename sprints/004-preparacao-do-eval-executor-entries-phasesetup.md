@@ -25,7 +25,7 @@ migrated: "0.2"
 **Context**
 
 O soml queria rodar `sprint eval --sweep` reusando este runner para executar `.eval.js`
-em milissegundos em vez de minutos. Isso exigia três ganchos que o `kinds.js` de 003 não
+em milissegundos em vez de minutos. Isso exigia três ganchos que o `src/kinds.js` de 003 não
 tinha: um executor (`.eval.js` não é módulo ESM chamando `test()`, exporta `(t) => {}`),
 um provedor de entries (`.eval.js` vive em `plans/**`, fora do walk), e um setup de fase
 (subir o Chromium uma vez, não por arquivo).
@@ -36,44 +36,44 @@ um provedor de entries (`.eval.js` vive em `plans/**`, fora do walk), e um setup
    como `test()` filhos.
 2. **`registerEntries(phase, fn)`** — entries diretas, sem walk.
 3. **`registerPhaseSetup(phase, fn)`** — recurso montado 1× por fase, derrubado depois.
-4. **`tuit.js`** — o parser+executor `.tuit` (o `kinds.js` já reconhecia o sufixo, nada
+4. **`src/tuit.js`** — o parser+executor `.tuit` (o `src/kinds.js` já reconhecia o sufixo, nada
    executava).
-5. **`console-capture.js`** — `console.*` não vaza de teste verde (compartilhado pelos
+5. **`src/console-capture.js`** — `console.*` não vaza de teste verde (compartilhado pelos
    dois `runTest`).
 6. **`cache` para evals** — `cacheFailure` (o vermelho reproduzível de eval não re-roda),
    `extraDeps` (o `files:` do `.md` de feature como grafo).
-7. **`probe.js`** — instrumentar chamadas para achar hogs (a preparação do profiling).
+7. **`src/probe.js`** — instrumentar chamadas para achar hogs (a preparação do profiling).
 
 ## Features que este sprint toca
 
-- **3 scan** — os três ganchos em `kinds.js`.
-- **6 compat** — `tuit.js`.
-- **2 cache** — `cacheFailure` + `extraDeps` em `cache.js`.
-- **5 profiling** — `probe.js` nasce.
-- **1 core** — `console-capture.js`.
+- **3 scan** — os três ganchos em `src/kinds.js`.
+- **6 compat** — `src/tuit.js`.
+- **2 cache** — `cacheFailure` + `extraDeps` em `src/cache.js`.
+- **5 profiling** — `src/probe.js` nasce.
+- **1 core** — `src/console-capture.js`.
 
 ## Criterio de pronto
 
-- `kinds.t.js` verde incluindo `registerPhaseSetup`.
-- `cache.t.js` verde incluindo `cacheFailure` e `extraDeps`.
-- `probe.t.js` verde.
+- `src/kinds.t.js` verde incluindo `registerPhaseSetup`.
+- `src/cache.t.js` verde incluindo `cacheFailure` e `extraDeps`.
+- `src/probe.t.js` verde.
 
 # REPORT
 
-Sprint retroativo. Os três ganchos de extensão (executor/entries/phaseSetup), tuit.js, console-capture, cacheFailure e probe — a preparação do .eval.js.
+Sprint retroativo. Os três ganchos de extensão (executor/entries/phaseSetup), src/tuit.js, console-capture, cacheFailure e probe — a preparação do .eval.js.
 
 ## O que aconteceu
 
-- **Os três ganchos** (`dbb49ed`) — `kinds.js` +34: `registerExecutor`, `registerEntries`,
+- **Os três ganchos** (`dbb49ed`) — `src/kinds.js` +34: `registerExecutor`, `registerEntries`,
   `registerPhaseSetup` + os `*For(kind)` correspondentes. `utest.js` +218 para consumi-los
   em `runPhase` (o provider, o `phaseSetup`, o `executor`).
-- **`tuit.js`** (`dbb49ed`, +115) — `parseTuitText` + `runTuitBlocks`; blocos acumulam via
+- **`src/tuit.js`** (`dbb49ed`, +115) — `parseTuitText` + `runTuitBlocks`; blocos acumulam via
   `_assign`/`soml`, `·` é conteúdo.
-- **`console-capture.js`** (`dbb49ed`, +20) — um módulo, os dois `runTest`.
-- **`cacheFailure` + `extraDeps`** (`b1586c7`) — `cache.js` +106; `cache.t.js` +130 cobre
+- **`src/console-capture.js`** (`dbb49ed`, +20) — um módulo, os dois `runTest`.
+- **`cacheFailure` + `extraDeps`** (`b1586c7`) — `src/cache.js` +106; `src/cache.t.js` +130 cobre
   o vermelho reproduzível e o `extraRoots`.
-- **`probe.js`** (`b1586c7` + `dbb49ed`, +155/+78) — as três formas, self-time, `report()`.
-  `probe.t.js` +96.
+- **`src/probe.js`** (`b1586c7` + `dbb49ed`, +155/+78) — as três formas, self-time, `report()`.
+  `src/probe.t.js` +96.
 
 ## Onde o PLAN errou
 
@@ -81,7 +81,7 @@ Sprint retroativo. Os três ganchos de extensão (executor/entries/phaseSetup), 
   robusto. Mas `registerExecutor` e `registerEntries` — o coração de "o soml reusa este
   runner" — só são exercitados **de lado**, quando o soml roda. Nenhum `.t.js` no utest
   os prende (feature 3.4, 🟠 até hoje).
-- **`tuit.js` entrou sem `tuit.t.js`.** Um parser com `Function(...)` (executa o objeto
+- **`src/tuit.js` entrou sem `tuit.t.js`.** Um parser com `Function(...)` (executa o objeto
   literal como código) e uma regra sutil de raiz-nova-vs-parcial, sem nada travando —
   feature 6.4, 🟠.
 - **O `utest.js` cresceu 218 linhas numa janela.** O `runPhase` virou a função mais densa
@@ -93,7 +93,7 @@ Sprint retroativo. Os três ganchos de extensão (executor/entries/phaseSetup), 
 | frente | estado |
 |---|---|
 | 3 scan | 🟡 (3.1-3.3) / 🟠 (3.4 ganchos) |
-| 6 compat | 🟠 — `tuit.js` sem teste |
+| 6 compat | 🟠 — `src/tuit.js` sem teste |
 | 2 cache | 🟡 — `cacheFailure` coberto |
-| 5 profiling | 🟡 — `probe.t.js` verde |
+| 5 profiling | 🟡 — `src/probe.t.js` verde |
 | 1 core | 🟠 — `console-capture` sem teste próprio |
