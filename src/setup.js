@@ -25,7 +25,13 @@ plugin({
       let code = await fs.promises.readFile(args.path, 'utf8')
       // Comment out any explicit bun:test imports
       if (code.includes('bun:test')) {
-        code = code.replace(/import\s+[\s\S]*?from\s+["']bun:test["'];?/g, m =>
+        // Ancorado ao inicio da linha e sem atravessar outra instrucao: o
+        // [\s\S]*? antigo casava do primeiro `import` do arquivo ate um
+        // "bun:test" escrito DENTRO de uma string, comentando em silencio todo
+        // o codigo entre os dois.
+        code = code.replace(/^[ \t]*import\s*\{[^}]*\}\s*from\s*["']bun:test["'];?[ \t]*$/mg, m =>
+          m.split('\n').map(l => '// [utest-shim] ' + l).join('\n'))
+        code = code.replace(/^[ \t]*import\s+[^;'"{]*?\s*from\s*["']bun:test["'];?[ \t]*$/mg, m =>
           m.split('\n').map(l => '// [utest-shim] ' + l).join('\n'))
       }
       // Prepend our shims import (ESM only) to shadow Bun's module-scoped test/describe/it/expect

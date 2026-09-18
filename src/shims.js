@@ -182,9 +182,14 @@ export const mock = jest
 
 
 export function installShims() {
-  Object.assign(globalThis, {
+  Object.assign(test.api, {
     describe, it, expect,
     beforeAll, afterAll, beforeEach, afterEach,
     withTempDir, spyOn, jest, vi, mock
   })
+  Object.assign(globalThis, test.api)
 }
+
+// test.js já expõe check/checkFail/checkException no import; somar o resto assim que
+// shims.js é carregado (describe/it/expect/etc) sem esperar um chamador explícito.
+installShims()

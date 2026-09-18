@@ -1,3 +1,19 @@
+// test.js — PRELOAD OBRIGATÓRIO. Qualquer arquivo, em qualquer projeto peer sibling, que
+// use `check`/`checkException`/os globais de asserção do `utest` DEVE importar ESTE módulo
+// (`import '.../utest/src/test.js'`) como a PRIMEIRA coisa que roda — antes de qualquer
+// outro import que dependa desses globais já existirem. `test.install()` (fim do arquivo)
+// roda como efeito colateral do próprio import e faz `Object.assign(globalThis, test.api)`
+// — não há outro ponto de instalação, e depender da ordem TRANSITIVA de imports de outro
+// módulo (torcer pra alguém no meio do caminho já ter importado isto) é frágil: qualquer
+// reordenação silenciosa quebra o consumidor sem aviso.
+//
+// NÃO importar `utest/src/index.js`/`utest.js` (o pacote inteiro, `package.json#main`)
+// só para pegar os globais fora do contexto de RODAR a suíte: aquele entrypoint instala um
+// trap em `process.exit` (proteção do runner) que quebra qualquer processo que chame
+// `process.exit()` legitimamente fora de um test run. `test.js` sozinho é o módulo certo —
+// só os globais de asserção, sem esse efeito colateral.
+import { check, checkFail, checkException } from './check.js'
+
 // _current: set by test.begin() for per-file isolation; null = use test.main (back-compat)
 let _current = null
 
@@ -75,8 +91,10 @@ test.main = globalThis.test?.main || {
   state: 'pending'
 }
 
-if (!globalThis.test) globalThis.test = test
-globalThis.test.main = test.main
+// test.api: a única fonte do que um corpo de teste recebe como contexto (`fn(ctx)`).
+// shims.js estende isto com describe/it/expect/etc — não pode importar de lá (ciclo:
+// shims.js já importa test.js), então cada camada soma o que só ela enxerga.
+test.api = test.api || { check, checkFail, checkException }
 
 Object.defineProperty(test, '_loadingFile', {
   get: () => (test.main._loadingFile),
@@ -88,5 +106,26 @@ test.todo = (name, fn) => test(name, fn, { todo: true })
 test.skip = (name, fn) => test(name, fn, { skip: true })
 test.it   = test
 test.context = {}
+
+// ─── Instalação explícita de globals ──────────────────────────────
+// Único ponto que escreve em `globalThis`. Chamado automaticamente no import (linha
+// abaixo) — todo consumidor direto de `test.js` (utest.js, os `.t.js` do projeto sob o
+// harness) ganha o global de graça, como sempre foi. Também exposto como `test.install()`
+// para quem monta o próprio entrypoint fora do harness (uma app TUI em runtime, por
+// exemplo) e precisa garantir o global de forma explícita, sem depender de MAIS um import
+// silencioso em algum ponto da cadeia.
+//
+// Idempotente por identidade de referência, não por forma: bun expõe um `test` nativo
+// (seu test runner embutido) antes deste módulo carregar, então `!globalThis.test` sozinho
+// nunca segura a instalação — mas comparar contra a PRÓPRIA função (`globalThis.test ===
+// test`) evita reescrever globals que hooks de terceiros (describe/it de shims.js, por
+// exemplo) já emendaram em cima da mesma instância.
+test.install = () => {
+  if (globalThis.test !== test) globalThis.test = test
+  globalThis.test.main = test.main
+  Object.assign(globalThis, test.api)
+  return test
+}
+test.install()
 
 export default test

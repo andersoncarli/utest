@@ -459,6 +459,27 @@ export function TestCache(root, { ledger = null } = {}) {
     const historyFresh = judge.fresh(phase, testPath, extraDeps, targetPath)
     const rel = () => relative(root, testPath)
 
+    // Com o ledger (conteúdo, sha256) habilitado, ele é a AUTORIDADE — mtime vira
+    // fallback puro, nunca cruzado. O motivo: um veredito de mtime (`timeVerdict`,
+    // via `.001` no segundo do alvo) sobrevive enquanto o INODE não muda, mesmo que
+    // o veredito real registrado (`judge.get`) diga passou — não há como o cache de
+    // tempo se autocorrigir sem um `--force`, porque nada nele reflete o resultado
+    // mais recente, só se o conjunto ainda está "no mesmo segundo". Ignorar
+    // `timeVerdict` aqui e ir direto no registro do ledger elimina essa classe de
+    // falso-vermelho preso (achado: `title.t.js` ficava marcado falho para sempre
+    // depois de UMA falha real, mesmo passando limpo em toda rodada seguinte).
+    if (ledger?.enabled) {
+      if (!historyFresh) return null
+      const rec = judge.get(phase, testPath)
+      if (!rec) return null
+      if (rec.state === 'exception' || rec.exception !== false) return null
+      return {
+        checks: rec.checks ?? 0, tests: rec.tests ?? 0,
+        failCount: rec.failCount ?? 0, exception: false,
+        failed: rec.state === 'failed',
+      }
+    }
+
     if (timeVerdict) {
       // HIT do tempo, histórico discorda (teste/alvo/deps mudaram desde o
       // último record) → rebaixa a MISS. O cache de tempo achou parecido; o

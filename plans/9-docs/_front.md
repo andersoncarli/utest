@@ -2,7 +2,7 @@
 front: 9
 keyword: docs
 title: Frente 9
-state: active
+state: confirmed
 updated: 2026-09-12
 ---
 # [9] docs — Frente 9

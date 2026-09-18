@@ -11,8 +11,13 @@ export function shim(content, file) {
   shimmed = shimmed.replace(/^#!.*\n/, '\n')
   
   // Eliminate bun:test imports first so they don't block `safe` global evaluation!
-  shimmed = shimmed.replace(/^import\s+[\s\S]*?\s+from\s+["']bun:test["'];?\s*/mg, (m) => '\n'.repeat(m.split('\n').length - 1))
-  shimmed = shimmed.replace(/const\s+[\s\S]*?\s+=\s+require\(["']bun:test["']\);?/mg, (m) => '\n'.repeat(m.split('\n').length - 1))
+  // Ancorado ao INICIO da linha e limitado ao corpo de UMA clausula de import
+  // ([^;]*? nunca atravessa outra instrucao): sem isso o [\s\S]*? casava do
+  // primeiro `import` do arquivo ate um "bun:test" escrito DENTRO de uma
+  // string, apagando em silencio todo o codigo entre os dois.
+  shimmed = shimmed.replace(/^[ \t]*import\s+[^;'"]*?\s*from\s*["']bun:test["'];?[ \t]*$/mg, (m) => '\n'.repeat(m.split('\n').length - 1))
+  shimmed = shimmed.replace(/^[ \t]*import\s*\{[^}]*\}\s*from\s*["']bun:test["'];?[ \t]*$/mg, (m) => '\n'.repeat(m.split('\n').length - 1))
+  shimmed = shimmed.replace(/^[ \t]*const\s*\{[^}]*\}\s*=\s*require\(["']bun:test["']\);?[ \t]*$/mg, (m) => '\n'.repeat(m.split('\n').length - 1))
 
   const globals = ['test', 'expect', 'describe', 'it', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll', 'check', 'checkFail']
   const safe = globals.filter(g => {

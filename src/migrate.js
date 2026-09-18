@@ -96,7 +96,7 @@ const KNOWN_METHODS = new Set([
 ])
 
 // ── Main transform ────────────────────────────────────────────────
-function transform(src) {
+export function transform(src) {
   let out = ''
   let i = 0
   let changed = 0
@@ -153,13 +153,13 @@ function transform(src) {
 }
 
 // ── Remove / strip bun:test imports ──────────────────────────────
-function stripBunImport(src) {
+export function stripBunImport(src) {
   // Remove entire import line from 'bun:test'
   return src.replace(/^import\s+\{[^}]*\}\s+from\s+["']bun:test["'];?\n?/gm, '')
 }
 
 // ── it( → test( ───────────────────────────────────────────────────
-function itToTest(src) {
+export function itToTest(src) {
   // Replace `it(` but not `it.todo(` or `it.skip(` — keep those as test.todo/test.skip
   // Also don't replace inside strings (best-effort)
   return src.replace(/\bit\(/g, 'test(')
@@ -169,7 +169,7 @@ function itToTest(src) {
 const LIFECYCLE = /\b(describe|beforeAll|beforeEach|afterAll|afterEach)\s*\(/
 
 // ── File processing ───────────────────────────────────────────────
-function processFile(filePath, dry) {
+export function processFile(filePath, dry) {
   const original = fs.readFileSync(filePath, 'utf8')
 
   if (LIFECYCLE.test(original)) {
@@ -191,33 +191,37 @@ function processFile(filePath, dry) {
 }
 
 // ── CLI ───────────────────────────────────────────────────────────
-const args    = process.argv.slice(2)
-const dry     = args.includes('--dry')
-const target  = args.find(a => !a.startsWith('-')) || '.'
-const rootAbs = path.resolve(target)
+// So roda como entrypoint: importar este modulo (o pareamento teste<->alvo do
+// utest importa o alvo) nao pode disparar o codemod.
+if (import.meta.main) {
+  const args    = process.argv.slice(2)
+  const dry     = args.includes('--dry')
+  const target  = args.find(a => !a.startsWith('-')) || '.'
+  const rootAbs = path.resolve(target)
 
-// Find test files
-function walk(dir, out = []) {
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (e.name === 'node_modules' || e.name === '.git') continue
-    const abs = path.join(dir, e.name)
-    if (e.isDirectory()) walk(abs, out)
-    else if (/\.(t|test)\.(js|ts)$/.test(e.name)) out.push(abs)
+  // Find test files
+  function walk(dir, out = []) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === '.git') continue
+      const abs = path.join(dir, e.name)
+      if (e.isDirectory()) walk(abs, out)
+      else if (/\.(t|test)\.(js|ts)$/.test(e.name)) out.push(abs)
+    }
+    return out
   }
-  return out
+
+  const stat = fs.statSync(rootAbs, { throwIfNoEntry: false })
+  const files = stat?.isFile() ? [rootAbs] : walk(rootAbs)
+  let totalChanged = 0, totalSkipped = 0, totalFiles = 0
+
+  for (const f of files) {
+    const rel = path.relative(rootAbs, f)
+    const result = processFile(f, dry)
+    if (result.skipped) { totalSkipped++; continue }
+    totalFiles++
+    totalChanged += result.changed
+    console.log(`${dry ? '[dry] ' : ''}${rel}  +${result.changed} conversions`)
+  }
+
+  console.log(`\n${dry ? '[dry-run] ' : ''}${totalFiles} files converted, ${totalChanged} expect() calls replaced, ${totalSkipped} skipped`)
 }
-
-const stat = fs.statSync(rootAbs, { throwIfNoEntry: false })
-const files = stat?.isFile() ? [rootAbs] : walk(rootAbs)
-let totalChanged = 0, totalSkipped = 0, totalFiles = 0
-
-for (const f of files) {
-  const rel = path.relative(rootAbs, f)
-  const result = processFile(f, dry)
-  if (result.skipped) { totalSkipped++; continue }
-  totalFiles++
-  totalChanged += result.changed
-  console.log(`${dry ? '[dry] ' : ''}${rel}  +${result.changed} conversions`)
-}
-
-console.log(`\n${dry ? '[dry-run] ' : ''}${totalFiles} files converted, ${totalChanged} expect() calls replaced, ${totalSkipped} skipped`)

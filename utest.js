@@ -74,17 +74,15 @@ check.view = (c) => checkView(c, { width: process.stdout.columns || 80 })
 
 // ─── Base context ─────────────────────────────────────────────────────────────
 // Everything a test body might need except target exports (added per file).
-// Mirrors src/setup.js globals so tests written for the subprocess runner also work in-process.
-const baseCtx = { check, checkFail, checkException, expect,
-  is, cl, toSource, callstack, normalize, hash53, forEach, dotfill,
-  withTempDir, spyOn, jest, vi, mock }
+// test.api (check/checkFail/checkException/expect/describe/it/...) é a fonte única —
+// test.js + shims.js já a monta e globaliza no import; aqui só somamos os utils que são
+// específicos deste runner in-process.
+const baseCtx = { ...test.api,
+  is, cl, toSource, callstack, normalize, hash53, forEach, dotfill }
 
 // ─── Globals for fn.length===0 style and file-level code ─────────────────────
 for (const [k, v] of Object.entries(baseCtx)) globalThis[k] = v
-Object.assign(globalThis, {
-  test, describe, it, spyOn, jest, vi, mock,
-  beforeAll, afterAll, beforeEach, afterEach
-})
+Object.assign(globalThis, { beforeAll, afterAll, beforeEach, afterEach })
 globalThis.utest = true
 globalThis.utestVerbosity = 1
 
@@ -100,8 +98,13 @@ plugin({
       // Return content unchanged with loader:'js' so Bun uses the plain JS loader
       // (not its test runner) and preserves accurate source maps for stack traces.
       if (!needsShim) return { contents: code, loader: args.path.endsWith('.ts') ? 'ts' : 'js' }
-      code = code.replace(/import\s+[\s\S]*?from\s+["'](?:bun:test|node:test)["'];?/g,
-        m => m.split('\n').map(l => '// [utest-shim] ' + l).join('\n'))
+      // Ancorado ao inicio da linha e sem atravessar outra instrucao: o
+      // [\s\S]*? antigo casava do primeiro `import` do arquivo ate um
+      // "bun:test" escrito DENTRO de uma string, comentando em silencio todo o
+      // codigo entre os dois (o arquivo inteiro virava sintaxe invalida).
+      const comment = m => m.split('\n').map(l => '// [utest-shim] ' + l).join('\n')
+      code = code.replace(/^[ \t]*import\s*\{[^}]*\}\s*from\s*["'](?:bun:test|node:test)["'];?[ \t]*$/mg, comment)
+      code = code.replace(/^[ \t]*import\s+[^;'"{]*?\s*from\s*["'](?:bun:test|node:test)["'];?[ \t]*$/mg, comment)
       const isCjs = /\bmodule\.exports\b|\brequire\s*\(/.test(code)
       if (!isCjs) {
         const shebang = code.startsWith('#!')
@@ -734,8 +737,11 @@ async function runPhase(phase, { forceFileEntry = false } = {}) {
   // esqueceu a API. So aplica ao caminho de import() direto: um executor
   // (`.tuit`/`.eval.js`) gera `test()` sinteticos a partir de `steps`, e um arquivo
   // sem passo nenhum e outro problema (fase vazia), nao este.
-  if (!executor && fileRoot.tests.length === 0)
-    process.stderr.write(`\x1b[33mutest: ${path.relative(root, entry.path)} não chamou test() nenhuma vez\x1b[39m\n`)
+
+
+  // tem um bug aqui a mensagem está aparecendo muito deve ser revolvida por fswatch
+  // if (!executor && fileRoot.tests.length === 0)
+  //   process.stderr.write(`\x1b[33mutest: ${path.relative(root, entry.path)} não chamou test() nenhuma vez\x1b[39m\n`)
 
   // ── Run all registered tests in-process ──────────────────────────────────
   const suite = {
