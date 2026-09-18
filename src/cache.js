@@ -464,7 +464,7 @@ export function TestCache(root, { ledger = null } = {}) {
       // último record) → rebaixa a MISS. O cache de tempo achou parecido; o
       // histórico prova que não é.
       if (!historyFresh) {
-        diag(`${rel()}: cache de tempo dizia HIT, ${judgeName} discorda (teste/alvo/deps mudaram desde o último record) → re-rodando`)
+        // diag(`${rel()}: cache de tempo dizia HIT, ${judgeName} discorda (teste/alvo/deps mudaram desde o último record) → re-rodando`)
         return null
       }
       return timeVerdict
@@ -494,7 +494,7 @@ export function TestCache(root, { ledger = null } = {}) {
     // `rec.exception` (truthy) deixava passar ambos os casos SEM o campo,
     // promovendo uma exceção antiga por engano — achado rodando ~/bot.
     if (rec.state === 'exception' || rec.exception !== false) return null
-    diag(`${rel()}: cache de tempo dizia MISS (segundo dessincronizado?), ${judgeName} confirma teste/alvo/deps intactos → aproveitando`)
+    // diag(`${rel()}: cache de tempo dizia MISS (segundo dessincronizado?), ${judgeName} confirma teste/alvo/deps intactos → aproveitando`)
     return {
       checks: rec.checks ?? 0, tests: rec.tests ?? 0,
       failCount: rec.failCount ?? 0, exception: false,
